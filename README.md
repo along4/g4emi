@@ -32,6 +32,17 @@ cmake --build build -j
 ./build/g4emi macros/neutron_gps.mac
 ```
 
+## Random Seeding
+
+By default, the app auto-generates fresh master random seeds on every launch.
+This makes independent runs produce different random trajectories by default.
+
+If you need reproducible runs, explicitly set seeds in your macro before `/run/beamOn`:
+
+```text
+/random/setSeeds 12345 67890
+```
+
 ## Configuration via Messenger (`/scintillator/geom/...` + `/output/...`)
 
 The app now exposes UI commands so you can set geometry and output directly in

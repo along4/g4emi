@@ -2,19 +2,21 @@
 #include "DetectorConstruction.hh"
 #include "config.hh"
 #include "messenger.hh"
+#include "seed.hh"
 
 #include "FTFP_BERT_HP.hh"
-#include "G4OpticalPhysics.hh"
 #include "G4OpticalParameters.hh"
+#include "G4OpticalPhysics.hh"
 #include "G4RunManagerFactory.hh"
 #include "G4UIExecutive.hh"
 #include "G4UImanager.hh"
 #include "G4VisExecutive.hh"
-#include "G4Types.hh"
 
 #include <memory>
 
 int main(int argc, char** argv) {
+  Seed::SetAutoMasterSeeds();
+
   auto* runManager = G4RunManagerFactory::CreateRunManager(G4RunManagerType::Default);
 
   auto config = std::make_unique<Config>();
