@@ -52,7 +52,7 @@ std::string StripKnownOutputExtension(const std::string& value) {
  * Build a concrete output path from base name and extension.
  */
 std::string ComposeOutputPath(const std::string& base, const char* extension) {
-  const std::string safeBase = base.empty() ? "photon_sensor_hits" : base;
+  const std::string safeBase = base.empty() ? "data/photon_sensor_hits" : base;
   return safeBase + extension;
 }
 }  // namespace
@@ -65,7 +65,7 @@ std::string ComposeOutputPath(const std::string& base, const char* extension) {
  * - Geometry: 5x5x1 cm scintillator with a 0.1 mm sensor plane.
  * - Material: EJ200.
  * - Output: CSV mode (enum default in header), output base name
- *   "photon_sensor_hits".
+ *   "data/photon_sensor_hits".
  */
 Config::Config()
     : fScintX(5.0 * cm),
@@ -73,7 +73,7 @@ Config::Config()
       fScintZ(1.0 * cm),
       fSensorThickness(0.1 * mm),
       fScintMaterial("EJ200"),
-      fOutputFilename("photon_sensor_hits") {}
+      fOutputFilename("data/photon_sensor_hits") {}
 
 /**
  * Thread-safe getter for output mode.

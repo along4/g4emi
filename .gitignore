@@ -21,6 +21,11 @@ compile_commands.json
 *.dat
 *.csv
 *.h5
+
+# Data directory contents (keep placeholder only)
+/data/**
+!/data/.gitkeep
+
 # Local scratch dirs (common spelling variants)
 /.scratch/
 

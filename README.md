@@ -75,7 +75,7 @@ before `/run/beamOn`.
 
 ```text
 /output/format both
-/output/filename photon_sensor_hits
+/output/filename data/photon_sensor_hits
 
 /scintillator/geom/material EJ200
 /scintillator/geom/scintX 5 cm
@@ -106,7 +106,7 @@ You should see optical processes such as `Scintillation`, `OpAbsorption`, and `O
 
 ## Photon Sensor Output
 
-CSV mode: each row in `photon_sensor_hits.csv` represents one optical photon that reached
+CSV mode: each row in `data/data/photon_sensor_hits.csv` represents one optical photon that reached
 the back-face sensor.
 
 ### File location (all output modes)
@@ -114,14 +114,14 @@ the back-face sensor.
 Output files are written to the current working directory of the process.
 
 - If you run `./build/g4emi ...` from project root, file is at
-  `./photon_sensor_hits.csv` and/or `./photon_sensor_hits.h5`.
+  `./data/data/photon_sensor_hits.csv` and/or `./data/photon_sensor_hits.h5`.
 - If you `cd build` and run `./g4emi ...`, file is at
-  `./build/photon_sensor_hits.csv` and/or `./build/photon_sensor_hits.h5`
+  `./build/data/data/photon_sensor_hits.csv` and/or `./build/data/photon_sensor_hits.h5`
   (relative to project root).
 
 ### Column schema
 
-`photon_sensor_hits.csv` columns in order:
+`data/data/photon_sensor_hits.csv` columns in order:
 
 | Column | Type | Units | Meaning | Notes |
 |---|---|---|---|---|
@@ -208,25 +208,25 @@ Correct comparison:
 Show header and first rows:
 
 ```bash
-head -n 6 photon_sensor_hits.csv
+head -n 6 data/photon_sensor_hits.csv
 ```
 
 Show one event only:
 
 ```bash
-awk -F, 'NR==1 || $1==0' photon_sensor_hits.csv | head -n 20
+awk -F, 'NR==1 || $1==0' data/photon_sensor_hits.csv | head -n 20
 ```
 
 Count rows per event:
 
 ```bash
-awk -F, 'NR>1{c[$1]++} END{for(e in c) print e,c[e]}' photon_sensor_hits.csv | sort -n | head
+awk -F, 'NR>1{c[$1]++} END{for(e in c) print e,c[e]}' data/photon_sensor_hits.csv | sort -n | head
 ```
 
 Check distinct secondary IDs for one event (example `event_id=0`):
 
 ```bash
-awk -F, '$1==0{print $3}' photon_sensor_hits.csv | sort -n | uniq
+awk -F, '$1==0{print $3}' data/photon_sensor_hits.csv | sort -n | uniq
 ```
 
 ## HDF5 layout
