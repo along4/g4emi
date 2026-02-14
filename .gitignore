@@ -21,6 +21,7 @@ compile_commands.json
 *.dat
 *.csv
 *.h5
+/.scatch/
 
 # Editor/OS artifacts
 .DS_Store
