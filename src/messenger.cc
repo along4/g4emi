@@ -13,32 +13,32 @@
  * Geant4 UI messenger responsible for runtime configuration commands.
  *
  * Responsibilities:
- * - Register `/plastic/...` command hierarchy.
+ * - Register `/scintillator/...` command hierarchy.
  * - Parse user-provided command values.
  * - Forward validated values into the shared Config object.
  * - Notify the run manager when geometry-affecting fields are modified.
  */
 Messenger::Messenger(Config* config) : fConfig(config) {
   // Top-level namespace for this application's custom commands.
-  fPlasticDir = new G4UIdirectory("/plastic/");
-  fPlasticDir->SetGuidance("Application controls");
+  fScintillatorDir = new G4UIdirectory("/scintillator/");
+  fScintillatorDir->SetGuidance("Application controls");
 
   // Geometry subtree (material and dimensions).
-  fGeomDir = new G4UIdirectory("/plastic/geom/");
+  fGeomDir = new G4UIdirectory("/scintillator/geom/");
   fGeomDir->SetGuidance("Geometry controls");
 
   // Output subtree (format and file destinations).
-  fOutputDir = new G4UIdirectory("/plastic/output/");
+  fOutputDir = new G4UIdirectory("/scintillator/output/");
   fOutputDir->SetGuidance("Output controls");
 
   // Material name command; accepts NIST names or custom labels handled later.
-  fGeomMaterialCmd = new G4UIcmdWithAString("/plastic/geom/material", this);
+  fGeomMaterialCmd = new G4UIcmdWithAString("/scintillator/geom/material", this);
   fGeomMaterialCmd->SetGuidance("Set scintillator material name (EJ200 or NIST name)");
   fGeomMaterialCmd->SetParameterName("material", false);
   fGeomMaterialCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 
   // Scintillator X dimension command in Geant4 length units.
-  fGeomScintXCmd = new G4UIcmdWithADoubleAndUnit("/plastic/geom/scintX", this);
+  fGeomScintXCmd = new G4UIcmdWithADoubleAndUnit("/scintillator/geom/scintX", this);
   fGeomScintXCmd->SetGuidance("Set scintillator size in X");
   fGeomScintXCmd->SetParameterName("scintX", false);
   fGeomScintXCmd->SetUnitCategory("Length");
@@ -46,7 +46,7 @@ Messenger::Messenger(Config* config) : fConfig(config) {
   fGeomScintXCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 
   // Scintillator Y dimension command.
-  fGeomScintYCmd = new G4UIcmdWithADoubleAndUnit("/plastic/geom/scintY", this);
+  fGeomScintYCmd = new G4UIcmdWithADoubleAndUnit("/scintillator/geom/scintY", this);
   fGeomScintYCmd->SetGuidance("Set scintillator size in Y");
   fGeomScintYCmd->SetParameterName("scintY", false);
   fGeomScintYCmd->SetUnitCategory("Length");
@@ -54,7 +54,7 @@ Messenger::Messenger(Config* config) : fConfig(config) {
   fGeomScintYCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 
   // Scintillator thickness (Z) command.
-  fGeomScintZCmd = new G4UIcmdWithADoubleAndUnit("/plastic/geom/scintZ", this);
+  fGeomScintZCmd = new G4UIcmdWithADoubleAndUnit("/scintillator/geom/scintZ", this);
   fGeomScintZCmd->SetGuidance("Set scintillator thickness in Z");
   fGeomScintZCmd->SetParameterName("scintZ", false);
   fGeomScintZCmd->SetUnitCategory("Length");
@@ -63,7 +63,7 @@ Messenger::Messenger(Config* config) : fConfig(config) {
 
   // Sensor thickness command; still treated as geometry-changing.
   fGeomSensorThicknessCmd =
-      new G4UIcmdWithADoubleAndUnit("/plastic/geom/sensorThickness", this);
+      new G4UIcmdWithADoubleAndUnit("/scintillator/geom/sensorThickness", this);
   fGeomSensorThicknessCmd->SetGuidance("Set back-face sensor thickness");
   fGeomSensorThicknessCmd->SetParameterName("sensorThickness", false);
   fGeomSensorThicknessCmd->SetUnitCategory("Length");
@@ -71,20 +71,20 @@ Messenger::Messenger(Config* config) : fConfig(config) {
   fGeomSensorThicknessCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 
   // Output format command. Allowed values are constrained by SetCandidates.
-  fOutputFormatCmd = new G4UIcmdWithAString("/plastic/output/format", this);
+  fOutputFormatCmd = new G4UIcmdWithAString("/scintillator/output/format", this);
   fOutputFormatCmd->SetGuidance("Set output format: csv, hdf5, both");
   fOutputFormatCmd->SetParameterName("format", false);
   fOutputFormatCmd->SetCandidates("csv hdf5 both");
   fOutputFormatCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 
   // CSV file path command.
-  fOutputCsvFileCmd = new G4UIcmdWithAString("/plastic/output/csvFile", this);
+  fOutputCsvFileCmd = new G4UIcmdWithAString("/scintillator/output/csvFile", this);
   fOutputCsvFileCmd->SetGuidance("Set CSV output file path");
   fOutputCsvFileCmd->SetParameterName("csvFile", false);
   fOutputCsvFileCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 
   // HDF5 file path command.
-  fOutputHdf5FileCmd = new G4UIcmdWithAString("/plastic/output/hdf5File", this);
+  fOutputHdf5FileCmd = new G4UIcmdWithAString("/scintillator/output/hdf5File", this);
   fOutputHdf5FileCmd->SetGuidance("Set HDF5 output file path");
   fOutputHdf5FileCmd->SetParameterName("hdf5File", false);
   fOutputHdf5FileCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
@@ -109,7 +109,7 @@ Messenger::~Messenger() {
 
   delete fOutputDir;
   delete fGeomDir;
-  delete fPlasticDir;
+  delete fScintillatorDir;
 }
 
 /**

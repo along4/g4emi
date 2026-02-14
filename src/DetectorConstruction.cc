@@ -48,7 +48,7 @@ G4double PositiveOrDefault(G4double value, G4double fallback) {
  *
  * Data provenance for EJ200 constants used below:
  * - Primary source: Eljen EJ-200/EJ-204/EJ-208/EJ-212 product page and data sheet.
- *   URL: https://eljentechnology.com/products/plastic-scintillators/ej-200-ej-204-ej-208-ej-212
+ *   URL: https://eljentechnology.com/products
  * - Values taken directly from Eljen tables:
  *   density = 1.023 g/cm^3, refractive index = 1.58,
  *   attenuation length = 380 cm, decay time = 2.1 ns,
@@ -152,7 +152,7 @@ G4VPhysicalVolume* DetectorConstruction::Construct() {
   worldMaterial->SetMaterialPropertiesTable(worldMpt);
 
   // Geometry defaults match the original baseline setup and may be overridden
-  // by /plastic/geom/* commands before /run/initialize.
+  // by /scintillator/geom/* commands before /run/initialize.
   auto scintX = 5.0 * cm;
   auto scintY = 5.0 * cm;
   auto scintZ = 1.0 * cm;

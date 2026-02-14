@@ -1,9 +1,9 @@
-# Plastic Scintillator + Neutron GPS (Geant4)
+# Scintillator + Neutron GPS (Geant4)
 
 This minimal Geant4 app builds a simple setup:
 
 - World: air box (`1 m` side)
-- Target: plastic scintillator slab (`5 cm x 5 cm x 1 cm`, custom material `EJ200`)
+- Target: scintillator slab (`5 cm x 5 cm x 1 cm`, custom material `EJ200`)
 - Source: `G4GeneralParticleSource` configured by macro to shoot neutrons toward the slab
 - Physics: `FTFP_BERT_HP` + `G4OpticalPhysics` (enables scintillation optical photons)
 
@@ -29,29 +29,29 @@ cmake --build build -j
 ## Run (batch GPS neutrons)
 
 ```bash
-./build/plastic_neutron macros/neutron_gps.mac
+./build/g4emi macros/neutron_gps.mac
 ```
 
-## Configuration via Messenger (`/plastic/...`)
+## Configuration via Messenger (`/scintillator/...`)
 
 The app now exposes UI commands so you can set geometry and output directly in
 macro files (or interactively) instead of relying on environment variables.
 
 Command groups:
 
-- `/plastic/geom/*`: geometry/material
-- `/plastic/output/*`: output format and file names
+- `/scintillator/geom/*`: geometry/material
+- `/scintillator/output/*`: output format and file names
 
 ### Supported commands
 
-- `/plastic/output/format [csv|hdf5|both]`
-- `/plastic/output/csvFile <path>`
-- `/plastic/output/hdf5File <path>`
-- `/plastic/geom/material <name>` (e.g. `EJ200`, `G4_PLASTIC_SC_VINYLTOLUENE`, etc.)
-- `/plastic/geom/scintX <value> <unit>`
-- `/plastic/geom/scintY <value> <unit>`
-- `/plastic/geom/scintZ <value> <unit>`
-- `/plastic/geom/sensorThickness <value> <unit>`
+- `/scintillator/output/format [csv|hdf5|both]`
+- `/scintillator/output/csvFile <path>`
+- `/scintillator/output/hdf5File <path>`
+- `/scintillator/geom/material <name>` (e.g. `EJ200` or a NIST material name)
+- `/scintillator/geom/scintX <value> <unit>`
+- `/scintillator/geom/scintY <value> <unit>`
+- `/scintillator/geom/scintZ <value> <unit>`
+- `/scintillator/geom/sensorThickness <value> <unit>`
 
 After changing geometry commands, run:
 
@@ -64,21 +64,21 @@ before `/run/beamOn`.
 ### Example config macro snippet
 
 ```text
-/plastic/output/format both
-/plastic/output/csvFile photon_sensor_hits.csv
-/plastic/output/hdf5File photon_sensor_hits.h5
-/plastic/geom/material EJ200
-/plastic/geom/scintX 5 cm
-/plastic/geom/scintY 5 cm
-/plastic/geom/scintZ 1 cm
-/plastic/geom/sensorThickness 0.1 mm
+/scintillator/output/format both
+/scintillator/output/csvFile photon_sensor_hits.csv
+/scintillator/output/hdf5File photon_sensor_hits.h5
+/scintillator/geom/material EJ200
+/scintillator/geom/scintX 5 cm
+/scintillator/geom/scintY 5 cm
+/scintillator/geom/scintZ 1 cm
+/scintillator/geom/sensorThickness 0.1 mm
 /run/initialize
 ```
 
 ## Run (interactive UI/vis)
 
 ```bash
-./build/plastic_neutron
+./build/g4emi
 ```
 
 This uses `macros/vis.mac` on startup.
@@ -103,9 +103,9 @@ the back-face sensor.
 
 Output files are written to the current working directory of the process.
 
-- If you run `./build/plastic_neutron ...` from project root, file is at
+- If you run `./build/g4emi ...` from project root, file is at
   `./photon_sensor_hits.csv` and/or `./photon_sensor_hits.h5`.
-- If you `cd build` and run `./plastic_neutron ...`, file is at
+- If you `cd build` and run `./g4emi ...`, file is at
   `./build/photon_sensor_hits.csv` and/or `./build/photon_sensor_hits.h5`
   (relative to project root).
 

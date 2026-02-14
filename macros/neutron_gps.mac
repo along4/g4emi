@@ -3,13 +3,13 @@
 /event/verbose 0
 /tracking/verbose 0
 /run/printProgress 1000
-/plastic/output/format hdf5
-/plastic/output/hdf5File photon_sensor_hits.h5
-/plastic/geom/material EJ200
-/plastic/geom/scintX 5 cm
-/plastic/geom/scintY 5 cm
-/plastic/geom/scintZ 1 cm
-/plastic/geom/sensorThickness 0.1 mm
+/scintillator/output/format hdf5
+/scintillator/output/hdf5File photon_sensor_hits.h5
+/scintillator/geom/material EJ200
+/scintillator/geom/scintX 5 cm
+/scintillator/geom/scintY 5 cm
+/scintillator/geom/scintZ 1 cm
+/scintillator/geom/sensorThickness 0.1 mm
 /run/initialize
 
 /gps/particle neutron
