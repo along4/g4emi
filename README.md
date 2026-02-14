@@ -29,7 +29,7 @@ cmake --build build -j
 ## Run (batch GPS neutrons)
 
 ```bash
-./build/g4emi macros/neutron_gps.mac
+./build/g4emi sim/macros/neutron_gps.mac
 ```
 
 ## Random Seeding
@@ -91,7 +91,7 @@ before `/run/beamOn`.
 ./build/g4emi
 ```
 
-This uses `macros/vis.mac` on startup.
+This uses `sim/macros/vis.mac` on startup.
 
 ## Verify optical scintillation physics is active
 
@@ -169,7 +169,7 @@ This means:
 
 ### Why `primary_id` is usually `1` here
 
-Current macro (`macros/neutron_gps.mac`) generates one primary neutron per event
+Current macro (`sim/macros/neutron_gps.mac`) generates one primary neutron per event
 (default GPS behavior, no `/gps/number` set).
 
 So typically:

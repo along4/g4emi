@@ -40,7 +40,7 @@ int main(int argc, char** argv) {
     uiManager->ApplyCommand(command + argv[1]);
   } else {
     auto* ui = new G4UIExecutive(argc, argv);
-    uiManager->ApplyCommand("/control/execute macros/vis.mac");
+    uiManager->ApplyCommand("/control/execute sim/macros/vis.mac");
     ui->SessionStart();
     delete ui;
   }
