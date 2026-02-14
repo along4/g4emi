@@ -4,7 +4,7 @@
 /tracking/verbose 0
 /run/printProgress 1000
 /output/format hdf5
-/output/hdf5File photon_sensor_hits.h5
+/output/filename photon_sensor_hits
 /scintillator/geom/material EJ200
 /scintillator/geom/scintX 5 cm
 /scintillator/geom/scintY 5 cm

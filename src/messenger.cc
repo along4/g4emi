@@ -27,7 +27,7 @@ Messenger::Messenger(Config* config) : fConfig(config) {
   fGeomDir = new G4UIdirectory("/scintillator/geom/");
   fGeomDir->SetGuidance("Geometry controls");
 
-  // Output subtree (format and file destinations).
+  // Output subtree (format and file destination controls).
   fOutputDir = new G4UIdirectory("/output/");
   fOutputDir->SetGuidance("Output controls");
 
@@ -77,17 +77,12 @@ Messenger::Messenger(Config* config) : fConfig(config) {
   fOutputFormatCmd->SetCandidates("csv hdf5 both");
   fOutputFormatCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 
-  // CSV file path command.
-  fOutputCsvFileCmd = new G4UIcmdWithAString("/output/csvFile", this);
-  fOutputCsvFileCmd->SetGuidance("Set CSV output file path");
-  fOutputCsvFileCmd->SetParameterName("csvFile", false);
-  fOutputCsvFileCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
-
-  // HDF5 file path command.
-  fOutputHdf5FileCmd = new G4UIcmdWithAString("/output/hdf5File", this);
-  fOutputHdf5FileCmd->SetGuidance("Set HDF5 output file path");
-  fOutputHdf5FileCmd->SetParameterName("hdf5File", false);
-  fOutputHdf5FileCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
+  // Output filename command.
+  fOutputFilenameCmd = new G4UIcmdWithAString("/output/filename", this);
+  fOutputFilenameCmd->SetGuidance(
+      "Set output base filename/path; .csv/.h5 extension is added automatically");
+  fOutputFilenameCmd->SetParameterName("filename", false);
+  fOutputFilenameCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 }
 
 /**
@@ -97,8 +92,7 @@ Messenger::Messenger(Config* config) : fConfig(config) {
  * constructor allocation flow.
  */
 Messenger::~Messenger() {
-  delete fOutputHdf5FileCmd;
-  delete fOutputCsvFileCmd;
+  delete fOutputFilenameCmd;
   delete fOutputFormatCmd;
 
   delete fGeomSensorThicknessCmd;
@@ -174,17 +168,21 @@ void Messenger::SetNewValue(G4UIcommand* command, G4String newValue) {
     return;
   }
 
-  // Output path updates only change destination, not simulation state.
-  if (command == fOutputCsvFileCmd) {
-    fConfig->SetCsvFile(newValue);
-    G4cout << "CSV output file set to '" << fConfig->GetCsvFile() << "'." << G4endl;
-    return;
-  }
-
-  if (command == fOutputHdf5FileCmd) {
-    fConfig->SetHdf5File(newValue);
-    G4cout << "HDF5 output file set to '" << fConfig->GetHdf5File() << "'."
-           << G4endl;
+  // Output filename is format-agnostic; extension is derived automatically.
+  if (command == fOutputFilenameCmd) {
+    fConfig->SetOutputFilename(newValue);
+    const auto mode = fConfig->GetOutputFormat();
+    if (mode == Config::OutputFormat::kCsv) {
+      G4cout << "Output filename set. CSV path: '" << fConfig->GetCsvFilePath()
+             << "'." << G4endl;
+    } else if (mode == Config::OutputFormat::kHdf5) {
+      G4cout << "Output filename set. HDF5 path: '" << fConfig->GetHdf5FilePath()
+             << "'." << G4endl;
+    } else {
+      G4cout << "Output filename set. CSV path: '" << fConfig->GetCsvFilePath()
+             << "', HDF5 path: '" << fConfig->GetHdf5FilePath() << "'."
+             << G4endl;
+    }
     return;
   }
 }

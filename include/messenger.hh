@@ -40,8 +40,7 @@ class Messenger : public G4UImessenger {
 
   /// Output configuration commands.
   G4UIcmdWithAString* fOutputFormatCmd = nullptr;
-  G4UIcmdWithAString* fOutputCsvFileCmd = nullptr;
-  G4UIcmdWithAString* fOutputHdf5FileCmd = nullptr;
+  G4UIcmdWithAString* fOutputFilenameCmd = nullptr;
 };
 
 #endif

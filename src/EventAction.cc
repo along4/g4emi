@@ -160,9 +160,9 @@ void EventAction::EndOfEventAction(const G4Event* event) {
 
   const auto eventID64 = static_cast<std::int64_t>(event->GetEventID());
   const std::string csvPath =
-      fConfig ? fConfig->GetCsvFile() : "photon_sensor_hits.csv";
+      fConfig ? fConfig->GetCsvFilePath() : "photon_sensor_hits.csv";
   const std::string hdf5Path =
-      fConfig ? fConfig->GetHdf5File() : "photon_sensor_hits.h5";
+      fConfig ? fConfig->GetHdf5FilePath() : "photon_sensor_hits.h5";
 
   // Build flat CSV rows (one row per detected photon hit).
   std::vector<SimIO::CsvPhotonHitInfo> csvRows;

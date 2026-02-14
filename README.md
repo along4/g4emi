@@ -40,13 +40,12 @@ macro files (or interactively) instead of relying on environment variables.
 Command groups:
 
 - `/scintillator/geom/*`: geometry/material
-- `/output/*`: output format and file names
+- `/output/*`: output format and base filename
 
 ### Supported commands
 
 - `/output/format [csv|hdf5|both]`
-- `/output/csvFile <path>`
-- `/output/hdf5File <path>`
+- `/output/filename <base_or_path>`
 - `/scintillator/geom/material <name>` (e.g. `EJ200` or a NIST material name)
 - `/scintillator/geom/scintX <value> <unit>`
 - `/scintillator/geom/scintY <value> <unit>`
@@ -65,8 +64,8 @@ before `/run/beamOn`.
 
 ```text
 /output/format both
-/output/csvFile photon_sensor_hits.csv
-/output/hdf5File photon_sensor_hits.h5
+/output/filename photon_sensor_hits
+
 /scintillator/geom/material EJ200
 /scintillator/geom/scintX 5 cm
 /scintillator/geom/scintY 5 cm

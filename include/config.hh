@@ -51,14 +51,14 @@ class Config {
   /// Set scintillator material name.
   void SetScintMaterial(const std::string& value);
 
-  /// Get CSV output file path.
-  std::string GetCsvFile() const;
-  /// Get HDF5 output file path.
-  std::string GetHdf5File() const;
-  /// Set CSV output file path.
-  void SetCsvFile(const std::string& value);
-  /// Set HDF5 output file path.
-  void SetHdf5File(const std::string& value);
+  /// Get output base filename/path (without output-format extension).
+  std::string GetOutputFilename() const;
+  /// Set output base filename/path (extension, if provided, is normalized away).
+  void SetOutputFilename(const std::string& value);
+  /// Get CSV output file path derived from output base filename.
+  std::string GetCsvFilePath() const;
+  /// Get HDF5 output file path derived from output base filename.
+  std::string GetHdf5FilePath() const;
 
  private:
   /// Guards all mutable config fields for cross-thread read/write safety.
@@ -73,10 +73,9 @@ class Config {
   G4double fScintZ = 0.0;
   G4double fSensorThickness = 0.0;
 
-  /// Material and output path settings.
+  /// Material and output settings.
   std::string fScintMaterial;
-  std::string fCsvFile;
-  std::string fHdf5File;
+  std::string fOutputFilename;
 };
 
 #endif
