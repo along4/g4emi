@@ -21,7 +21,11 @@ compile_commands.json
 *.dat
 *.csv
 *.h5
+# Local scratch dirs (common spelling variants)
+/.scratch/
 /.scatch/
+/.scrath/
+/.strach/
 
 # Editor/OS artifacts
 .DS_Store
