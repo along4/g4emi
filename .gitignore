@@ -18,6 +18,8 @@ compile_commands.json
 *.exe
 
 # Local data outputs (large; use Git LFS if versioning is required)
+*.dat
+*.csv
 *.h5
 
 # Editor/OS artifacts
