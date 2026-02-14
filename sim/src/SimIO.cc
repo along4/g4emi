@@ -1,5 +1,7 @@
 #include "SimIO.hh"
 
+#include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -392,6 +394,110 @@ std::vector<detail::Hdf5PhotonNativeRow> ToNative(
   return out;
 }
 }  // namespace
+
+/**
+ * Normalize a user-provided run-name into a single directory-safe token.
+ *
+ * Transformations:
+ * - Trim leading/trailing whitespace.
+ * - Remove one layer of matching single or double quotes.
+ * - Replace path separators and embedded whitespace with underscores.
+ */
+std::string NormalizeRunName(const std::string& value) {
+  std::string normalized = value;
+
+  const auto isSpace = [](unsigned char c) { return std::isspace(c) != 0; };
+  normalized.erase(normalized.begin(),
+                   std::find_if(normalized.begin(), normalized.end(),
+                                [&](char c) {
+                                  return !isSpace(static_cast<unsigned char>(c));
+                                }));
+  normalized.erase(
+      std::find_if(normalized.rbegin(), normalized.rend(),
+                   [&](char c) {
+                     return !isSpace(static_cast<unsigned char>(c));
+                   })
+          .base(),
+      normalized.end());
+
+  if (normalized.size() >= 2) {
+    const char first = normalized.front();
+    const char last = normalized.back();
+    const bool isDoubleQuoted = (first == char(34) && last == char(34));
+    const bool isSingleQuoted = (first == char(39) && last == char(39));
+    if (isDoubleQuoted || isSingleQuoted) {
+      normalized = normalized.substr(1, normalized.size() - 2);
+    }
+  }
+
+  for (char& c : normalized) {
+    const unsigned char uc = static_cast<unsigned char>(c);
+    if (c == '/' || c == '\\' || std::isspace(uc)) {
+      c = '_';
+    }
+  }
+
+  return normalized;
+}
+
+/**
+ * Strip a known output extension from a base file name/path.
+ *
+ * Recognized extensions are `.csv`, `.h5`, and `.hdf5` (case-insensitive).
+ */
+std::string StripKnownOutputExtension(const std::string& value) {
+  const std::filesystem::path path(value);
+
+  std::string ext = path.extension().string();
+  std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) {
+    return static_cast<char>(std::tolower(c));
+  });
+
+  if (ext != ".csv" && ext != ".h5" && ext != ".hdf5") {
+    return value;
+  }
+
+  const std::filesystem::path base = path.parent_path() / path.stem();
+  return base.string();
+}
+
+/**
+ * Compose an absolute output file path from base name, optional run name, and
+ * output extension.
+ */
+std::string ComposeOutputPath(const std::string& base,
+                              const std::string& runName,
+                              const char* extension) {
+  const std::string safeBase = base.empty() ? "data/photon_sensor_hits" : base;
+
+  std::filesystem::path basePath(safeBase);
+  if (basePath.is_relative()) {
+#ifdef G4EMI_REPO_ROOT
+    basePath = std::filesystem::path(G4EMI_REPO_ROOT) / basePath;
+#else
+    basePath = std::filesystem::current_path() / basePath;
+#endif
+  }
+
+  if (runName.empty()) {
+    return basePath.string() + extension;
+  }
+
+  std::string leaf = basePath.filename().string();
+  if (leaf.empty()) {
+    leaf = "photon_sensor_hits";
+  }
+
+#ifdef G4EMI_REPO_ROOT
+  const std::filesystem::path runDir =
+      std::filesystem::path(G4EMI_REPO_ROOT) / "data" / runName;
+#else
+  const std::filesystem::path runDir =
+      std::filesystem::current_path() / "data" / runName;
+#endif
+
+  return (runDir / leaf).string() + extension;
+}
 
 /**
  * Append photon-hit rows to CSV output.

@@ -1,10 +1,10 @@
 #include "config.hh"
+#include "SimIO.hh"
 
 #include "G4SystemOfUnits.hh"
 
 #include <algorithm>
 #include <cctype>
-#include <filesystem>
 
 namespace {
 /**
@@ -24,120 +24,6 @@ std::string ToLower(std::string value) {
   std::transform(value.begin(), value.end(), value.begin(),
                  [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
   return value;
-}
-
-/**
- * Return the repository root path captured at compile time.
- */
-std::filesystem::path RepoRootPath() {
-#ifdef G4EMI_REPO_ROOT
-  return std::filesystem::path(G4EMI_REPO_ROOT);
-#else
-  return std::filesystem::current_path();
-#endif
-}
-
-/**
- * Trim leading/trailing whitespace from user-entered strings.
- */
-std::string Trim(std::string value) {
-  const auto isSpace = [](unsigned char c) { return std::isspace(c) != 0; };
-  value.erase(value.begin(),
-              std::find_if(value.begin(), value.end(),
-                           [&](char c) { return !isSpace(static_cast<unsigned char>(c)); }));
-  value.erase(
-      std::find_if(value.rbegin(), value.rend(),
-                   [&](char c) { return !isSpace(static_cast<unsigned char>(c)); })
-          .base(),
-      value.end());
-  return value;
-}
-
-/**
- * Remove one layer of matching single/double quotes around a string.
- */
-std::string Unquote(const std::string& value) {
-  if (value.size() < 2) {
-    return value;
-  }
-
-  const char first = value.front();
-  const char last = value.back();
-  if ((first == '"' && last == '"') || (first == '\'' && last == '\'')) {
-    return value.substr(1, value.size() - 2);
-  }
-  return value;
-}
-
-/**
- * Normalize run-name text into a directory-safe label.
- *
- * Path separators and whitespace are replaced with underscores to guarantee the
- * run name maps to exactly one directory level under `data/`.
- */
-std::string NormalizeRunName(const std::string& value) {
-  std::string normalized = Unquote(Trim(value));
-  for (char& c : normalized) {
-    const unsigned char uc = static_cast<unsigned char>(c);
-    if (c == '/' || c == '\\' || std::isspace(uc)) {
-      c = '_';
-    }
-  }
-  return normalized;
-}
-
-/**
- * Remove recognized output extensions from a filename/path.
- *
- * Accepted suffixes:
- * - .csv
- * - .h5
- * - .hdf5
- *
- * This lets users pass either a bare base name or a full file name while we
- * still keep one canonical base path internally.
- */
-std::string StripKnownOutputExtension(const std::string& value) {
-  const std::filesystem::path path(value);
-  const std::string ext = ToLower(path.extension().string());
-  if (ext != ".csv" && ext != ".h5" && ext != ".hdf5") {
-    return value;
-  }
-
-  const std::filesystem::path base = path.parent_path() / path.stem();
-  return base.string();
-}
-
-/**
- * Build a concrete output path from base name, optional run name, and extension.
- *
- * Behavior:
- * - No run name: use base path directly (default `data/photon_sensor_hits`),
- *   anchored to repository root when relative.
- * - Run name set: force output under `<repo>/data/<runname>/`, preserving only
- *   the base file stem from the configured filename.
- */
-std::string ComposeOutputPath(const std::string& base,
-                              const std::string& runName,
-                              const char* extension) {
-  const std::string safeBase = base.empty() ? "data/photon_sensor_hits" : base;
-
-  std::filesystem::path basePath(safeBase);
-  if (basePath.is_relative()) {
-    basePath = RepoRootPath() / basePath;
-  }
-
-  if (runName.empty()) {
-    return basePath.string() + extension;
-  }
-
-  std::string leaf = basePath.filename().string();
-  if (leaf.empty()) {
-    leaf = "photon_sensor_hits";
-  }
-
-  const std::filesystem::path runDir = RepoRootPath() / "data" / runName;
-  return (runDir / leaf).string() + extension;
 }
 }  // namespace
 
@@ -328,7 +214,7 @@ void Config::SetOutputFilename(const std::string& value) {
     return;
   }
 
-  const std::string normalized = StripKnownOutputExtension(value);
+  const std::string normalized = SimIO::StripKnownOutputExtension(value);
   if (normalized.empty()) {
     return;
   }
@@ -351,17 +237,17 @@ std::string Config::GetOutputRunName() const {
  */
 void Config::SetOutputRunName(const std::string& value) {
   std::lock_guard<std::mutex> lock(fMutex);
-  fOutputRunName = NormalizeRunName(value);
+  fOutputRunName = SimIO::NormalizeRunName(value);
 }
 
 /// Thread-safe getter for CSV output path derived from output settings.
 std::string Config::GetCsvFilePath() const {
   std::lock_guard<std::mutex> lock(fMutex);
-  return ComposeOutputPath(fOutputFilename, fOutputRunName, ".csv");
+  return SimIO::ComposeOutputPath(fOutputFilename, fOutputRunName, ".csv");
 }
 
 /// Thread-safe getter for HDF5 output path derived from output settings.
 std::string Config::GetHdf5FilePath() const {
   std::lock_guard<std::mutex> lock(fMutex);
-  return ComposeOutputPath(fOutputFilename, fOutputRunName, ".h5");
+  return SimIO::ComposeOutputPath(fOutputFilename, fOutputRunName, ".h5");
 }

@@ -29,6 +29,32 @@ using Hdf5State = SimStructures::detail::Hdf5State;
 
 }  // namespace detail
 
+/**
+ * Normalize a user-provided run-name into a single directory-safe token.
+ *
+ * Transformations:
+ * - Trim leading/trailing whitespace.
+ * - Remove one layer of matching single or double quotes.
+ * - Replace path separators and embedded whitespace with underscores.
+ */
+std::string NormalizeRunName(const std::string& value);
+
+/**
+ * Strip a known output extension from a base file name/path.
+ *
+ * Recognized extensions are `.csv`, `.h5`, and `.hdf5` (case-insensitive).
+ * Unknown extensions are preserved as-is.
+ */
+std::string StripKnownOutputExtension(const std::string& value);
+
+/**
+ * Compose an absolute output file path from base name, optional run-name, and
+ * file extension. Relative base paths are anchored to the repository root.
+ */
+std::string ComposeOutputPath(const std::string& base,
+                              const std::string& runName,
+                              const char* extension);
+
 /// Append flat photon-hit rows to CSV output (creates header for new file).
 bool AppendCsv(const std::string& csvPath,
                const std::vector<CsvPhotonHitInfo>& rows,
