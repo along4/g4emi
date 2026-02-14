@@ -1,0 +1,28 @@
+# Build directories
+/build/
+/cmake-build-*/
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+Makefile
+cmake_install.cmake
+compile_commands.json
+
+# Binaries / objects
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+
+# Local data outputs (large; use Git LFS if versioning is required)
+*.h5
+
+# Editor/OS artifacts
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/
