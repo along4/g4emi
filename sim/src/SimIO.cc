@@ -1,6 +1,6 @@
 #include "SimIO.hh"
+#include "utils.hh"
 
-#include <algorithm>
 #include <cctype>
 #include <cstdlib>
 #include <cstring>
@@ -404,31 +404,7 @@ std::vector<detail::Hdf5PhotonNativeRow> ToNative(
  * - Replace path separators and embedded whitespace with underscores.
  */
 std::string NormalizeRunName(const std::string& value) {
-  std::string normalized = value;
-
-  const auto isSpace = [](unsigned char c) { return std::isspace(c) != 0; };
-  normalized.erase(normalized.begin(),
-                   std::find_if(normalized.begin(), normalized.end(),
-                                [&](char c) {
-                                  return !isSpace(static_cast<unsigned char>(c));
-                                }));
-  normalized.erase(
-      std::find_if(normalized.rbegin(), normalized.rend(),
-                   [&](char c) {
-                     return !isSpace(static_cast<unsigned char>(c));
-                   })
-          .base(),
-      normalized.end());
-
-  if (normalized.size() >= 2) {
-    const char first = normalized.front();
-    const char last = normalized.back();
-    const bool isDoubleQuoted = (first == char(34) && last == char(34));
-    const bool isSingleQuoted = (first == char(39) && last == char(39));
-    if (isDoubleQuoted || isSingleQuoted) {
-      normalized = normalized.substr(1, normalized.size() - 2);
-    }
-  }
+  std::string normalized = Utils::Unquote(Utils::Trim(value));
 
   for (char& c : normalized) {
     const unsigned char uc = static_cast<unsigned char>(c);
@@ -447,11 +423,7 @@ std::string NormalizeRunName(const std::string& value) {
  */
 std::string StripKnownOutputExtension(const std::string& value) {
   const std::filesystem::path path(value);
-
-  std::string ext = path.extension().string();
-  std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) {
-    return static_cast<char>(std::tolower(c));
-  });
+  const std::string ext = Utils::ToLower(path.extension().string());
 
   if (ext != ".csv" && ext != ".h5" && ext != ".hdf5") {
     return value;

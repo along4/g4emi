@@ -1,31 +1,8 @@
 #include "config.hh"
 #include "SimIO.hh"
+#include "utils.hh"
 
 #include "G4SystemOfUnits.hh"
-
-#include <algorithm>
-#include <cctype>
-
-namespace {
-/**
- * Normalize free-form UI text to lowercase for case-insensitive comparisons.
- *
- * Why it exists:
- * - Geant4 UI commands are string-based and users may type variants such as
- *   "HDF5", "hDf5", etc.
- * - Centralizing normalization keeps parsing logic in one place and avoids
- *   duplicated transforms throughout Config methods.
- *
- * Notes:
- * - The cast to unsigned char avoids undefined behavior for chars with the
- *   high bit set when passed to std::tolower.
- */
-std::string ToLower(std::string value) {
-  std::transform(value.begin(), value.end(), value.begin(),
-                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-  return value;
-}
-}  // namespace
 
 /**
  * Construct simulation defaults used when no UI command overrides are provided.
@@ -94,7 +71,7 @@ bool Config::ParseOutputFormat(std::string value, OutputFormat* out) {
     return false;
   }
 
-  value = ToLower(value);
+  value = Utils::ToLower(value);
   if (value == "csv") {
     *out = OutputFormat::kCsv;
     return true;
