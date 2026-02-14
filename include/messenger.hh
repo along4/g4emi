@@ -9,7 +9,7 @@ class G4UIcmdWithADoubleAndUnit;
 class G4UIcmdWithAString;
 class G4UIcommand;
 
-/// Geant4 UI messenger that maps `/scintillator/*` commands into `Config` updates.
+/// Geant4 UI messenger that maps `/scintillator/geom/*` and `/output/*` commands into `Config` updates.
 class Messenger : public G4UImessenger {
  public:
   /// `config` is a shared mutable settings object updated by UI commands.
@@ -26,7 +26,7 @@ class Messenger : public G4UImessenger {
   /// Shared runtime configuration sink.
   Config* fConfig = nullptr;
 
-  /// Command directories under `/scintillator`.
+  /// Command directories for geometry (`/scintillator`) and output (`/output`).
   G4UIdirectory* fScintillatorDir = nullptr;
   G4UIdirectory* fGeomDir = nullptr;
   G4UIdirectory* fOutputDir = nullptr;

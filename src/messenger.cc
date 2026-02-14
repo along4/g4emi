@@ -13,7 +13,7 @@
  * Geant4 UI messenger responsible for runtime configuration commands.
  *
  * Responsibilities:
- * - Register `/scintillator/...` command hierarchy.
+ * - Register `/scintillator/geom/...` and `/output/...` command hierarchy.
  * - Parse user-provided command values.
  * - Forward validated values into the shared Config object.
  * - Notify the run manager when geometry-affecting fields are modified.
@@ -28,7 +28,7 @@ Messenger::Messenger(Config* config) : fConfig(config) {
   fGeomDir->SetGuidance("Geometry controls");
 
   // Output subtree (format and file destinations).
-  fOutputDir = new G4UIdirectory("/scintillator/output/");
+  fOutputDir = new G4UIdirectory("/output/");
   fOutputDir->SetGuidance("Output controls");
 
   // Material name command; accepts NIST names or custom labels handled later.
@@ -71,20 +71,20 @@ Messenger::Messenger(Config* config) : fConfig(config) {
   fGeomSensorThicknessCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 
   // Output format command. Allowed values are constrained by SetCandidates.
-  fOutputFormatCmd = new G4UIcmdWithAString("/scintillator/output/format", this);
+  fOutputFormatCmd = new G4UIcmdWithAString("/output/format", this);
   fOutputFormatCmd->SetGuidance("Set output format: csv, hdf5, both");
   fOutputFormatCmd->SetParameterName("format", false);
   fOutputFormatCmd->SetCandidates("csv hdf5 both");
   fOutputFormatCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 
   // CSV file path command.
-  fOutputCsvFileCmd = new G4UIcmdWithAString("/scintillator/output/csvFile", this);
+  fOutputCsvFileCmd = new G4UIcmdWithAString("/output/csvFile", this);
   fOutputCsvFileCmd->SetGuidance("Set CSV output file path");
   fOutputCsvFileCmd->SetParameterName("csvFile", false);
   fOutputCsvFileCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 
   // HDF5 file path command.
-  fOutputHdf5FileCmd = new G4UIcmdWithAString("/scintillator/output/hdf5File", this);
+  fOutputHdf5FileCmd = new G4UIcmdWithAString("/output/hdf5File", this);
   fOutputHdf5FileCmd->SetGuidance("Set HDF5 output file path");
   fOutputHdf5FileCmd->SetParameterName("hdf5File", false);
   fOutputHdf5FileCmd->AvailableForStates(G4State_PreInit, G4State_Idle);

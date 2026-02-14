@@ -32,7 +32,7 @@ cmake --build build -j
 ./build/g4emi macros/neutron_gps.mac
 ```
 
-## Configuration via Messenger (`/scintillator/...`)
+## Configuration via Messenger (`/scintillator/geom/...` + `/output/...`)
 
 The app now exposes UI commands so you can set geometry and output directly in
 macro files (or interactively) instead of relying on environment variables.
@@ -40,13 +40,13 @@ macro files (or interactively) instead of relying on environment variables.
 Command groups:
 
 - `/scintillator/geom/*`: geometry/material
-- `/scintillator/output/*`: output format and file names
+- `/output/*`: output format and file names
 
 ### Supported commands
 
-- `/scintillator/output/format [csv|hdf5|both]`
-- `/scintillator/output/csvFile <path>`
-- `/scintillator/output/hdf5File <path>`
+- `/output/format [csv|hdf5|both]`
+- `/output/csvFile <path>`
+- `/output/hdf5File <path>`
 - `/scintillator/geom/material <name>` (e.g. `EJ200` or a NIST material name)
 - `/scintillator/geom/scintX <value> <unit>`
 - `/scintillator/geom/scintY <value> <unit>`
@@ -64,9 +64,9 @@ before `/run/beamOn`.
 ### Example config macro snippet
 
 ```text
-/scintillator/output/format both
-/scintillator/output/csvFile photon_sensor_hits.csv
-/scintillator/output/hdf5File photon_sensor_hits.h5
+/output/format both
+/output/csvFile photon_sensor_hits.csv
+/output/hdf5File photon_sensor_hits.h5
 /scintillator/geom/material EJ200
 /scintillator/geom/scintX 5 cm
 /scintillator/geom/scintY 5 cm
