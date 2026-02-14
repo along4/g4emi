@@ -5,6 +5,7 @@
 /run/printProgress 1000
 /output/format hdf5
 /output/filename data/photon_sensor_hits
+/output/runname example
 /scintillator/geom/material EJ200
 /scintillator/geom/scintX 5 cm
 /scintillator/geom/scintY 5 cm

@@ -83,6 +83,13 @@ Messenger::Messenger(Config* config) : fConfig(config) {
       "Set output base filename/path; .csv/.h5 extension is added automatically");
   fOutputFilenameCmd->SetParameterName("filename", false);
   fOutputFilenameCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
+
+  // Optional run-name command used for routing outputs to data/<runname>/.
+  fOutputRunNameCmd = new G4UIcmdWithAString("/output/runname", this);
+  fOutputRunNameCmd->SetGuidance(
+      "Set optional run name; outputs go under data/<runname>/. Use \"\" to clear.");
+  fOutputRunNameCmd->SetParameterName("runname", false);
+  fOutputRunNameCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 }
 
 /**
@@ -92,6 +99,7 @@ Messenger::Messenger(Config* config) : fConfig(config) {
  * constructor allocation flow.
  */
 Messenger::~Messenger() {
+  delete fOutputRunNameCmd;
   delete fOutputFilenameCmd;
   delete fOutputFormatCmd;
 
@@ -180,6 +188,29 @@ void Messenger::SetNewValue(G4UIcommand* command, G4String newValue) {
              << "'." << G4endl;
     } else {
       G4cout << "Output filename set. CSV path: '" << fConfig->GetCsvFilePath()
+             << "', HDF5 path: '" << fConfig->GetHdf5FilePath() << "'."
+             << G4endl;
+    }
+    return;
+  }
+
+  // Run name controls optional output routing under data/<runname>/.
+  if (command == fOutputRunNameCmd) {
+    fConfig->SetOutputRunName(newValue);
+    const auto runName = fConfig->GetOutputRunName();
+    if (runName.empty()) {
+      G4cout << "Output run name cleared." << G4endl;
+    } else {
+      G4cout << "Output run name set to '" << runName << "'." << G4endl;
+    }
+
+    const auto mode = fConfig->GetOutputFormat();
+    if (mode == Config::OutputFormat::kCsv) {
+      G4cout << "CSV path: '" << fConfig->GetCsvFilePath() << "'." << G4endl;
+    } else if (mode == Config::OutputFormat::kHdf5) {
+      G4cout << "HDF5 path: '" << fConfig->GetHdf5FilePath() << "'." << G4endl;
+    } else {
+      G4cout << "CSV path: '" << fConfig->GetCsvFilePath()
              << "', HDF5 path: '" << fConfig->GetHdf5FilePath() << "'."
              << G4endl;
     }

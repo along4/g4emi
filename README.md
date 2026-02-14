@@ -57,6 +57,7 @@ Command groups:
 
 - `/output/format [csv|hdf5|both]`
 - `/output/filename <base_or_path>`
+- `/output/runname <name>` (optional; default empty, writes into `data/<runname>/`)
 - `/scintillator/geom/material <name>` (e.g. `EJ200` or a NIST material name)
 - `/scintillator/geom/scintX <value> <unit>`
 - `/scintillator/geom/scintY <value> <unit>`
@@ -106,22 +107,19 @@ You should see optical processes such as `Scintillation`, `OpAbsorption`, and `O
 
 ## Photon Sensor Output
 
-CSV mode: each row in `data/data/photon_sensor_hits.csv` represents one optical photon that reached
+CSV mode: each row in `data/photon_sensor_hits.csv` represents one optical photon that reached
 the back-face sensor.
 
 ### File location (all output modes)
 
-Output files are written to the current working directory of the process.
+Output files are written under the repository data directory (`<repo>/data`) regardless of launch directory.
 
-- If you run `./build/g4emi ...` from project root, file is at
-  `./data/data/photon_sensor_hits.csv` and/or `./data/photon_sensor_hits.h5`.
-- If you `cd build` and run `./g4emi ...`, file is at
-  `./build/data/data/photon_sensor_hits.csv` and/or `./build/data/photon_sensor_hits.h5`
-  (relative to project root).
+- Outputs are written to `./data/photon_sensor_hits.csv` and/or `./data/photon_sensor_hits.h5` (repo root).
+- If `/output/runname <name>` is set, outputs are written to `./data/<name>/photon_sensor_hits.csv` and/or `./data/<name>/photon_sensor_hits.h5`.
 
 ### Column schema
 
-`data/data/photon_sensor_hits.csv` columns in order:
+`data/photon_sensor_hits.csv` columns in order:
 
 | Column | Type | Units | Meaning | Notes |
 |---|---|---|---|---|

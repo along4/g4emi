@@ -20,6 +20,10 @@ target_link_libraries(g4emi PRIVATE
   ${HDF5_LIBRARIES}
 )
 
+target_compile_definitions(g4emi PRIVATE
+  G4EMI_REPO_ROOT="${CMAKE_SOURCE_DIR}"
+)
+
 # Keep executable path stable as ./build/g4emi.
 set_target_properties(g4emi PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}

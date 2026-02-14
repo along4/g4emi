@@ -55,9 +55,15 @@ class Config {
   std::string GetOutputFilename() const;
   /// Set output base filename/path (extension, if provided, is normalized away).
   void SetOutputFilename(const std::string& value);
-  /// Get CSV output file path derived from output base filename.
+
+  /// Get optional run name used to place outputs under `data/<runname>/`.
+  std::string GetOutputRunName() const;
+  /// Set optional run name (empty string disables run-specific subdirectory).
+  void SetOutputRunName(const std::string& value);
+
+  /// Get CSV output file path derived from output settings.
   std::string GetCsvFilePath() const;
-  /// Get HDF5 output file path derived from output base filename.
+  /// Get HDF5 output file path derived from output settings.
   std::string GetHdf5FilePath() const;
 
  private:
@@ -76,6 +82,7 @@ class Config {
   /// Material and output settings.
   std::string fScintMaterial;
   std::string fOutputFilename;
+  std::string fOutputRunName;
 };
 
 #endif
