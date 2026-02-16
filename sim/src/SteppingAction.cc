@@ -27,7 +27,7 @@ SteppingAction::SteppingAction(const DetectorConstruction* detector,
  * Called by Geant4 for every simulation step.
  *
  * Processing is intentionally restricted to the configured scintillator scoring
- * volume to avoid collecting irrelevant data from world/sensor regions.
+ * volume to avoid collecting irrelevant data from world/optical-interface regions.
  */
 void SteppingAction::UserSteppingAction(const G4Step* step) {
   if (!step || !fEventAction || !fDetector) {

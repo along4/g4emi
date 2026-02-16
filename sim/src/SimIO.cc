@@ -305,37 +305,37 @@ bool EnsureReady(const std::string& hdf5Path, std::string* errorMessage) {
   H5Tinsert(s.photonType, "photon_origin_z_mm",
             HOFFSET(detail::Hdf5PhotonNativeRow, photon_origin_z_mm),
             H5T_NATIVE_DOUBLE);
-  H5Tinsert(s.photonType, "sensor_hit_x_mm",
-            HOFFSET(detail::Hdf5PhotonNativeRow, sensor_hit_x_mm),
+  H5Tinsert(s.photonType, "optical_interface_hit_x_mm",
+            HOFFSET(detail::Hdf5PhotonNativeRow, optical_interface_hit_x_mm),
             H5T_NATIVE_DOUBLE);
-  H5Tinsert(s.photonType, "sensor_hit_y_mm",
-            HOFFSET(detail::Hdf5PhotonNativeRow, sensor_hit_y_mm),
+  H5Tinsert(s.photonType, "optical_interface_hit_y_mm",
+            HOFFSET(detail::Hdf5PhotonNativeRow, optical_interface_hit_y_mm),
             H5T_NATIVE_DOUBLE);
 
-  // Sensor-crossing optical state used for downstream lens/ray propagation.
-  H5Tinsert(s.photonType, "sensor_hit_dir_x",
-            HOFFSET(detail::Hdf5PhotonNativeRow, sensor_hit_dir_x),
+  // Optical-interface crossing optical state used for downstream lens/ray propagation.
+  H5Tinsert(s.photonType, "optical_interface_hit_dir_x",
+            HOFFSET(detail::Hdf5PhotonNativeRow, optical_interface_hit_dir_x),
             H5T_NATIVE_DOUBLE);
-  H5Tinsert(s.photonType, "sensor_hit_dir_y",
-            HOFFSET(detail::Hdf5PhotonNativeRow, sensor_hit_dir_y),
+  H5Tinsert(s.photonType, "optical_interface_hit_dir_y",
+            HOFFSET(detail::Hdf5PhotonNativeRow, optical_interface_hit_dir_y),
             H5T_NATIVE_DOUBLE);
-  H5Tinsert(s.photonType, "sensor_hit_dir_z",
-            HOFFSET(detail::Hdf5PhotonNativeRow, sensor_hit_dir_z),
+  H5Tinsert(s.photonType, "optical_interface_hit_dir_z",
+            HOFFSET(detail::Hdf5PhotonNativeRow, optical_interface_hit_dir_z),
             H5T_NATIVE_DOUBLE);
-  H5Tinsert(s.photonType, "sensor_hit_pol_x",
-            HOFFSET(detail::Hdf5PhotonNativeRow, sensor_hit_pol_x),
+  H5Tinsert(s.photonType, "optical_interface_hit_pol_x",
+            HOFFSET(detail::Hdf5PhotonNativeRow, optical_interface_hit_pol_x),
             H5T_NATIVE_DOUBLE);
-  H5Tinsert(s.photonType, "sensor_hit_pol_y",
-            HOFFSET(detail::Hdf5PhotonNativeRow, sensor_hit_pol_y),
+  H5Tinsert(s.photonType, "optical_interface_hit_pol_y",
+            HOFFSET(detail::Hdf5PhotonNativeRow, optical_interface_hit_pol_y),
             H5T_NATIVE_DOUBLE);
-  H5Tinsert(s.photonType, "sensor_hit_pol_z",
-            HOFFSET(detail::Hdf5PhotonNativeRow, sensor_hit_pol_z),
+  H5Tinsert(s.photonType, "optical_interface_hit_pol_z",
+            HOFFSET(detail::Hdf5PhotonNativeRow, optical_interface_hit_pol_z),
             H5T_NATIVE_DOUBLE);
-  H5Tinsert(s.photonType, "sensor_hit_energy_eV",
-            HOFFSET(detail::Hdf5PhotonNativeRow, sensor_hit_energy_eV),
+  H5Tinsert(s.photonType, "optical_interface_hit_energy_eV",
+            HOFFSET(detail::Hdf5PhotonNativeRow, optical_interface_hit_energy_eV),
             H5T_NATIVE_DOUBLE);
-  H5Tinsert(s.photonType, "sensor_hit_wavelength_nm",
-            HOFFSET(detail::Hdf5PhotonNativeRow, sensor_hit_wavelength_nm),
+  H5Tinsert(s.photonType, "optical_interface_hit_wavelength_nm",
+            HOFFSET(detail::Hdf5PhotonNativeRow, optical_interface_hit_wavelength_nm),
             H5T_NATIVE_DOUBLE);
 
   H5Tclose(speciesType);
@@ -405,7 +405,7 @@ std::vector<detail::Hdf5SecondaryNativeRow> ToNative(
  * Convert semantic photon row containers into HDF5-native POD rows.
  *
  * This maps one semantic PhotonInfo row into the exact `/photons` binary
- * layout, including sensor crossing position, direction, polarization,
+ * layout, including optical-interface crossing position, direction, polarization,
  * and spectrally relevant fields (energy and wavelength).
  */
 std::vector<detail::Hdf5PhotonNativeRow> ToNative(
@@ -421,16 +421,16 @@ std::vector<detail::Hdf5PhotonNativeRow> ToNative(
     native.photon_origin_x_mm = row.photonOriginXmm;
     native.photon_origin_y_mm = row.photonOriginYmm;
     native.photon_origin_z_mm = row.photonOriginZmm;
-    native.sensor_hit_x_mm = row.sensorHitXmm;
-    native.sensor_hit_y_mm = row.sensorHitYmm;
-    native.sensor_hit_dir_x = row.sensorHitDirX;
-    native.sensor_hit_dir_y = row.sensorHitDirY;
-    native.sensor_hit_dir_z = row.sensorHitDirZ;
-    native.sensor_hit_pol_x = row.sensorHitPolX;
-    native.sensor_hit_pol_y = row.sensorHitPolY;
-    native.sensor_hit_pol_z = row.sensorHitPolZ;
-    native.sensor_hit_energy_eV = row.sensorHitEnergyEV;
-    native.sensor_hit_wavelength_nm = row.sensorHitWavelengthNm;
+    native.optical_interface_hit_x_mm = row.opticalInterfaceHitXmm;
+    native.optical_interface_hit_y_mm = row.opticalInterfaceHitYmm;
+    native.optical_interface_hit_dir_x = row.opticalInterfaceHitDirX;
+    native.optical_interface_hit_dir_y = row.opticalInterfaceHitDirY;
+    native.optical_interface_hit_dir_z = row.opticalInterfaceHitDirZ;
+    native.optical_interface_hit_pol_x = row.opticalInterfaceHitPolX;
+    native.optical_interface_hit_pol_y = row.opticalInterfaceHitPolY;
+    native.optical_interface_hit_pol_z = row.opticalInterfaceHitPolZ;
+    native.optical_interface_hit_energy_eV = row.opticalInterfaceHitEnergyEV;
+    native.optical_interface_hit_wavelength_nm = row.opticalInterfaceHitWavelengthNm;
     out.push_back(native);
   }
   return out;
@@ -482,7 +482,7 @@ std::string StripKnownOutputExtension(const std::string& value) {
 std::string ComposeOutputPath(const std::string& base,
                               const std::string& runName,
                               const char* extension) {
-  const std::string safeBase = base.empty() ? "data/photon_sensor_hits" : base;
+  const std::string safeBase = base.empty() ? "data/photon_optical_interface_hits" : base;
 
   std::filesystem::path basePath(safeBase);
   if (basePath.is_relative()) {
@@ -499,7 +499,7 @@ std::string ComposeOutputPath(const std::string& base,
 
   std::string leaf = basePath.filename().string();
   if (leaf.empty()) {
-    leaf = "photon_sensor_hits";
+    leaf = "photon_optical_interface_hits";
   }
 
 #ifdef G4EMI_REPO_ROOT
@@ -556,8 +556,8 @@ bool AppendCsv(const std::string& csvPath,
         << row.secondaryOriginXmm << "," << row.secondaryOriginYmm << ","
         << row.secondaryOriginZmm << "," << row.secondaryOriginEnergyMeV << ","
         << row.scintOriginXmm << "," << row.scintOriginYmm << ","
-        << row.scintOriginZmm << "," << row.sensorHitXmm << ","
-        << row.sensorHitYmm << "\n";
+        << row.scintOriginZmm << "," << row.opticalInterfaceHitXmm << ","
+        << row.opticalInterfaceHitYmm << "\n";
   }
 
   return true;
@@ -569,7 +569,7 @@ bool AppendCsv(const std::string& csvPath,
  * Dataset mapping:
  * - /primaries   <- primaryRows
  * - /secondaries <- secondaryRows
- * - /photons     <- photonRows (includes sensor-crossing direction,
+ * - /photons     <- photonRows (includes optical-interface crossing direction,
  *                   polarization, energy, wavelength)
  */
 bool AppendHdf5(const std::string& hdf5Path,

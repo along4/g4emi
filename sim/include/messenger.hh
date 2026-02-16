@@ -9,7 +9,7 @@ class G4UIcmdWithADoubleAndUnit;
 class G4UIcmdWithAString;
 class G4UIcommand;
 
-/// Geant4 UI messenger that maps `/scintillator/geom/*`, `/sensor/geom/*`, and `/output/*` commands into `Config` updates.
+/// Geant4 UI messenger that maps `/scintillator/geom/*`, `/optical_interface/geom/*`, and `/output/*` commands into `Config` updates.
 class Messenger : public G4UImessenger {
  public:
   /// `config` is a shared mutable settings object updated by UI commands.
@@ -26,11 +26,11 @@ class Messenger : public G4UImessenger {
   /// Shared runtime configuration sink.
   Config* fConfig = nullptr;
 
-  /// Command directories for scintillator, sensor, and output controls.
+  /// Command directories for scintillator, optical-interface, and output controls.
   G4UIdirectory* fScintillatorDir = nullptr;
   G4UIdirectory* fScintillatorGeomDir = nullptr;
-  G4UIdirectory* fSensorDir = nullptr;
-  G4UIdirectory* fSensorGeomDir = nullptr;
+  G4UIdirectory* fOpticalInterfaceDir = nullptr;
+  G4UIdirectory* fOpticalInterfaceGeomDir = nullptr;
   G4UIdirectory* fOutputDir = nullptr;
 
   /// Scintillator geometry/material commands.
@@ -43,15 +43,15 @@ class Messenger : public G4UImessenger {
   G4UIcmdWithADoubleAndUnit* fGeomScintPosZCmd = nullptr;
   G4UIcmdWithADoubleAndUnit* fGeomApertureRadiusCmd = nullptr;
 
-  /// Sensor geometry commands (size + thickness).
-  G4UIcmdWithADoubleAndUnit* fSensorXCmd = nullptr;
-  G4UIcmdWithADoubleAndUnit* fSensorYCmd = nullptr;
-  G4UIcmdWithADoubleAndUnit* fSensorThicknessCmd = nullptr;
+  /// Optical-interface geometry commands (size + thickness).
+  G4UIcmdWithADoubleAndUnit* fOpticalInterfaceXCmd = nullptr;
+  G4UIcmdWithADoubleAndUnit* fOpticalInterfaceYCmd = nullptr;
+  G4UIcmdWithADoubleAndUnit* fOpticalInterfaceThicknessCmd = nullptr;
 
-  /// Sensor center-position commands in world coordinates.
-  G4UIcmdWithADoubleAndUnit* fSensorPosXCmd = nullptr;
-  G4UIcmdWithADoubleAndUnit* fSensorPosYCmd = nullptr;
-  G4UIcmdWithADoubleAndUnit* fSensorPosZCmd = nullptr;
+  /// Optical-interface center-position commands in world coordinates.
+  G4UIcmdWithADoubleAndUnit* fOpticalInterfacePosXCmd = nullptr;
+  G4UIcmdWithADoubleAndUnit* fOpticalInterfacePosYCmd = nullptr;
+  G4UIcmdWithADoubleAndUnit* fOpticalInterfacePosZCmd = nullptr;
 
   /// Output configuration commands.
   G4UIcmdWithAString* fOutputFormatCmd = nullptr;

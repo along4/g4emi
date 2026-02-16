@@ -1,4 +1,4 @@
-#include "PhotonSensorSD.hh"
+#include "PhotonOpticalInterfaceSD.hh"
 
 #include "EventAction.hh"
 
@@ -12,34 +12,34 @@
 #include "G4TrackStatus.hh"
 
 /**
- * Construct the optical-photon sensor sensitive detector.
+ * Construct the optical-photon optical-interface sensitive detector.
  *
  * The detector name is registered with Geant4's SD manager and is used to bind
- * this SD instance to the back-face sensor logical volume in
+ * this SD instance to the back-face optical-interface logical volume in
  * DetectorConstruction::ConstructSDandField().
  */
-PhotonSensorSD::PhotonSensorSD(const G4String& name) : G4VSensitiveDetector(name) {}
+PhotonOpticalInterfaceSD::PhotonOpticalInterfaceSD(const G4String& name) : G4VSensitiveDetector(name) {}
 
 /**
- * Process a hit inside the sensor volume.
+ * Process a hit inside the optical-interface volume.
  *
  * Behavior and intent:
  * - Accept only optical-photon tracks; all other particles are ignored.
  * - Build one EventAction::PhotonHitRecord per accepted photon crossing.
- * - Capture sensor-entry ray state from the pre-step point:
+ * - Capture optical-interface-entry ray state from the pre-step point:
  *   position, momentum direction, polarization, and total energy.
  * - Derive wavelength from energy (`lambda = h*c/E`) and store both.
  * - Prefer rich ancestry metadata precomputed in TrackingAction
  *   (FindPhotonCreationInfo).
  * - Fall back to minimal track-derived fields when ancestry metadata is missing.
  * - Stop and kill the photon after recording the hit so each detected photon
- *   contributes at most one sensor record.
+ *   contributes at most one optical-interface record.
  *
  * Return value:
- * - true  -> this step was handled as a valid optical-photon sensor hit.
+ * - true  -> this step was handled as a valid optical-photon optical-interface hit.
  * - false -> ignored (null step, non-optical track, or missing EventAction).
  */
-G4bool PhotonSensorSD::ProcessHits(G4Step* step, G4TouchableHistory*) {
+G4bool PhotonOpticalInterfaceSD::ProcessHits(G4Step* step, G4TouchableHistory*) {
   // Defensive check: Geant4 should provide a valid step, but guard anyway.
   if (!step) {
     return false;
@@ -70,15 +70,15 @@ G4bool PhotonSensorSD::ProcessHits(G4Step* step, G4TouchableHistory*) {
   // Pre-step point corresponds to entry into the sensitive volume.
   // We capture full ray state here for downstream optical propagation.
   const auto* preStep = step->GetPreStepPoint();
-  hit.sensorHitPosition = preStep->GetPosition();
-  hit.sensorHitDirection = preStep->GetMomentumDirection();
-  hit.sensorHitPolarization = preStep->GetPolarization();
-  hit.sensorHitEnergy = preStep->GetTotalEnergy();
+  hit.opticalInterfaceHitPosition = preStep->GetPosition();
+  hit.opticalInterfaceHitDirection = preStep->GetMomentumDirection();
+  hit.opticalInterfaceHitPolarization = preStep->GetPolarization();
+  hit.opticalInterfaceHitEnergy = preStep->GetTotalEnergy();
 
   // Convert energy to wavelength using Geant4 physical constants.
   // Keep the default sentinel (-1) when energy is non-positive.
-  if (hit.sensorHitEnergy > 0.0) {
-    hit.sensorHitWavelength = (h_Planck * c_light) / hit.sensorHitEnergy;
+  if (hit.opticalInterfaceHitEnergy > 0.0) {
+    hit.opticalInterfaceHitWavelength = (h_Planck * c_light) / hit.opticalInterfaceHitEnergy;
   }
 
   // Preferred path: TrackingAction already resolved primary/secondary ancestry
@@ -111,7 +111,7 @@ G4bool PhotonSensorSD::ProcessHits(G4Step* step, G4TouchableHistory*) {
   eventAction->RecordPhotonHit(hit);
 
   // Terminate the photon after hit registration to avoid duplicate detections
-  // from further transport steps inside/after the sensor volume.
+  // from further transport steps inside/after the optical-interface volume.
   track->SetTrackStatus(fStopAndKill);
   return true;
 }

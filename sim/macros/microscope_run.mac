@@ -5,7 +5,7 @@
 /run/printProgress 1000
 
 /output/format hdf5
-/output/filename data/photon_sensor_hits
+/output/filename data/photon_optical_interface_hits
 /output/runname microscope
 
 /scintillator/geom/material EJ200
@@ -16,12 +16,12 @@
 /scintillator/geom/posY 0 cm
 /scintillator/geom/posZ 0 cm
 
-/sensor/geom/sensorX 5 cm
-/sensor/geom/sensorY 5 cm
-/sensor/geom/sensorThickness 0.1 mm
-/sensor/geom/posX 0 cm
-/sensor/geom/posY 0 cm
-/sensor/geom/posZ 17.526 mm
+/optical_interface/geom/sizeX 5 cm
+/optical_interface/geom/sizeY 5 cm
+/optical_interface/geom/thickness 0.1 mm
+/optical_interface/geom/posX 0 cm
+/optical_interface/geom/posY 0 cm
+/optical_interface/geom/posZ 17.526 mm
 
 /run/initialize
 

@@ -34,7 +34,7 @@ class EventAction : public G4UserEventAction {
     G4double secondaryOriginEnergy = -1.0;
   };
 
-  /// Finalized sensor-hit record (one entry per detected optical photon).
+  /// Finalized optical-interface-hit record (one entry per detected optical photon).
   struct PhotonHitRecord {
     /// Geant4 track IDs (event-local).
     G4int primaryID = -1;
@@ -54,16 +54,16 @@ class EventAction : public G4UserEventAction {
     /// Optical-photon creation point inside the scintillator volume.
     G4ThreeVector scintOriginPosition;
 
-    /// Sensor-crossing position (world frame) at pre-step boundary entry.
-    G4ThreeVector sensorHitPosition;
-    /// Unit momentum-direction vector (dx,dy,dz) at sensor crossing.
-    G4ThreeVector sensorHitDirection;
-    /// Polarization vector at sensor crossing (world frame components).
-    G4ThreeVector sensorHitPolarization;
-    /// Photon total energy at sensor crossing (Geant4 internal energy units).
-    G4double sensorHitEnergy = -1.0;
-    /// Photon wavelength at sensor crossing (Geant4 length units).
-    G4double sensorHitWavelength = -1.0;
+    /// Optical-interface crossing position (world frame) at pre-step boundary entry.
+    G4ThreeVector opticalInterfaceHitPosition;
+    /// Unit momentum-direction vector (dx,dy,dz) at optical-interface crossing.
+    G4ThreeVector opticalInterfaceHitDirection;
+    /// Polarization vector at optical-interface crossing (world frame components).
+    G4ThreeVector opticalInterfaceHitPolarization;
+    /// Photon total energy at optical-interface crossing (Geant4 internal energy units).
+    G4double opticalInterfaceHitEnergy = -1.0;
+    /// Photon wavelength at optical-interface crossing (Geant4 length units).
+    G4double opticalInterfaceHitWavelength = -1.0;
   };
 
   /// Stores pointer to shared run configuration.
@@ -96,7 +96,7 @@ class EventAction : public G4UserEventAction {
   bool ConsumePendingPhotonOrigin(const G4Track* photonTrack,
                                   G4ThreeVector* origin);
 
-  /// Append one finalized sensor hit including crossing ray state metadata.
+  /// Append one finalized optical-interface hit including crossing ray state metadata.
   void RecordPhotonHit(const PhotonHitRecord& hit);
   /// Event primary species label.
   const std::string& GetPrimarySpecies() const { return fPrimarySpecies; }
@@ -125,7 +125,7 @@ class EventAction : public G4UserEventAction {
   std::unordered_map<G4int, PhotonCreationInfo> fPhotonCreationInfo;
   /// Track pointer -> pending origin captured at stepping-time.
   std::unordered_map<const void*, G4ThreeVector> fPendingPhotonOrigin;
-  /// Collected sensor-hit rows for end-of-event serialization.
+  /// Collected optical-interface-hit rows for end-of-event serialization.
   std::vector<PhotonHitRecord> fPhotonHits;
 };
 

@@ -1,7 +1,7 @@
 [workspace]
 name = "g4emi"
 version = "0.1.0"
-description = "Python tooling for lens propagation studies using Geant4 sensor-hit output."
+description = "Python tooling for lens propagation studies using Geant4 optical-interface-hit output."
 channels = ["conda-forge"]
 platforms = ["linux-64"]
 

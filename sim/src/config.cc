@@ -11,15 +11,15 @@
  *
  * Defaults are intentionally conservative and mirror the original hard-coded
  * application setup:
- * - Geometry: 5x5x1 cm scintillator with a 0.1 mm sensor plane.
+ * - Geometry: 5x5x1 cm scintillator with a 0.1 mm optical-interface plane.
  * - Scintillator position defaults to world origin (0,0,0).
- * - Sensor X/Y default to 0, which means "inherit scintillator X/Y".
- * - Sensor position defaults to NaN on all axes, which means:
+ * - Optical-interface X/Y default to 0, which means "inherit scintillator X/Y".
+ * - Optical-interface position defaults to NaN on all axes, which means:
  *   - X/Y align to scintillator center,
  *   - Z uses default flush placement at scintillator +Z face.
  * - Material: EJ200.
  * - Output: CSV mode (enum default in header), output base name
- *   "data/photon_sensor_hits", and no run-name subdirectory.
+ *   "data/photon_optical_interface_hits", and no run-name subdirectory.
  */
 Config::Config()
     : fScintX(5.0 * cm),
@@ -29,14 +29,14 @@ Config::Config()
       fScintPosY(0.0),
       fScintPosZ(0.0),
       fApertureRadius(0.0),
-      fSensorX(0.0),
-      fSensorY(0.0),
-      fSensorThickness(0.1 * mm),
-      fSensorPosX(std::numeric_limits<G4double>::quiet_NaN()),
-      fSensorPosY(std::numeric_limits<G4double>::quiet_NaN()),
-      fSensorPosZ(std::numeric_limits<G4double>::quiet_NaN()),
+      fOpticalInterfaceX(0.0),
+      fOpticalInterfaceY(0.0),
+      fOpticalInterfaceThickness(0.1 * mm),
+      fOpticalInterfacePosX(std::numeric_limits<G4double>::quiet_NaN()),
+      fOpticalInterfacePosY(std::numeric_limits<G4double>::quiet_NaN()),
+      fOpticalInterfacePosZ(std::numeric_limits<G4double>::quiet_NaN()),
       fScintMaterial("EJ200"),
-      fOutputFilename("data/photon_sensor_hits"),
+      fOutputFilename("data/photon_optical_interface_hits"),
       fOutputRunName("") {}
 
 /**
@@ -163,40 +163,40 @@ G4double Config::GetApertureRadius() const {
   return fApertureRadius;
 }
 
-/// Thread-safe geometry getter: sensor size in X.
-G4double Config::GetSensorX() const {
+/// Thread-safe geometry getter: optical-interface size in X.
+G4double Config::GetOpticalInterfaceX() const {
   std::lock_guard<std::mutex> lock(fMutex);
-  return fSensorX;
+  return fOpticalInterfaceX;
 }
 
-/// Thread-safe geometry getter: sensor size in Y.
-G4double Config::GetSensorY() const {
+/// Thread-safe geometry getter: optical-interface size in Y.
+G4double Config::GetOpticalInterfaceY() const {
   std::lock_guard<std::mutex> lock(fMutex);
-  return fSensorY;
+  return fOpticalInterfaceY;
 }
 
-/// Thread-safe geometry getter: sensor thickness in Z.
-G4double Config::GetSensorThickness() const {
+/// Thread-safe geometry getter: optical-interface thickness in Z.
+G4double Config::GetOpticalInterfaceThickness() const {
   std::lock_guard<std::mutex> lock(fMutex);
-  return fSensorThickness;
+  return fOpticalInterfaceThickness;
 }
 
-/// Thread-safe geometry getter: sensor center position X.
-G4double Config::GetSensorPosX() const {
+/// Thread-safe geometry getter: optical-interface center position X.
+G4double Config::GetOpticalInterfacePosX() const {
   std::lock_guard<std::mutex> lock(fMutex);
-  return fSensorPosX;
+  return fOpticalInterfacePosX;
 }
 
-/// Thread-safe geometry getter: sensor center position Y.
-G4double Config::GetSensorPosY() const {
+/// Thread-safe geometry getter: optical-interface center position Y.
+G4double Config::GetOpticalInterfacePosY() const {
   std::lock_guard<std::mutex> lock(fMutex);
-  return fSensorPosY;
+  return fOpticalInterfacePosY;
 }
 
-/// Thread-safe geometry getter: sensor center position Z.
-G4double Config::GetSensorPosZ() const {
+/// Thread-safe geometry getter: optical-interface center position Z.
+G4double Config::GetOpticalInterfacePosZ() const {
   std::lock_guard<std::mutex> lock(fMutex);
-  return fSensorPosZ;
+  return fOpticalInterfacePosZ;
 }
 
 /// Thread-safe geometry setter: scintillator size in X.
@@ -241,40 +241,40 @@ void Config::SetApertureRadius(G4double value) {
   fApertureRadius = value;
 }
 
-/// Thread-safe geometry setter: sensor size in X.
-void Config::SetSensorX(G4double value) {
+/// Thread-safe geometry setter: optical-interface size in X.
+void Config::SetOpticalInterfaceX(G4double value) {
   std::lock_guard<std::mutex> lock(fMutex);
-  fSensorX = value;
+  fOpticalInterfaceX = value;
 }
 
-/// Thread-safe geometry setter: sensor size in Y.
-void Config::SetSensorY(G4double value) {
+/// Thread-safe geometry setter: optical-interface size in Y.
+void Config::SetOpticalInterfaceY(G4double value) {
   std::lock_guard<std::mutex> lock(fMutex);
-  fSensorY = value;
+  fOpticalInterfaceY = value;
 }
 
-/// Thread-safe geometry setter: sensor thickness in Z.
-void Config::SetSensorThickness(G4double value) {
+/// Thread-safe geometry setter: optical-interface thickness in Z.
+void Config::SetOpticalInterfaceThickness(G4double value) {
   std::lock_guard<std::mutex> lock(fMutex);
-  fSensorThickness = value;
+  fOpticalInterfaceThickness = value;
 }
 
-/// Thread-safe geometry setter: sensor center position X.
-void Config::SetSensorPosX(G4double value) {
+/// Thread-safe geometry setter: optical-interface center position X.
+void Config::SetOpticalInterfacePosX(G4double value) {
   std::lock_guard<std::mutex> lock(fMutex);
-  fSensorPosX = value;
+  fOpticalInterfacePosX = value;
 }
 
-/// Thread-safe geometry setter: sensor center position Y.
-void Config::SetSensorPosY(G4double value) {
+/// Thread-safe geometry setter: optical-interface center position Y.
+void Config::SetOpticalInterfacePosY(G4double value) {
   std::lock_guard<std::mutex> lock(fMutex);
-  fSensorPosY = value;
+  fOpticalInterfacePosY = value;
 }
 
-/// Thread-safe geometry setter: sensor center position Z.
-void Config::SetSensorPosZ(G4double value) {
+/// Thread-safe geometry setter: optical-interface center position Z.
+void Config::SetOpticalInterfacePosZ(G4double value) {
   std::lock_guard<std::mutex> lock(fMutex);
-  fSensorPosZ = value;
+  fOpticalInterfacePosZ = value;
 }
 
 /// Thread-safe material-name getter.

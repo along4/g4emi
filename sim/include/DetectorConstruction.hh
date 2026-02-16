@@ -27,7 +27,7 @@ class DetectorConstruction : public G4VUserDetectorConstruction {
   /// Logical volume for scintillator energy-deposition scoring.
   G4LogicalVolume* fScoringVolume = nullptr;
   /// Logical volume for optical-photon hit detection plane.
-  G4LogicalVolume* fPhotonSensorVolume = nullptr;
+  G4LogicalVolume* fOpticalInterfaceVolume = nullptr;
 };
 
 #endif

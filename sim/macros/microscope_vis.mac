@@ -14,12 +14,12 @@
 /scintillator/geom/apertureRadius 8 mm
 
 
-/sensor/geom/sensorX 2 cm
-/sensor/geom/sensorY 2 cm
-/sensor/geom/sensorThickness 0.1 mm
-/sensor/geom/posX 0 cm
-/sensor/geom/posY 0 cm
-/sensor/geom/posZ 17.526 mm
+/optical_interface/geom/sizeX 2 cm
+/optical_interface/geom/sizeY 2 cm
+/optical_interface/geom/thickness 0.1 mm
+/optical_interface/geom/posX 0 cm
+/optical_interface/geom/posY 0 cm
+/optical_interface/geom/posZ 17.526 mm
 
 /run/initialize
 
@@ -46,4 +46,3 @@
 /gps/direction 0 0 1
 /gps/ene/type Mono
 /gps/ene/mono 6 MeV
-

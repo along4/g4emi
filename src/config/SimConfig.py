@@ -1,7 +1,7 @@
 """Pydantic simulation configuration for lens-aware g4emi geometry macros.
 
 This module binds together three concerns:
-1. User-facing simulation geometry parameters (scintillator/sensor).
+1. User-facing simulation geometry parameters (scintillator/optical-interface).
 2. Lens-driven geometry extraction from `.zmx` models.
 3. Deterministic macro-file rewriting for Geant4 command inputs.
 
@@ -49,12 +49,12 @@ class SimConfig(BaseModel):
     - Resolves and loads corresponding `.zmx` models via `LensModels`.
     - Exposes derived lens geometry used for simulation setup:
       clear diameter, lens length, image-circle metadata.
-    - Produces Geant4 macro commands for scintillator/sensor configuration.
+    - Produces Geant4 macro commands for scintillator/optical-interface configuration.
 
     Modeling convention:
     - `lenses[0]` is treated as the primary/object-side lens for defaults.
-    - Sensor diameter defaults to primary lens clear diameter unless overridden.
-    - Sensor Z placement is computed from requested back-face standoff.
+    - Optical-interface diameter defaults to primary lens clear diameter unless overridden.
+    - Optical-interface Z placement is computed from requested back-face standoff.
     """
 
     model_config = ConfigDict(validate_assignment=True)
@@ -76,20 +76,20 @@ class SimConfig(BaseModel):
     scint_pos_y_cm: float = 0.0
     scint_pos_z_cm: float = 0.0
 
-    # Sensor geometry + placement.
-    sensor_thickness_mm: float = Field(default=0.1, gt=0.0)
-    sensor_pos_x_cm: float = 0.0
-    sensor_pos_y_cm: float = 0.0
-    scint_back_to_sensor_mm: float = Field(default=200.0, gt=0.0)
-    sensor_diameter_mm: float | None = Field(default=None, gt=0.0)
+    # Optical-interface geometry + placement.
+    optical_interface_thickness_mm: float = Field(default=0.1, gt=0.0)
+    optical_interface_pos_x_cm: float = 0.0
+    optical_interface_pos_y_cm: float = 0.0
+    scint_back_to_optical_interface_mm: float = Field(default=200.0, gt=0.0)
+    optical_interface_diameter_mm: float | None = Field(default=None, gt=0.0)
 
-    # Optional aperture linked to sensor diameter by default.
+    # Optional aperture linked to optical-interface diameter by default.
     use_aperture_mask: bool = True
     aperture_radius_mm: float | None = Field(default=None, gt=0.0)
 
     # Output metadata.
     output_format: str = "hdf5"
-    output_filename: str = "data/photon_sensor_hits"
+    output_filename: str = "data/photon_optical_interface_hits"
     output_runname: str = "microscope"
 
     @model_validator(mode="after")
@@ -98,7 +98,7 @@ class SimConfig(BaseModel):
 
         This validator is intentionally holistic:
         - structural checks: lens/reversed cardinality
-        - geometric checks: sensor diameter, aperture feasibility, placement
+        - geometric checks: optical-interface diameter, aperture feasibility, placement
 
         Because `validate_assignment=True`, these checks also run after field
         updates, not only at construction time.
@@ -127,17 +127,17 @@ class SimConfig(BaseModel):
         """Validate geometry relationships that span multiple fields.
 
         Invariants enforced:
-        - Resolved sensor diameter must be strictly positive.
+        - Resolved optical-interface diameter must be strictly positive.
         - Optional aperture radius must fit inside scintillator half-diagonal.
-        - Sensor center Z must lie beyond scintillator back face.
+        - Optical-interface center Z must lie beyond scintillator back face.
         """
 
-        # Resolve effective sensor diameter first, since several downstream
+        # Resolve effective optical-interface diameter first, since several downstream
         # constraints depend on it (including default aperture sizing).
-        sensor_diameter_mm = self.resolved_sensor_diameter_mm()
-        if sensor_diameter_mm <= 0.0:
+        optical_interface_diameter_mm = self.resolved_optical_interface_diameter_mm()
+        if optical_interface_diameter_mm <= 0.0:
             raise ValueError(
-                f"Resolved sensor diameter must be > 0 mm (got {sensor_diameter_mm})."
+                f"Resolved optical-interface diameter must be > 0 mm (got {optical_interface_diameter_mm})."
             )
 
         aperture_radius_mm = self.resolved_aperture_radius_mm()
@@ -151,12 +151,12 @@ class SimConfig(BaseModel):
                     f"{aperture_radius_mm:.3f} mm > {scint_half_diag_mm:.3f} mm."
                 )
 
-        sensor_center_z_mm = self.sensor_center_z_mm()
+        optical_interface_center_z_mm = self.optical_interface_center_z_mm()
         scint_back_face_z_mm = self._scint_back_face_z_mm()
-        if sensor_center_z_mm <= scint_back_face_z_mm:
+        if optical_interface_center_z_mm <= scint_back_face_z_mm:
             raise ValueError(
-                "Sensor center must be beyond scintillator back face: "
-                f"{sensor_center_z_mm:.3f} mm <= {scint_back_face_z_mm:.3f} mm."
+                "Optical-interface center must be beyond scintillator back face: "
+                f"{optical_interface_center_z_mm:.3f} mm <= {scint_back_face_z_mm:.3f} mm."
             )
 
     def validate_geometry(self) -> "SimConfig":
@@ -185,9 +185,9 @@ class SimConfig(BaseModel):
     def with_geometry_updates(self, **updates: Any) -> "SimConfig":
         """Return a new config with geometry updates atomically validated.
 
-        This is a geometry-oriented alias around `validated_copy_with_updates`
+        This is a geometry-oriented wrapper around `validated_copy_with_updates`
         intended for simulation scripts that frequently tune multiple fields
-        together (for example scintillator size + sensor standoff).
+        together (for example scintillator size + optical-interface standoff).
         """
 
         return self.validated_copy_with_updates(**updates)
@@ -221,22 +221,22 @@ class SimConfig(BaseModel):
 
         return self.lens_models()[0]
 
-    def resolved_sensor_diameter_mm(self) -> float:
-        """Return sensor diameter in mm.
+    def resolved_optical_interface_diameter_mm(self) -> float:
+        """Return optical-interface diameter in mm.
 
         Priority:
-        1. explicit `sensor_diameter_mm`
+        1. explicit `optical_interface_diameter_mm`
         2. primary lens clear diameter
 
         Why this default:
-        - In single-lens workflows, sensor capture area typically tracks lens
+        - In single-lens workflows, optical-interface capture area typically tracks lens
           clear aperture/image coverage constraints.
-        - For two-lens workflows, users can override with `sensor_diameter_mm`
+        - For two-lens workflows, users can override with `optical_interface_diameter_mm`
           if they prefer a different sizing policy.
         """
 
-        if self.sensor_diameter_mm is not None:
-            return self.sensor_diameter_mm
+        if self.optical_interface_diameter_mm is not None:
+            return self.optical_interface_diameter_mm
         return lens_clear_diameter_mm(self.primary_lens())
 
     def lens_stack_length_total_mm(self) -> float:
@@ -286,35 +286,35 @@ class SimConfig(BaseModel):
         Behavior:
         - Returns `None` when aperture masking is disabled.
         - Uses explicit `aperture_radius_mm` when provided.
-        - Otherwise derives radius as half of resolved sensor diameter.
+        - Otherwise derives radius as half of resolved optical-interface diameter.
         """
 
         if not self.use_aperture_mask:
             return None
         if self.aperture_radius_mm is not None:
             return self.aperture_radius_mm
-        return 0.5 * self.resolved_sensor_diameter_mm()
+        return 0.5 * self.resolved_optical_interface_diameter_mm()
 
-    def sensor_center_z_mm(self) -> float:
-        """Compute sensor center z-position (mm) from configured standoff.
+    def optical_interface_center_z_mm(self) -> float:
+        """Compute optical-interface center z-position (mm) from configured standoff.
 
         Definitions:
         - Scintillator back face z:
           `scint_pos_z + scint_z/2`
-        - Sensor front face z:
-          `scintillator_back_face_z + scint_back_to_sensor_mm`
-        - Sensor center z:
-          `sensor_front_face_z + sensor_thickness/2`
+        - Optical-interface front face z:
+          `scintillator_back_face_z + scint_back_to_optical_interface_mm`
+        - Optical-interface center z:
+          `optical_interface_front_face_z + optical_interface_thickness/2`
         """
 
         scint_center_z_mm = self.scint_pos_z_cm * 10.0
         scint_half_thickness_mm = 0.5 * self.scint_z_cm * 10.0
-        sensor_half_thickness_mm = 0.5 * self.sensor_thickness_mm
+        optical_interface_half_thickness_mm = 0.5 * self.optical_interface_thickness_mm
         return (
             scint_center_z_mm
             + scint_half_thickness_mm
-            + self.scint_back_to_sensor_mm
-            + sensor_half_thickness_mm
+            + self.scint_back_to_optical_interface_mm
+            + optical_interface_half_thickness_mm
         )
 
     def geometry_commands(self) -> list[str]:
@@ -323,10 +323,10 @@ class SimConfig(BaseModel):
         Output order is stable and groups commands by subsystem:
         1. scintillator material and dimensions
         2. optional aperture command
-        3. sensor dimensions and placement
+        3. optical-interface dimensions and placement
         """
 
-        sensor_diameter_mm = self.resolved_sensor_diameter_mm()
+        optical_interface_diameter_mm = self.resolved_optical_interface_diameter_mm()
         aperture_radius_mm = self.resolved_aperture_radius_mm()
 
         commands = [
@@ -345,12 +345,12 @@ class SimConfig(BaseModel):
 
         commands.extend(
             [
-                f"/sensor/geom/sensorX {sensor_diameter_mm:.3f} mm",
-                f"/sensor/geom/sensorY {sensor_diameter_mm:.3f} mm",
-                f"/sensor/geom/sensorThickness {self.sensor_thickness_mm:g} mm",
-                f"/sensor/geom/posX {self.sensor_pos_x_cm:g} cm",
-                f"/sensor/geom/posY {self.sensor_pos_y_cm:g} cm",
-                f"/sensor/geom/posZ {self.sensor_center_z_mm():.3f} mm",
+                f"/optical_interface/geom/sizeX {optical_interface_diameter_mm:.3f} mm",
+                f"/optical_interface/geom/sizeY {optical_interface_diameter_mm:.3f} mm",
+                f"/optical_interface/geom/thickness {self.optical_interface_thickness_mm:g} mm",
+                f"/optical_interface/geom/posX {self.optical_interface_pos_x_cm:g} cm",
+                f"/optical_interface/geom/posY {self.optical_interface_pos_y_cm:g} cm",
+                f"/optical_interface/geom/posZ {self.optical_interface_center_z_mm():.3f} mm",
             ]
         )
         return commands
@@ -407,14 +407,14 @@ class SimConfig(BaseModel):
         - direct model fields (`model_dump`)
         - derived lens summary list
         - total lens-stack length
-        - resolved sensor diameter
+        - resolved optical-interface diameter
         """
 
         out = self.model_dump(mode="json")
         out["lens_geometry"] = self.lens_geometry_summary()
         out["lens_reversed_flags"] = self.lens_reversed_flags()
         out["lens_stack_length_total_mm"] = self.lens_stack_length_total_mm()
-        out["resolved_sensor_diameter_mm"] = self.resolved_sensor_diameter_mm()
+        out["resolved_optical_interface_diameter_mm"] = self.resolved_optical_interface_diameter_mm()
         return out
 
 
@@ -467,8 +467,8 @@ def _cli() -> None:
             "Total configured lens stack length (mm):",
             f"{cfg.lens_stack_length_total_mm():.3f}",
         )
-        print("Resolved sensor diameter (mm):", f"{cfg.resolved_sensor_diameter_mm():.3f}")
-        print("Resolved sensor center Z (mm):", f"{cfg.sensor_center_z_mm():.3f}")
+        print("Resolved optical-interface diameter (mm):", f"{cfg.resolved_optical_interface_diameter_mm():.3f}")
+        print("Resolved optical-interface center Z (mm):", f"{cfg.optical_interface_center_z_mm():.3f}")
         print("Geometry commands:")
         for cmd in cfg.geometry_commands():
             print(cmd)

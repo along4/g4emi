@@ -14,7 +14,7 @@
  * Geant4 UI messenger responsible for runtime configuration commands.
  *
  * Responsibilities:
- * - Register `/scintillator/geom/...`, `/sensor/geom/...`, and `/output/...`
+ * - Register `/scintillator/geom/...`, `/optical_interface/geom/...`, and `/output/...`
  *   command hierarchy.
  * - Parse user-provided command values.
  * - Forward validated values into the shared Config object.
@@ -29,13 +29,13 @@ Messenger::Messenger(Config* config) : fConfig(config) {
   fScintillatorGeomDir = new G4UIdirectory("/scintillator/geom/");
   fScintillatorGeomDir->SetGuidance("Scintillator geometry and material controls");
 
-  // Top-level namespace for sensor geometry commands.
-  fSensorDir = new G4UIdirectory("/sensor/");
-  fSensorDir->SetGuidance("Sensor controls");
+  // Top-level namespace for optical-interface geometry commands.
+  fOpticalInterfaceDir = new G4UIdirectory("/optical_interface/");
+  fOpticalInterfaceDir->SetGuidance("Optical-interface controls");
 
-  // Sensor geometry subtree.
-  fSensorGeomDir = new G4UIdirectory("/sensor/geom/");
-  fSensorGeomDir->SetGuidance("Sensor geometry controls");
+  // Optical-interface geometry subtree.
+  fOpticalInterfaceGeomDir = new G4UIdirectory("/optical_interface/geom/");
+  fOpticalInterfaceGeomDir->SetGuidance("Optical-interface geometry controls");
 
   // Output subtree (format and file destination controls).
   fOutputDir = new G4UIdirectory("/output/");
@@ -100,50 +100,54 @@ Messenger::Messenger(Config* config) : fConfig(config) {
   fGeomApertureRadiusCmd->SetRange("apertureRadius >= 0.");
   fGeomApertureRadiusCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 
-  // Sensor dimensions (X, Y) and thickness (Z).
-  fSensorXCmd = new G4UIcmdWithADoubleAndUnit("/sensor/geom/sensorX", this);
-  fSensorXCmd->SetGuidance("Set sensor size in X (0 means inherit scintillator X)");
-  fSensorXCmd->SetParameterName("sensorX", false);
-  fSensorXCmd->SetUnitCategory("Length");
-  fSensorXCmd->SetRange("sensorX >= 0.");
-  fSensorXCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
+  // Optical-interface dimensions (X, Y) and thickness (Z).
+  fOpticalInterfaceXCmd =
+      new G4UIcmdWithADoubleAndUnit("/optical_interface/geom/sizeX", this);
+  fOpticalInterfaceXCmd->SetGuidance(
+      "Set optical-interface size in X (0 means inherit scintillator X)");
+  fOpticalInterfaceXCmd->SetParameterName("sizeX", false);
+  fOpticalInterfaceXCmd->SetUnitCategory("Length");
+  fOpticalInterfaceXCmd->SetRange("sizeX >= 0.");
+  fOpticalInterfaceXCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 
-  fSensorYCmd = new G4UIcmdWithADoubleAndUnit("/sensor/geom/sensorY", this);
-  fSensorYCmd->SetGuidance("Set sensor size in Y (0 means inherit scintillator Y)");
-  fSensorYCmd->SetParameterName("sensorY", false);
-  fSensorYCmd->SetUnitCategory("Length");
-  fSensorYCmd->SetRange("sensorY >= 0.");
-  fSensorYCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
+  fOpticalInterfaceYCmd =
+      new G4UIcmdWithADoubleAndUnit("/optical_interface/geom/sizeY", this);
+  fOpticalInterfaceYCmd->SetGuidance(
+      "Set optical-interface size in Y (0 means inherit scintillator Y)");
+  fOpticalInterfaceYCmd->SetParameterName("sizeY", false);
+  fOpticalInterfaceYCmd->SetUnitCategory("Length");
+  fOpticalInterfaceYCmd->SetRange("sizeY >= 0.");
+  fOpticalInterfaceYCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 
-  fSensorThicknessCmd =
-      new G4UIcmdWithADoubleAndUnit("/sensor/geom/sensorThickness", this);
-  fSensorThicknessCmd->SetGuidance("Set sensor thickness in Z");
-  fSensorThicknessCmd->SetParameterName("sensorThickness", false);
-  fSensorThicknessCmd->SetUnitCategory("Length");
-  fSensorThicknessCmd->SetRange("sensorThickness > 0.");
-  fSensorThicknessCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
+  fOpticalInterfaceThicknessCmd =
+      new G4UIcmdWithADoubleAndUnit("/optical_interface/geom/thickness", this);
+  fOpticalInterfaceThicknessCmd->SetGuidance("Set optical-interface thickness in Z");
+  fOpticalInterfaceThicknessCmd->SetParameterName("thickness", false);
+  fOpticalInterfaceThicknessCmd->SetUnitCategory("Length");
+  fOpticalInterfaceThicknessCmd->SetRange("thickness > 0.");
+  fOpticalInterfaceThicknessCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 
-  // Sensor center-position commands in world coordinates.
-  fSensorPosXCmd = new G4UIcmdWithADoubleAndUnit("/sensor/geom/posX", this);
-  fSensorPosXCmd->SetGuidance(
-      "Set sensor center X position in world coordinates (default aligns with scintillator center)");
-  fSensorPosXCmd->SetParameterName("posX", false);
-  fSensorPosXCmd->SetUnitCategory("Length");
-  fSensorPosXCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
+  // Optical-interface center-position commands in world coordinates.
+  fOpticalInterfacePosXCmd = new G4UIcmdWithADoubleAndUnit("/optical_interface/geom/posX", this);
+  fOpticalInterfacePosXCmd->SetGuidance(
+      "Set optical-interface center X position in world coordinates (default aligns with scintillator center)");
+  fOpticalInterfacePosXCmd->SetParameterName("posX", false);
+  fOpticalInterfacePosXCmd->SetUnitCategory("Length");
+  fOpticalInterfacePosXCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 
-  fSensorPosYCmd = new G4UIcmdWithADoubleAndUnit("/sensor/geom/posY", this);
-  fSensorPosYCmd->SetGuidance(
-      "Set sensor center Y position in world coordinates (default aligns with scintillator center)");
-  fSensorPosYCmd->SetParameterName("posY", false);
-  fSensorPosYCmd->SetUnitCategory("Length");
-  fSensorPosYCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
+  fOpticalInterfacePosYCmd = new G4UIcmdWithADoubleAndUnit("/optical_interface/geom/posY", this);
+  fOpticalInterfacePosYCmd->SetGuidance(
+      "Set optical-interface center Y position in world coordinates (default aligns with scintillator center)");
+  fOpticalInterfacePosYCmd->SetParameterName("posY", false);
+  fOpticalInterfacePosYCmd->SetUnitCategory("Length");
+  fOpticalInterfacePosYCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 
-  fSensorPosZCmd = new G4UIcmdWithADoubleAndUnit("/sensor/geom/posZ", this);
-  fSensorPosZCmd->SetGuidance(
-      "Set sensor center Z position in world coordinates (default is flush on scintillator +Z face when not set)");
-  fSensorPosZCmd->SetParameterName("posZ", false);
-  fSensorPosZCmd->SetUnitCategory("Length");
-  fSensorPosZCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
+  fOpticalInterfacePosZCmd = new G4UIcmdWithADoubleAndUnit("/optical_interface/geom/posZ", this);
+  fOpticalInterfacePosZCmd->SetGuidance(
+      "Set optical-interface center Z position in world coordinates (default is flush on scintillator +Z face when not set)");
+  fOpticalInterfacePosZCmd->SetParameterName("posZ", false);
+  fOpticalInterfacePosZCmd->SetUnitCategory("Length");
+  fOpticalInterfacePosZCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 
   // Output format command. Allowed values are constrained by SetCandidates.
   fOutputFormatCmd = new G4UIcmdWithAString("/output/format", this);
@@ -178,13 +182,13 @@ Messenger::~Messenger() {
   delete fOutputFilenameCmd;
   delete fOutputFormatCmd;
 
-  delete fSensorPosZCmd;
-  delete fSensorPosYCmd;
-  delete fSensorPosXCmd;
+  delete fOpticalInterfacePosZCmd;
+  delete fOpticalInterfacePosYCmd;
+  delete fOpticalInterfacePosXCmd;
 
-  delete fSensorThicknessCmd;
-  delete fSensorYCmd;
-  delete fSensorXCmd;
+  delete fOpticalInterfaceThicknessCmd;
+  delete fOpticalInterfaceYCmd;
+  delete fOpticalInterfaceXCmd;
 
   delete fGeomScintPosZCmd;
   delete fGeomScintPosYCmd;
@@ -196,8 +200,8 @@ Messenger::~Messenger() {
   delete fGeomMaterialCmd;
 
   delete fOutputDir;
-  delete fSensorGeomDir;
-  delete fSensorDir;
+  delete fOpticalInterfaceGeomDir;
+  delete fOpticalInterfaceDir;
   delete fScintillatorGeomDir;
   delete fScintillatorDir;
 }
@@ -269,46 +273,46 @@ void Messenger::SetNewValue(G4UIcommand* command, G4String newValue) {
     return;
   }
 
-  // Sensor dimensions are controlled in dedicated /sensor/geom subtree.
-  if (command == fSensorXCmd) {
-    fConfig->SetSensorX(fSensorXCmd->GetNewDoubleValue(newValue));
+  // Optical-interface dimensions are controlled in dedicated /optical_interface/geom subtree.
+  if (command == fOpticalInterfaceXCmd) {
+    fConfig->SetOpticalInterfaceX(fOpticalInterfaceXCmd->GetNewDoubleValue(newValue));
     NotifyGeometryChanged();
     return;
   }
 
-  if (command == fSensorYCmd) {
-    fConfig->SetSensorY(fSensorYCmd->GetNewDoubleValue(newValue));
+  if (command == fOpticalInterfaceYCmd) {
+    fConfig->SetOpticalInterfaceY(fOpticalInterfaceYCmd->GetNewDoubleValue(newValue));
     NotifyGeometryChanged();
     return;
   }
 
-  if (command == fSensorThicknessCmd) {
-    fConfig->SetSensorThickness(fSensorThicknessCmd->GetNewDoubleValue(newValue));
+  if (command == fOpticalInterfaceThicknessCmd) {
+    fConfig->SetOpticalInterfaceThickness(fOpticalInterfaceThicknessCmd->GetNewDoubleValue(newValue));
     NotifyGeometryChanged();
     return;
   }
 
-  // Sensor absolute center position controls.
-  if (command == fSensorPosXCmd) {
-    const auto value = fSensorPosXCmd->GetNewDoubleValue(newValue);
-    fConfig->SetSensorPosX(value);
-    G4cout << "Sensor posX set to " << value / mm << " mm." << G4endl;
+  // Optical-interface absolute center position controls.
+  if (command == fOpticalInterfacePosXCmd) {
+    const auto value = fOpticalInterfacePosXCmd->GetNewDoubleValue(newValue);
+    fConfig->SetOpticalInterfacePosX(value);
+    G4cout << "Optical-interface posX set to " << value / mm << " mm." << G4endl;
     NotifyGeometryChanged();
     return;
   }
 
-  if (command == fSensorPosYCmd) {
-    const auto value = fSensorPosYCmd->GetNewDoubleValue(newValue);
-    fConfig->SetSensorPosY(value);
-    G4cout << "Sensor posY set to " << value / mm << " mm." << G4endl;
+  if (command == fOpticalInterfacePosYCmd) {
+    const auto value = fOpticalInterfacePosYCmd->GetNewDoubleValue(newValue);
+    fConfig->SetOpticalInterfacePosY(value);
+    G4cout << "Optical-interface posY set to " << value / mm << " mm." << G4endl;
     NotifyGeometryChanged();
     return;
   }
 
-  if (command == fSensorPosZCmd) {
-    const auto value = fSensorPosZCmd->GetNewDoubleValue(newValue);
-    fConfig->SetSensorPosZ(value);
-    G4cout << "Sensor posZ set to " << value / mm << " mm." << G4endl;
+  if (command == fOpticalInterfacePosZCmd) {
+    const auto value = fOpticalInterfacePosZCmd->GetNewDoubleValue(newValue);
+    fConfig->SetOpticalInterfacePosZ(value);
+    G4cout << "Optical-interface posZ set to " << value / mm << " mm." << G4endl;
     NotifyGeometryChanged();
     return;
   }

@@ -8,7 +8,7 @@ This minimal Geant4 app builds a simple setup:
 - Physics: `FTFP_BERT_HP` + `G4OpticalPhysics` (enables scintillation optical photons)
 
 During a run, the code prints progress every 1000 events.
-Optical photons crossing a thin sensor plane at the scintillator back face are recorded to
+Optical photons crossing a thin optical-interface plane at the scintillator back face are recorded to
 CSV, HDF5, or both (selectable).
 
 ## Build
@@ -56,8 +56,8 @@ models and patch macro files.
 Canon 50mm preset behavior:
 
 - Scintillator: `10 cm x 10 cm x 2 cm`
-- Sensor standoff: `20 cm` from scintillator back face to sensor front face
-- Sensor diameter: derived from `src/optics/zmxFiles/CanonEF50mmf1.0L.zmx`
+- Optical-interface standoff: `20 cm` from scintillator back face to optical-interface front face
+- Optical-interface diameter: derived from `src/optics/zmxFiles/CanonEF50mmf1.0L.zmx`
 
 Preview resolved geometry commands (single lens default):
 
@@ -96,7 +96,7 @@ If you need reproducible runs, explicitly set seeds in your macro before `/run/b
 /random/setSeeds 12345 67890
 ```
 
-## Configuration via Messenger (`/scintillator/geom/...` + `/sensor/geom/...` + `/output/...`)
+## Configuration via Messenger (`/scintillator/geom/...` + `/optical_interface/geom/...` + `/output/...`)
 
 The app now exposes UI commands so you can set geometry and output directly in
 macro files (or interactively) instead of relying on environment variables.
@@ -104,7 +104,7 @@ macro files (or interactively) instead of relying on environment variables.
 Command groups:
 
 - `/scintillator/geom/*`: scintillator geometry/material
-- `/sensor/geom/*`: sensor geometry
+- `/optical_interface/geom/*`: optical-interface geometry
 - `/output/*`: output format and base filename
 
 ### Supported commands
@@ -119,12 +119,12 @@ Command groups:
 - `/scintillator/geom/posX <value> <unit>`
 - `/scintillator/geom/posY <value> <unit>`
 - `/scintillator/geom/posZ <value> <unit>`
-- `/sensor/geom/sensorX <value> <unit>` (0 means inherit scintillator X)
-- `/sensor/geom/sensorY <value> <unit>` (0 means inherit scintillator Y)
-- `/sensor/geom/sensorThickness <value> <unit>`
-- `/sensor/geom/posX <value> <unit>`
-- `/sensor/geom/posY <value> <unit>`
-- `/sensor/geom/posZ <value> <unit>` (optional; if unset, defaults to flush on scintillator +Z face)
+- `/optical_interface/geom/sizeX <value> <unit>` (0 means inherit scintillator X)
+- `/optical_interface/geom/sizeY <value> <unit>` (0 means inherit scintillator Y)
+- `/optical_interface/geom/thickness <value> <unit>`
+- `/optical_interface/geom/posX <value> <unit>`
+- `/optical_interface/geom/posY <value> <unit>`
+- `/optical_interface/geom/posZ <value> <unit>` (optional; if unset, defaults to flush on scintillator +Z face)
 
 After changing geometry commands, run:
 
@@ -138,7 +138,7 @@ before `/run/beamOn`.
 
 ```text
 /output/format both
-/output/filename data/photon_sensor_hits
+/output/filename data/photon_optical_interface_hits
 
 /scintillator/geom/material EJ200
 /scintillator/geom/scintX 5 cm
@@ -147,12 +147,12 @@ before `/run/beamOn`.
 /scintillator/geom/posX 0 cm
 /scintillator/geom/posY 0 cm
 /scintillator/geom/posZ 0 cm
-/sensor/geom/sensorX 5 cm
-/sensor/geom/sensorY 5 cm
-/sensor/geom/sensorThickness 0.1 mm
-/sensor/geom/posX 0 cm
-/sensor/geom/posY 0 cm
-# /sensor/geom/posZ 5 mm  # optional absolute Z override (otherwise flush default)
+/optical_interface/geom/sizeX 5 cm
+/optical_interface/geom/sizeY 5 cm
+/optical_interface/geom/thickness 0.1 mm
+/optical_interface/geom/posX 0 cm
+/optical_interface/geom/posY 0 cm
+# /optical_interface/geom/posZ 5 mm  # optional absolute Z override (otherwise flush default)
 /run/initialize
 ```
 
@@ -175,28 +175,28 @@ In the Geant4 prompt:
 
 You should see optical processes such as `Scintillation`, `OpAbsorption`, and `OpBoundary`.
 
-## Photon Sensor Output
+## Photon Optical-Interface Output
 
-CSV mode: each row in `data/photon_sensor_hits.csv` represents one optical photon that reached
-the back-face sensor.
+CSV mode: each row in `data/photon_optical_interface_hits.csv` represents one optical photon that reached
+the back-face optical-interface.
 
 ### File location (all output modes)
 
 Output files are written under the repository data directory (`<repo>/data`) regardless of launch directory.
 
-- Outputs are written to `./data/photon_sensor_hits.csv` and/or `./data/photon_sensor_hits.h5` (repo root).
-- If `/output/runname <name>` is set, outputs are written to `./data/<name>/photon_sensor_hits.csv` and/or `./data/<name>/photon_sensor_hits.h5`.
+- Outputs are written to `./data/photon_optical_interface_hits.csv` and/or `./data/photon_optical_interface_hits.h5` (repo root).
+- If `/output/runname <name>` is set, outputs are written to `./data/<name>/photon_optical_interface_hits.csv` and/or `./data/<name>/photon_optical_interface_hits.h5`.
 
 ### Column schema
 
-`data/photon_sensor_hits.csv` columns in order:
+`data/photon_optical_interface_hits.csv` columns in order:
 
 | Column | Type | Units | Meaning | Notes |
 |---|---|---|---|---|
 | `event_id` | integer | n/a | Geant4 event index for this run | Starts at `0` and increments per event in `/run/beamOn N`. |
 | `primary_id` | integer | n/a | Track ID of the root primary associated with this photon hit | Track IDs are event-local. Commonly `1` when one primary is generated per event. |
 | `secondary_id` | integer | n/a | Track ID of the optical photon's immediate parent track | Usually a recoil/charged secondary that produced scintillation. |
-| `photon_id` | integer | n/a | Track ID of the optical photon that reached the sensor | Unique within an event, not across the entire file. |
+| `photon_id` | integer | n/a | Track ID of the optical photon that reached the optical-interface | Unique within an event, not across the entire file. |
 | `prim_spec` | string | n/a | Species label of the primary particle | Examples: `n`, `g`, `a`, `p`, `electron`, `positron`. |
 | `prim_x` | float | mm | Primary vertex x-position | Position of the primary vertex used for that event. |
 | `prim_y` | float | mm | Primary vertex y-position | Position of the primary vertex used for that event. |
@@ -208,8 +208,8 @@ Output files are written under the repository data directory (`<repo>/data`) reg
 | `scin_orig_x` | float | mm | Optical-photon origin x-position in scintillator | Captured at photon creation. |
 | `scin_orig_y` | float | mm | Optical-photon origin y-position in scintillator | Captured at photon creation. |
 | `scin_orig_z` | float | mm | Optical-photon origin z-position in scintillator | Captured at photon creation. |
-| `scin_face_x` | float | mm | Optical-photon hit x-position at back-face sensor | Position at sensor crossing point. |
-| `scin_face_y` | float | mm | Optical-photon hit y-position at back-face sensor | Position at sensor crossing point. |
+| `scin_face_x` | float | mm | Optical-photon hit x-position at back-face optical-interface | Position at optical-interface crossing point. |
+| `scin_face_y` | float | mm | Optical-photon hit y-position at back-face optical-interface | Position at optical-interface crossing point. |
 
 Practical uniqueness keys:
 
@@ -276,25 +276,25 @@ Correct comparison:
 Show header and first rows:
 
 ```bash
-head -n 6 data/photon_sensor_hits.csv
+head -n 6 data/photon_optical_interface_hits.csv
 ```
 
 Show one event only:
 
 ```bash
-awk -F, 'NR==1 || $1==0' data/photon_sensor_hits.csv | head -n 20
+awk -F, 'NR==1 || $1==0' data/photon_optical_interface_hits.csv | head -n 20
 ```
 
 Count rows per event:
 
 ```bash
-awk -F, 'NR>1{c[$1]++} END{for(e in c) print e,c[e]}' data/photon_sensor_hits.csv | sort -n | head
+awk -F, 'NR>1{c[$1]++} END{for(e in c) print e,c[e]}' data/photon_optical_interface_hits.csv | sort -n | head
 ```
 
 Check distinct secondary IDs for one event (example `event_id=0`):
 
 ```bash
-awk -F, '$1==0{print $3}' data/photon_sensor_hits.csv | sort -n | uniq
+awk -F, '$1==0{print $3}' data/photon_optical_interface_hits.csv | sort -n | uniq
 ```
 
 ## HDF5 layout
@@ -314,33 +314,33 @@ Dataset schemas:
   `secondary_origin_z_mm`, `secondary_origin_energy_MeV`
 - `/photons`: `gun_call_id`, `primary_track_id`, `secondary_track_id`,
   `photon_track_id`, `photon_origin_x_mm`, `photon_origin_y_mm`,
-  `photon_origin_z_mm`, `sensor_hit_x_mm`, `sensor_hit_y_mm`,
-  `sensor_hit_dir_x`, `sensor_hit_dir_y`, `sensor_hit_dir_z`,
-  `sensor_hit_pol_x`, `sensor_hit_pol_y`, `sensor_hit_pol_z`,
-  `sensor_hit_energy_eV`, `sensor_hit_wavelength_nm`
+  `photon_origin_z_mm`, `optical_interface_hit_x_mm`, `optical_interface_hit_y_mm`,
+  `optical_interface_hit_dir_x`, `optical_interface_hit_dir_y`, `optical_interface_hit_dir_z`,
+  `optical_interface_hit_pol_x`, `optical_interface_hit_pol_y`, `optical_interface_hit_pol_z`,
+  `optical_interface_hit_energy_eV`, `optical_interface_hit_wavelength_nm`
 
-### `/photons` sensor-crossing fields
+### `/photons` optical-interface crossing fields
 
-The `/photons` dataset now stores enough optical state at the sensor crossing
+The `/photons` dataset now stores enough optical state at the optical-interface crossing
 to seed downstream lens propagation in external tools (e.g. Python ray tracing).
 
 | Field | Units | Meaning |
 |---|---|---|
-| `sensor_hit_x_mm` | mm | Sensor entry position x at pre-step boundary crossing. |
-| `sensor_hit_y_mm` | mm | Sensor entry position y at pre-step boundary crossing. |
-| `sensor_hit_dir_x` | unitless | x-component of momentum direction unit vector at crossing. |
-| `sensor_hit_dir_y` | unitless | y-component of momentum direction unit vector at crossing. |
-| `sensor_hit_dir_z` | unitless | z-component of momentum direction unit vector at crossing. |
-| `sensor_hit_pol_x` | unitless | x-component of photon polarization vector at crossing. |
-| `sensor_hit_pol_y` | unitless | y-component of photon polarization vector at crossing. |
-| `sensor_hit_pol_z` | unitless | z-component of photon polarization vector at crossing. |
-| `sensor_hit_energy_eV` | eV | Photon total energy at sensor crossing. |
-| `sensor_hit_wavelength_nm` | nm | Photon wavelength derived as `lambda = h*c/E` from crossing energy. |
+| `optical_interface_hit_x_mm` | mm | Optical-interface entry position x at pre-step boundary crossing. |
+| `optical_interface_hit_y_mm` | mm | Optical-interface entry position y at pre-step boundary crossing. |
+| `optical_interface_hit_dir_x` | unitless | x-component of momentum direction unit vector at crossing. |
+| `optical_interface_hit_dir_y` | unitless | y-component of momentum direction unit vector at crossing. |
+| `optical_interface_hit_dir_z` | unitless | z-component of momentum direction unit vector at crossing. |
+| `optical_interface_hit_pol_x` | unitless | x-component of photon polarization vector at crossing. |
+| `optical_interface_hit_pol_y` | unitless | y-component of photon polarization vector at crossing. |
+| `optical_interface_hit_pol_z` | unitless | z-component of photon polarization vector at crossing. |
+| `optical_interface_hit_energy_eV` | eV | Photon total energy at optical-interface crossing. |
+| `optical_interface_hit_wavelength_nm` | nm | Photon wavelength derived as `lambda = h*c/E` from crossing energy. |
 
 Notes:
 
 - Direction and polarization components are written in world coordinates.
-- `sensor_hit_energy_eV` and `sensor_hit_wavelength_nm` are both stored so
+- `optical_interface_hit_energy_eV` and `optical_interface_hit_wavelength_nm` are both stored so
   post-processing does not need to recompute spectral values.
 - CSV output remains unchanged; these new fields are HDF5-only in `/photons`.
 
@@ -355,7 +355,7 @@ Important interpretation note:
 
 - `/primaries` has one row per event (every `gun_call_id`).
 - `/secondaries` and `/photons` are sparse: they only contain rows linked to
-  detected photons at the back-face sensor, so some `gun_call_id` values are
+  detected photons at the back-face optical-interface, so some `gun_call_id` values are
   intentionally absent there.
 
 Units are the same as CSV:
@@ -370,7 +370,7 @@ Units are the same as CSV:
 
 HDF5 compound datasets are not migrated in-place.
 
-- If you append to an existing older `photon_sensor_hits.h5`, it keeps the old
+- If you append to an existing older `photon_optical_interface_hits.h5`, it keeps the old
   `/photons` compound layout.
 - To get the new `/photons` fields, write to a fresh file:
   use a new `/output/runname`, or remove/rename the existing HDF5 file first.

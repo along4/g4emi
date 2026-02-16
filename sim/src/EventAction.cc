@@ -23,7 +23,7 @@
  * Responsibilities:
  * - Capture primary metadata from the Geant4 event.
  * - Collect cross-step/cross-track context (track origins and photon ancestry).
- * - Accumulate per-photon sensor-hit records.
+ * - Accumulate per-photon optical-interface-hit records.
  * - Transform collected data into IO row containers at end-of-event.
  * - Delegate all file writing to SimIO (CSV/HDF5) under one write lock.
  */
@@ -140,8 +140,8 @@ void EventAction::BeginOfEventAction(const G4Event* event) {
  * Workflow:
  * 1. Emit lightweight progress every 1000 simulated events.
  * 2. Build row containers for enabled output mode(s).
- *    - CSV rows keep the legacy flat sensor-hit schema.
- *    - HDF5 photon rows include sensor-crossing ray metadata
+ *    - CSV rows keep the legacy flat optical-interface-hit schema.
+ *    - HDF5 photon rows include optical-interface crossing ray metadata
  *      (direction, polarization, energy, wavelength).
  * 3. Serialize rows through SimIO under a shared file-write mutex.
  */
@@ -163,9 +163,9 @@ void EventAction::EndOfEventAction(const G4Event* event) {
 
   const auto eventID64 = static_cast<std::int64_t>(event->GetEventID());
   const std::string csvPath =
-      fConfig ? fConfig->GetCsvFilePath() : "photon_sensor_hits.csv";
+      fConfig ? fConfig->GetCsvFilePath() : "photon_optical_interface_hits.csv";
   const std::string hdf5Path =
-      fConfig ? fConfig->GetHdf5FilePath() : "photon_sensor_hits.h5";
+      fConfig ? fConfig->GetHdf5FilePath() : "photon_optical_interface_hits.h5";
 
   // Build flat CSV rows (one row per detected photon hit).
   std::vector<SimIO::CsvPhotonHitInfo> csvRows;
@@ -188,8 +188,8 @@ void EventAction::EndOfEventAction(const G4Event* event) {
       row.scintOriginXmm = hit.scintOriginPosition.x() / mm;
       row.scintOriginYmm = hit.scintOriginPosition.y() / mm;
       row.scintOriginZmm = hit.scintOriginPosition.z() / mm;
-      row.sensorHitXmm = hit.sensorHitPosition.x() / mm;
-      row.sensorHitYmm = hit.sensorHitPosition.y() / mm;
+      row.opticalInterfaceHitXmm = hit.opticalInterfaceHitPosition.x() / mm;
+      row.opticalInterfaceHitYmm = hit.opticalInterfaceHitPosition.y() / mm;
       csvRows.push_back(row);
     }
   }
@@ -251,7 +251,7 @@ void EventAction::EndOfEventAction(const G4Event* event) {
     }
 
     // Photons: one output row per detected optical photon hit.
-    // Capture both scintillation-origin location and sensor-crossing ray state.
+    // Capture both scintillation-origin location and optical-interface crossing ray state.
     // Unit conversions:
     // - positions -> mm
     // - energy -> eV
@@ -266,16 +266,16 @@ void EventAction::EndOfEventAction(const G4Event* event) {
       row.photonOriginXmm = hit.scintOriginPosition.x() / mm;
       row.photonOriginYmm = hit.scintOriginPosition.y() / mm;
       row.photonOriginZmm = hit.scintOriginPosition.z() / mm;
-      row.sensorHitXmm = hit.sensorHitPosition.x() / mm;
-      row.sensorHitYmm = hit.sensorHitPosition.y() / mm;
-      row.sensorHitDirX = hit.sensorHitDirection.x();
-      row.sensorHitDirY = hit.sensorHitDirection.y();
-      row.sensorHitDirZ = hit.sensorHitDirection.z();
-      row.sensorHitPolX = hit.sensorHitPolarization.x();
-      row.sensorHitPolY = hit.sensorHitPolarization.y();
-      row.sensorHitPolZ = hit.sensorHitPolarization.z();
-      row.sensorHitEnergyEV = hit.sensorHitEnergy / eV;
-      row.sensorHitWavelengthNm = hit.sensorHitWavelength / nm;
+      row.opticalInterfaceHitXmm = hit.opticalInterfaceHitPosition.x() / mm;
+      row.opticalInterfaceHitYmm = hit.opticalInterfaceHitPosition.y() / mm;
+      row.opticalInterfaceHitDirX = hit.opticalInterfaceHitDirection.x();
+      row.opticalInterfaceHitDirY = hit.opticalInterfaceHitDirection.y();
+      row.opticalInterfaceHitDirZ = hit.opticalInterfaceHitDirection.z();
+      row.opticalInterfaceHitPolX = hit.opticalInterfaceHitPolarization.x();
+      row.opticalInterfaceHitPolY = hit.opticalInterfaceHitPolarization.y();
+      row.opticalInterfaceHitPolZ = hit.opticalInterfaceHitPolarization.z();
+      row.opticalInterfaceHitEnergyEV = hit.opticalInterfaceHitEnergy / eV;
+      row.opticalInterfaceHitWavelengthNm = hit.opticalInterfaceHitWavelength / nm;
       photonRows.push_back(row);
     }
   }
@@ -372,12 +372,12 @@ bool EventAction::ConsumePendingPhotonOrigin(const G4Track* photonTrack,
 }
 
 /**
- * Append one finalized photon sensor-hit record for the current event.
+ * Append one finalized photon optical-interface-hit record for the current event.
  *
  * The record is expected to already contain:
  * - ancestry linkage (primary/secondary IDs and species),
  * - scintillation origin,
- * - sensor-crossing optical state (position, direction, polarization,
+ * - optical-interface crossing optical state (position, direction, polarization,
  *   energy, wavelength).
  */
 void EventAction::RecordPhotonHit(const PhotonHitRecord& hit) {

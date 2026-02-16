@@ -1,5 +1,5 @@
 #include "DetectorConstruction.hh"
-#include "PhotonSensorSD.hh"
+#include "PhotonOpticalInterfaceSD.hh"
 #include "config.hh"
 
 #include "G4Box.hh"
@@ -144,7 +144,7 @@ DetectorConstruction::DetectorConstruction(const Config* config) : fConfig(confi
  * - World: air box, auto-sized to stay comfortably larger than active volumes.
  * - Scintillator: centered EJ200 (or requested material) slab with configurable
  *   size and world position.
- * - Sensor: thin plane (size/position configurable) used to record optical hits.
+ * - Optical interface: thin plane (size/position configurable) used to record optical hits.
  *
  * Optical transport:
  * - World air gets RINDEX/ABSLENGTH to avoid undefined optical boundaries.
@@ -185,7 +185,7 @@ G4VPhysicalVolume* DetectorConstruction::Construct() {
   worldMaterial->SetMaterialPropertiesTable(worldMpt);
 
   // Geometry defaults match the baseline setup and may be overridden by
-  // /scintillator/geom/* and /sensor/geom/* commands before /run/initialize.
+  // /scintillator/geom/* and /optical_interface/geom/* commands before /run/initialize.
   auto scintX = 5.0 * cm;
   auto scintY = 5.0 * cm;
   auto scintZ = 1.0 * cm;
@@ -195,15 +195,15 @@ G4VPhysicalVolume* DetectorConstruction::Construct() {
   auto scintPosY = 0.0 * mm;
   auto scintPosZ = 0.0 * mm;
 
-  // Sensor defaults to covering the scintillator back face unless overridden.
-  auto sensorX = scintX;
-  auto sensorY = scintY;
-  auto sensorThickness = 0.1 * mm;
+  // Optical interface defaults to covering the scintillator back face unless overridden.
+  auto opticalInterfaceX = scintX;
+  auto opticalInterfaceY = scintY;
+  auto opticalInterfaceThickness = 0.1 * mm;
 
-  // Sensor default center: aligned with scintillator X/Y and flush on +Z face.
-  auto sensorPosX = std::numeric_limits<G4double>::quiet_NaN();
-  auto sensorPosY = std::numeric_limits<G4double>::quiet_NaN();
-  auto sensorPosZ = std::numeric_limits<G4double>::quiet_NaN();
+  // Optical interface default center: aligned with scintillator X/Y and flush on +Z face.
+  auto opticalInterfacePosX = std::numeric_limits<G4double>::quiet_NaN();
+  auto opticalInterfacePosY = std::numeric_limits<G4double>::quiet_NaN();
+  auto opticalInterfacePosZ = std::numeric_limits<G4double>::quiet_NaN();
 
   // Optional circular aperture pass-through radius at scintillator +Z face.
   auto apertureRadius = 0.0 * mm;
@@ -218,14 +218,14 @@ G4VPhysicalVolume* DetectorConstruction::Construct() {
     scintPosY = fConfig->GetScintPosY();
     scintPosZ = fConfig->GetScintPosZ();
 
-    sensorX = PositiveOrDefault(fConfig->GetSensorX(), scintX);
-    sensorY = PositiveOrDefault(fConfig->GetSensorY(), scintY);
-    sensorThickness =
-        PositiveOrDefault(fConfig->GetSensorThickness(), sensorThickness);
+    opticalInterfaceX = PositiveOrDefault(fConfig->GetOpticalInterfaceX(), scintX);
+    opticalInterfaceY = PositiveOrDefault(fConfig->GetOpticalInterfaceY(), scintY);
+    opticalInterfaceThickness =
+        PositiveOrDefault(fConfig->GetOpticalInterfaceThickness(), opticalInterfaceThickness);
 
-    sensorPosX = fConfig->GetSensorPosX();
-    sensorPosY = fConfig->GetSensorPosY();
-    sensorPosZ = fConfig->GetSensorPosZ();
+    opticalInterfacePosX = fConfig->GetOpticalInterfacePosX();
+    opticalInterfacePosY = fConfig->GetOpticalInterfacePosY();
+    opticalInterfacePosZ = fConfig->GetOpticalInterfacePosZ();
     apertureRadius = std::max(0.0, fConfig->GetApertureRadius());
   }
 
@@ -242,29 +242,29 @@ G4VPhysicalVolume* DetectorConstruction::Construct() {
     apertureEnabled = false;
   }
 
-  const auto defaultSensorX = scintPosX;
-  const auto defaultSensorY = scintPosY;
-  const auto defaultSensorZ =
+  const auto defaultOpticalInterfaceX = scintPosX;
+  const auto defaultOpticalInterfaceY = scintPosY;
+  const auto defaultOpticalInterfaceZ =
       scintBackFaceZ + (apertureEnabled ? apertureThickness : 0.0) +
-      0.5 * sensorThickness;
+      0.5 * opticalInterfaceThickness;
 
-  const auto sensorCenterX = std::isnan(sensorPosX) ? defaultSensorX : sensorPosX;
-  const auto sensorCenterY = std::isnan(sensorPosY) ? defaultSensorY : sensorPosY;
-  const auto sensorCenterZ = std::isnan(sensorPosZ) ? defaultSensorZ : sensorPosZ;
+  const auto opticalInterfaceCenterX = std::isnan(opticalInterfacePosX) ? defaultOpticalInterfaceX : opticalInterfacePosX;
+  const auto opticalInterfaceCenterY = std::isnan(opticalInterfacePosY) ? defaultOpticalInterfaceY : opticalInterfacePosY;
+  const auto opticalInterfaceCenterZ = std::isnan(opticalInterfacePosZ) ? defaultOpticalInterfaceZ : opticalInterfacePosZ;
 
   G4cout << "[Geom] Scint(mm)=(" << scintPosX / mm << "," << scintPosY / mm
-         << "," << scintPosZ / mm << ") Sensor(mm)=(" << sensorCenterX / mm
-         << "," << sensorCenterY / mm << "," << sensorCenterZ / mm
+         << "," << scintPosZ / mm << ") OpticalInterface(mm)=(" << opticalInterfaceCenterX / mm
+         << "," << opticalInterfaceCenterY / mm << "," << opticalInterfaceCenterZ / mm
          << ") ApertureR(mm)=" << apertureRadius / mm << G4endl;
 
   // Keep world automatically large enough even when volumes are shifted.
   // We size from required half-extents with a 4x safety factor.
   const auto requiredHalfX = std::max(std::abs(scintPosX) + 0.5 * scintX,
-                                      std::abs(sensorCenterX) + 0.5 * sensorX);
+                                      std::abs(opticalInterfaceCenterX) + 0.5 * opticalInterfaceX);
   const auto requiredHalfY = std::max(std::abs(scintPosY) + 0.5 * scintY,
-                                      std::abs(sensorCenterY) + 0.5 * sensorY);
+                                      std::abs(opticalInterfaceCenterY) + 0.5 * opticalInterfaceY);
   auto requiredHalfZ = std::max(std::abs(scintPosZ) + 0.5 * scintZ,
-                                std::abs(sensorCenterZ) + 0.5 * sensorThickness);
+                                std::abs(opticalInterfaceCenterZ) + 0.5 * opticalInterfaceThickness);
   if (apertureEnabled) {
     requiredHalfZ =
         std::max(requiredHalfZ, std::abs(apertureCenterZ) + 0.5 * apertureThickness);
@@ -293,7 +293,7 @@ G4VPhysicalVolume* DetectorConstruction::Construct() {
                     0,
                     true);
 
-  // Visualization: tint scintillator so sensor motion is easier to see.
+  // Visualization: tint scintillator so optical-interface motion is easier to see.
   static auto* scintVisAttributes = []() {
     auto* vis = new G4VisAttributes(G4Colour(0.1, 0.5, 0.9, 0.35));
     vis->SetVisibility(true);
@@ -337,25 +337,27 @@ G4VPhysicalVolume* DetectorConstruction::Construct() {
     }
   }
 
-  // Photon sensor is a dedicated logical volume used only for hit collection.
-  auto* sensorSolid = new G4Box("PhotonSensorSolid", 0.5 * sensorX, 0.5 * sensorY,
-                                0.5 * sensorThickness);
-  fPhotonSensorVolume =
-      new G4LogicalVolume(sensorSolid, worldMaterial, "PhotonSensorLV");
+  // Photon optical-interface is a dedicated logical volume used only for hit collection.
+  auto* opticalInterfaceSolid =
+      new G4Box("PhotonOpticalInterfaceSolid", 0.5 * opticalInterfaceX,
+                0.5 * opticalInterfaceY, 0.5 * opticalInterfaceThickness);
+  fOpticalInterfaceVolume =
+      new G4LogicalVolume(opticalInterfaceSolid, worldMaterial,
+                          "PhotonOpticalInterfaceLV");
 
-  // Visualization: draw the sensor in solid red so it is easy to identify in OGL.
-  static auto* sensorVisAttributes = []() {
+  // Visualization: draw the optical interface in solid red for easy OGL inspection.
+  static auto* opticalInterfaceVisAttributes = []() {
     auto* vis = new G4VisAttributes(G4Colour(1.0, 0.0, 0.0));
     vis->SetVisibility(true);
     vis->SetForceSolid(true);
     return vis;
   }();
-  fPhotonSensorVolume->SetVisAttributes(sensorVisAttributes);
+  fOpticalInterfaceVolume->SetVisAttributes(opticalInterfaceVisAttributes);
 
   new G4PVPlacement(nullptr,
-                    G4ThreeVector(sensorCenterX, sensorCenterY, sensorCenterZ),
-                    fPhotonSensorVolume,
-                    "PhotonSensorPV",
+                    G4ThreeVector(opticalInterfaceCenterX, opticalInterfaceCenterY, opticalInterfaceCenterZ),
+                    fOpticalInterfaceVolume,
+                    "PhotonOpticalInterfacePV",
                     worldLV,
                     false,
                     0,
@@ -367,11 +369,11 @@ G4VPhysicalVolume* DetectorConstruction::Construct() {
 /**
  * Attach sensitive detector(s) after geometry is built.
  *
- * We register a single PhotonSensorSD instance and assign it to the sensor
+ * We register a single PhotonOpticalInterfaceSD instance and assign it to the optical-interface
  * logical volume. If geometry was not built (or failed), we skip safely.
  */
 void DetectorConstruction::ConstructSDandField() {
-  if (!fPhotonSensorVolume) {
+  if (!fOpticalInterfaceVolume) {
     return;
   }
 
@@ -380,13 +382,14 @@ void DetectorConstruction::ConstructSDandField() {
   // Reuse the existing SD across geometry reinitializations. This avoids
   // duplicate-registration warnings (DET1010) when geometry commands trigger
   // /run/reinitializeGeometry in interactive sessions.
-  auto* existing = sdManager->FindSensitiveDetector("PhotonSensorSD", false);
-  auto* photonSensor = existing ? static_cast<PhotonSensorSD*>(existing)
-                                : new PhotonSensorSD("PhotonSensorSD");
+  auto* existing = sdManager->FindSensitiveDetector("PhotonOpticalInterfaceSD", false);
+  auto* photonOpticalInterface =
+      existing ? static_cast<PhotonOpticalInterfaceSD*>(existing)
+               : new PhotonOpticalInterfaceSD("PhotonOpticalInterfaceSD");
 
   if (!existing) {
-    sdManager->AddNewDetector(photonSensor);
+    sdManager->AddNewDetector(photonOpticalInterface);
   }
 
-  SetSensitiveDetector(fPhotonSensorVolume, photonSensor);
+  SetSensitiveDetector(fOpticalInterfaceVolume, photonOpticalInterface);
 }

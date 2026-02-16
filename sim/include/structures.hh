@@ -53,7 +53,7 @@ struct SecondaryInfo {
  *
  * Represents one detected optical photon row destined for the `/photons`
  * dataset in HDF5 output. This includes both creation-point metadata and
- * sensor-crossing state needed for downstream optical propagation.
+ * optical-interface crossing state needed for downstream optical propagation.
  */
 struct PhotonInfo {
   /// Geant4 event ID (`G4Event::GetEventID()`).
@@ -70,24 +70,24 @@ struct PhotonInfo {
   double photonOriginYmm = 0.0;
   double photonOriginZmm = 0.0;
 
-  /// Sensor entry-point coordinates in mm at the pre-step boundary crossing.
-  double sensorHitXmm = 0.0;
-  double sensorHitYmm = 0.0;
+  /// Optical-interface entry-point coordinates in mm at the pre-step boundary crossing.
+  double opticalInterfaceHitXmm = 0.0;
+  double opticalInterfaceHitYmm = 0.0;
 
-  /// Unit momentum-direction components at sensor crossing.
-  double sensorHitDirX = 0.0;
-  double sensorHitDirY = 0.0;
-  double sensorHitDirZ = 0.0;
+  /// Unit momentum-direction components at optical-interface crossing.
+  double opticalInterfaceHitDirX = 0.0;
+  double opticalInterfaceHitDirY = 0.0;
+  double opticalInterfaceHitDirZ = 0.0;
 
-  /// Polarization-vector components at sensor crossing.
-  double sensorHitPolX = 0.0;
-  double sensorHitPolY = 0.0;
-  double sensorHitPolZ = 0.0;
+  /// Polarization-vector components at optical-interface crossing.
+  double opticalInterfaceHitPolX = 0.0;
+  double opticalInterfaceHitPolY = 0.0;
+  double opticalInterfaceHitPolZ = 0.0;
 
-  /// Total photon energy at sensor crossing in eV.
-  double sensorHitEnergyEV = -1.0;
-  /// Photon wavelength at sensor crossing in nm.
-  double sensorHitWavelengthNm = -1.0;
+  /// Total photon energy at optical-interface crossing in eV.
+  double opticalInterfaceHitEnergyEV = -1.0;
+  /// Photon wavelength at optical-interface crossing in nm.
+  double opticalInterfaceHitWavelengthNm = -1.0;
 };
 
 /**
@@ -116,8 +116,8 @@ struct CsvPhotonHitInfo {
   double scintOriginYmm = 0.0;
   double scintOriginZmm = 0.0;
 
-  double sensorHitXmm = 0.0;
-  double sensorHitYmm = 0.0;
+  double opticalInterfaceHitXmm = 0.0;
+  double opticalInterfaceHitYmm = 0.0;
 };
 
 namespace detail {
@@ -173,16 +173,16 @@ struct Hdf5PhotonNativeRow {
   double photon_origin_x_mm;
   double photon_origin_y_mm;
   double photon_origin_z_mm;
-  double sensor_hit_x_mm;
-  double sensor_hit_y_mm;
-  double sensor_hit_dir_x;
-  double sensor_hit_dir_y;
-  double sensor_hit_dir_z;
-  double sensor_hit_pol_x;
-  double sensor_hit_pol_y;
-  double sensor_hit_pol_z;
-  double sensor_hit_energy_eV;
-  double sensor_hit_wavelength_nm;
+  double optical_interface_hit_x_mm;
+  double optical_interface_hit_y_mm;
+  double optical_interface_hit_dir_x;
+  double optical_interface_hit_dir_y;
+  double optical_interface_hit_dir_z;
+  double optical_interface_hit_pol_x;
+  double optical_interface_hit_pol_y;
+  double optical_interface_hit_pol_z;
+  double optical_interface_hit_energy_eV;
+  double optical_interface_hit_wavelength_nm;
 };
 
 /**

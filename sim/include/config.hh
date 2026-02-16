@@ -44,22 +44,22 @@ class Config {
   /// Circular aperture radius at scintillator +Z face (0 disables aperture).
   G4double GetApertureRadius() const;
 
-  /// Sensor X length (0 means inherit scintillator X).
-  G4double GetSensorX() const;
-  /// Sensor Y length (0 means inherit scintillator Y).
-  G4double GetSensorY() const;
-  /// Sensor Z thickness.
-  G4double GetSensorThickness() const;
+  /// Optical-interface X length (0 means inherit scintillator X).
+  G4double GetOpticalInterfaceX() const;
+  /// Optical-interface Y length (0 means inherit scintillator Y).
+  G4double GetOpticalInterfaceY() const;
+  /// Optical-interface Z thickness.
+  G4double GetOpticalInterfaceThickness() const;
 
-  /// Sensor center X position in world coordinates.
-  /// If unset, geometry code aligns sensor X with scintillator center X.
-  G4double GetSensorPosX() const;
-  /// Sensor center Y position in world coordinates.
-  /// If unset, geometry code aligns sensor Y with scintillator center Y.
-  G4double GetSensorPosY() const;
-  /// Sensor center Z position in world coordinates.
+  /// Optical-interface center X position in world coordinates.
+  /// If unset, geometry code aligns optical-interface X with scintillator center X.
+  G4double GetOpticalInterfacePosX() const;
+  /// Optical-interface center Y position in world coordinates.
+  /// If unset, geometry code aligns optical-interface Y with scintillator center Y.
+  G4double GetOpticalInterfacePosY() const;
+  /// Optical-interface center Z position in world coordinates.
   /// If unset, geometry code uses default flush placement on scintillator +Z face.
-  G4double GetSensorPosZ() const;
+  G4double GetOpticalInterfacePosZ() const;
 
   /// Set scintillator X length.
   void SetScintX(G4double value);
@@ -77,19 +77,19 @@ class Config {
   /// Set circular aperture radius at scintillator +Z face (0 disables aperture).
   void SetApertureRadius(G4double value);
 
-  /// Set sensor X length.
-  void SetSensorX(G4double value);
-  /// Set sensor Y length.
-  void SetSensorY(G4double value);
-  /// Set sensor Z thickness.
-  void SetSensorThickness(G4double value);
+  /// Set optical-interface X length.
+  void SetOpticalInterfaceX(G4double value);
+  /// Set optical-interface Y length.
+  void SetOpticalInterfaceY(G4double value);
+  /// Set optical-interface Z thickness.
+  void SetOpticalInterfaceThickness(G4double value);
 
-  /// Set sensor center X position in world coordinates.
-  void SetSensorPosX(G4double value);
-  /// Set sensor center Y position in world coordinates.
-  void SetSensorPosY(G4double value);
-  /// Set sensor center Z position in world coordinates.
-  void SetSensorPosZ(G4double value);
+  /// Set optical-interface center X position in world coordinates.
+  void SetOpticalInterfacePosX(G4double value);
+  /// Set optical-interface center Y position in world coordinates.
+  void SetOpticalInterfacePosY(G4double value);
+  /// Set optical-interface center Z position in world coordinates.
+  void SetOpticalInterfacePosZ(G4double value);
 
   /// Get scintillator material name.
   std::string GetScintMaterial() const;
@@ -130,17 +130,17 @@ class Config {
   /// Circular pass-through radius for aperture at scintillator +Z face.
   G4double fApertureRadius = 0.0;
 
-  /// Sensor dimensions in Geant4 internal units.
-  /// `fSensorX`/`fSensorY` may be zero to indicate "inherit scintillator size".
-  G4double fSensorX = 0.0;
-  G4double fSensorY = 0.0;
-  G4double fSensorThickness = 0.0;
+  /// Optical-interface dimensions in Geant4 internal units.
+  /// `fOpticalInterfaceX`/`fOpticalInterfaceY` may be zero to indicate "inherit scintillator size".
+  G4double fOpticalInterfaceX = 0.0;
+  G4double fOpticalInterfaceY = 0.0;
+  G4double fOpticalInterfaceThickness = 0.0;
 
-  /// Sensor center position in world coordinates.
+  /// Optical-interface center position in world coordinates.
   /// Values may be NaN to indicate "use default alignment/placement behavior".
-  G4double fSensorPosX = 0.0;
-  G4double fSensorPosY = 0.0;
-  G4double fSensorPosZ = 0.0;
+  G4double fOpticalInterfacePosX = 0.0;
+  G4double fOpticalInterfacePosY = 0.0;
+  G4double fOpticalInterfacePosZ = 0.0;
 
   /// Material and output settings.
   std::string fScintMaterial;

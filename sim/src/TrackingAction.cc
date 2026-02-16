@@ -51,7 +51,7 @@ TrackingAction::TrackingAction(EventAction* eventAction)
  * Responsibilities:
  * 1. Record generic track-origin metadata.
  * 2. Resolve and cache primary ancestry (`primaryTrackID`) through parent links.
- * 3. For optical photons, build PhotonCreationInfo so sensor hits can later
+ * 3. For optical photons, build PhotonCreationInfo so optical-interface hits can later
  *    include secondary parent and scintillation origin metadata.
  */
 void TrackingAction::PreUserTrackingAction(const G4Track* track) {
@@ -79,7 +79,7 @@ void TrackingAction::PreUserTrackingAction(const G4Track* track) {
   }
   fEventAction->RecordTrackInfo(trackID, trackInfo);
 
-  // For optical photons, cache creation ancestry used when the sensor SD records
+  // For optical photons, cache creation ancestry used when the optical-interface SD records
   // the eventual hit. This bridges tracking-time ancestry with SD hit capture.
   if (particleName == "opticalphoton") {
     EventAction::PhotonCreationInfo info;
