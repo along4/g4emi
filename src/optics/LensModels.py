@@ -1,4 +1,22 @@
-"""Pydantic lens models and `.zmx` geometry extraction helpers."""
+"""Lens metadata models and Zemax `.zmx` geometry extraction utilities.
+
+This module centralizes all parsing/inference logic related to optical lens
+files so higher-level orchestration code (for example `SimConfig`) can consume
+clean, validated geometry values without knowing Zemax text details.
+
+Design goals:
+- Keep parsing deterministic and explicit (no hidden global state).
+- Preserve traceability back to source `.zmx` file path.
+- Expose practical geometry values in millimeters:
+  - clear aperture diameter
+  - approximate lens assembly length
+  - image-plane coverage metadata (image-circle and inferred sensor size)
+
+Terminology used here:
+- "semi-diameter": radial half-size from optic axis to edge.
+- "clear diameter": full diameter, usually 2 * semi-diameter.
+- "track length": sum of finite DISZ separations in the sequential prescription.
+"""
 
 from __future__ import annotations
 
@@ -9,15 +27,27 @@ import re
 from pydantic import BaseModel, ConfigDict, Field
 
 
+# Capture the leading unit token (for example "MM") from `UNIT` line.
 _UNIT_RE = re.compile(r"^\s*UNIT\s+([A-Za-z]+)\b")
+# Start of each surface block in sequential Zemax files.
 _SURF_RE = re.compile(r"^\s*SURF\s+(\d+)\b")
+# First numeric value following `DIAM` is the surface aperture value.
 _DIAM_RE = re.compile(r"^\s*DIAM\s+([-+]?\d*\.?\d+(?:[Ee][-+]?\d+)?)\b")
+# `DISZ` carries spacing to the next surface, may be finite or INFINITY.
 _DISZ_RE = re.compile(r"^\s*DISZ\s+(.+?)\s*$")
+# Presence of `GLAS` marks a refractive element surface.
 _GLAS_RE = re.compile(r"^\s*GLAS\b")
 
 
 class LensSurface(BaseModel):
-    """Parsed subset of a Zemax surface block."""
+    """Compact representation of one parsed Zemax surface.
+
+    Field semantics:
+    - `index`: Zemax surface index (`SURF n`).
+    - `semi_diameter_mm`: parsed `DIAM` value for this surface.
+    - `disz_to_next_mm`: finite distance to next surface (`DISZ`), if present.
+    - `has_glass`: true if this surface block contains a `GLAS` entry.
+    """
 
     model_config = ConfigDict(frozen=True)
 
@@ -28,7 +58,20 @@ class LensSurface(BaseModel):
 
 
 class LensModel(BaseModel):
-    """Lens metadata and extracted geometry from a `.zmx` file."""
+    """Lens metadata and derived geometry extracted from a `.zmx` file.
+
+    This model is immutable (`frozen=True`) so derived geometric values cannot
+    drift from the source parse once constructed.
+
+    High-level geometric outputs:
+    - `clear_diameter_mm`: largest usable aperture diameter in the prescription.
+    - `lens_stack_length_mm`: front-to-back lens-group depth approximation
+      bounded by first/last surfaces that reference glass.
+    - `image_circle_diameter_mm`: image-plane coverage inferred from last
+      surface aperture.
+    - `inferred_sensor_width_mm_3x2`/`...height...`: 3:2-format rectangle
+      inferred from the image-circle diagonal.
+    """
 
     model_config = ConfigDict(frozen=True)
 
@@ -56,15 +99,37 @@ class LensModel(BaseModel):
     ) -> "LensModel":
         """Construct a LensModel by parsing a Zemax `.zmx` file.
 
-        Geometry extraction:
-        - `clear_diameter_mm`: max DIAM (or 2x max DIAM if DIAM is semi-diameter).
-        - `total_track_length_mm`: sum of finite DISZ values across all non-object surfaces.
-        - `lens_stack_length_mm`: sum of finite DISZ from first to last surface containing GLAS.
-          This approximates front-to-back lens assembly length (excluding long image-space distance).
-        - `image_plane_semidiameter_mm`: DIAM from the last surface (image surface).
-        - `image_circle_diameter_mm`: image-plane diameter inferred from the image semidiameter.
+        Parsing algorithm summary:
+        1. Scan the file line-by-line and build `LensSurface` blocks between
+           successive `SURF` markers.
+        2. Record first-seen UNIT token and validate that it is `MM`.
+        3. Extract relevant per-surface values (`DIAM`, `DISZ`, `GLAS` flag).
+        4. Compute aggregate geometric metrics from parsed surfaces.
+
+        Geometry extraction details:
+        - `clear_diameter_mm`:
+          `max(DIAM)` or `2*max(DIAM)` depending on
+          `diam_token_is_semidiameter`.
+        - `total_track_length_mm`:
+          sum of finite `DISZ` values for surfaces with index > 0; gives a
+          whole-prescription axial path length proxy.
+        - `lens_stack_length_mm`:
+          sum of finite `DISZ` from first to last surface that includes `GLAS`;
+          this isolates physical lens-group depth from very long object/image
+          distances.
+        - `image_plane_semidiameter_mm`:
+          aperture value on the last indexed surface (treated as image plane).
+        - `image_circle_diameter_mm`:
+          full image-circle diameter inferred from image semidiameter.
         - `inferred_sensor_width_mm_3x2` / `inferred_sensor_height_mm_3x2`:
-          sensor size inferred from image-circle diagonal assuming a 3:2 frame.
+          rectangle inferred from a 3:2 aspect ratio assumption where the
+          diagonal equals image-circle diameter.
+
+        Important assumptions/caveats:
+        - Sequential `.zmx` style with explicit `SURF`/`DIAM`/`DISZ` tokens.
+        - Image-plane interpreted as highest surface index.
+        - Inferred sensor size is not guaranteed to match a real sensor unless
+          the lens was designed for that exact format.
         """
 
         path = Path(zmx_path).resolve()
@@ -73,15 +138,20 @@ class LensModel(BaseModel):
 
         lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
 
+        # File-level lens unit (expected MM from these datasets).
         unit: str | None = None
+        # Ordered list of parsed surface records.
         surfaces: list[LensSurface] = []
 
+        # Mutable parse state for one surface block.
         current_index: int | None = None
         current_diam = 0.0
         current_disz: float | None = None
         current_has_glass = False
 
         def flush_surface() -> None:
+            """Finalize current mutable surface state into `surfaces` list."""
+
             nonlocal current_index, current_diam, current_disz, current_has_glass
             if current_index is None:
                 return
@@ -99,19 +169,23 @@ class LensModel(BaseModel):
             current_has_glass = False
 
         for line in lines:
+            # Capture unit once from the first matching UNIT line.
             unit_match = _UNIT_RE.match(line)
             if unit_match and unit is None:
                 unit = unit_match.group(1).upper()
 
+            # New SURF begins: commit prior block, then reset state.
             surf_match = _SURF_RE.match(line)
             if surf_match:
                 flush_surface()
                 current_index = int(surf_match.group(1))
                 continue
 
+            # Ignore non-surface lines once not inside a SURF block.
             if current_index is None:
                 continue
 
+            # Keep the leading DIAM numeric token as surface semi-diameter.
             diam_match = _DIAM_RE.match(line)
             if diam_match:
                 value = float(diam_match.group(1))
@@ -119,6 +193,7 @@ class LensModel(BaseModel):
                     current_diam = value
                 continue
 
+            # Parse finite DISZ spacing; skip INFINITY sentinel.
             disz_match = _DISZ_RE.match(line)
             if disz_match:
                 token = disz_match.group(1).strip().split()[0].upper()
@@ -126,9 +201,11 @@ class LensModel(BaseModel):
                     current_disz = float(token)
                 continue
 
+            # Any GLAS line marks this surface as part of refractive lens stack.
             if _GLAS_RE.match(line):
                 current_has_glass = True
 
+        # Commit the final surface block at EOF.
         flush_surface()
 
         if unit and unit != "MM":
@@ -138,7 +215,9 @@ class LensModel(BaseModel):
         if not surfaces:
             raise ValueError(f"No SURF blocks found in {path}")
 
-        diam_values = [s.semi_diameter_mm for s in surfaces if s.semi_diameter_mm > 0.0]
+        diam_values = [
+            s.semi_diameter_mm for s in surfaces if s.semi_diameter_mm > 0.0
+        ]
         if not diam_values:
             raise ValueError(f"No positive DIAM values found in {path}")
 
@@ -148,9 +227,12 @@ class LensModel(BaseModel):
         )
 
         total_track_length_mm = sum(
-            s.disz_to_next_mm for s in surfaces if s.index > 0 and s.disz_to_next_mm is not None
+            s.disz_to_next_mm
+            for s in surfaces
+            if s.index > 0 and s.disz_to_next_mm is not None
         )
 
+        # Identify physical lens stack extent using GLAS-tagged surfaces.
         glass_indices = [s.index for s in surfaces if s.has_glass]
         lens_stack_length_mm = 0.0
         if glass_indices:
@@ -162,6 +244,7 @@ class LensModel(BaseModel):
                 if s.disz_to_next_mm is not None and first_glass <= s.index <= last_glass
             )
 
+        # Image surface approximated by largest SURF index in sequential model.
         image_surface = max(surfaces, key=lambda s: s.index)
         image_plane_semidiameter_mm = max(0.0, image_surface.semi_diameter_mm)
         image_circle_diameter_mm = (
@@ -170,8 +253,8 @@ class LensModel(BaseModel):
             else image_plane_semidiameter_mm
         )
 
-        # Infer 3:2 sensor dimensions from diagonal = image circle diameter.
-        # This is an inference, not an explicit sensor specification in .zmx.
+        # Infer 3:2 sensor dimensions from diagonal=image_circle_diameter_mm.
+        # This is inferred convenience metadata, not explicit file truth.
         inferred_sensor_width_mm_3x2 = image_circle_diameter_mm * (3.0 / math.sqrt(13.0))
         inferred_sensor_height_mm_3x2 = image_circle_diameter_mm * (2.0 / math.sqrt(13.0))
 
@@ -192,16 +275,24 @@ class LensModel(BaseModel):
 
 
 def _default_zmx_dir() -> Path:
+    """Return default repository location for bundled Zemax files."""
+
     return Path(__file__).resolve().parent / "zmxFiles"
 
 
 def resolve_lens_path(lens_ref: str | Path) -> Path:
     """Resolve a lens reference into a concrete `.zmx` file path.
 
-    Accepted forms:
-    - absolute or relative filesystem path
-    - short aliases: `canon50`, `nikkor80-200`
-    - file stem or filename under `src/optics/zmxFiles`
+    Resolution order:
+    1. Exact user-provided filesystem path.
+    2. Known aliases (`canon50`, `nikkor80-200`, etc.).
+    3. File under default zmx directory.
+    4. File stem under default directory with `.zmx` suffix added.
+
+    Accepted lens_ref forms:
+    - absolute or relative path
+    - alias token
+    - filename or stem for file in `src/optics/zmxFiles`
     """
 
     if isinstance(lens_ref, Path):
@@ -216,18 +307,18 @@ def resolve_lens_path(lens_ref: str | Path) -> Path:
         }
         candidate = Path(alias_map.get(alias, lens_ref))
 
-    # Direct path hit.
+    # Direct path hit (absolute or cwd-relative).
     if candidate.exists():
         return candidate.resolve()
 
     zmx_dir = _default_zmx_dir()
 
-    # Try path under default zmx directory.
+    # Try path under default bundled zmx directory.
     in_dir = zmx_dir / candidate
     if in_dir.exists():
         return in_dir.resolve()
 
-    # Try adding extension under default zmx directory.
+    # Try adding .zmx extension under default bundled directory.
     if candidate.suffix.lower() != ".zmx":
         with_ext = zmx_dir / f"{candidate.name}.zmx"
         if with_ext.exists():
@@ -237,7 +328,11 @@ def resolve_lens_path(lens_ref: str | Path) -> Path:
 
 
 def load_lens_models(lenses: list[str | Path]) -> list[LensModel]:
-    """Load one or more lens models from references."""
+    """Load and parse a sequence of lenses from path/alias references.
+
+    The returned list order matches the input order. Caller can treat this as
+    optical ordering (for example lens 1 then lens 2 in a stack).
+    """
 
     models: list[LensModel] = []
     for lens_ref in lenses:
@@ -247,18 +342,18 @@ def load_lens_models(lenses: list[str | Path]) -> list[LensModel]:
 
 
 def lens_clear_diameter_mm(lens: LensModel) -> float:
-    """Return clear diameter (mm) from a LensModel."""
+    """Return clear aperture diameter (mm) from a parsed lens model."""
 
     return lens.clear_diameter_mm
 
 
 def lens_stack_length_mm(lens: LensModel) -> float:
-    """Return extracted lens assembly length (mm) from a LensModel."""
+    """Return extracted front-to-back lens stack length (mm)."""
 
     return lens.lens_stack_length_mm
 
 
 def lens_image_circle_diameter_mm(lens: LensModel) -> float:
-    """Return inferred image-circle diameter (mm) from the image surface."""
+    """Return image-circle diameter (mm) inferred from image-plane DIAM."""
 
     return lens.image_circle_diameter_mm

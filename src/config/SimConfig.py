@@ -1,4 +1,15 @@
-"""Pydantic simulation configuration for lens-aware g4emi macro geometry."""
+"""Pydantic simulation configuration for lens-aware g4emi geometry macros.
+
+This module binds together three concerns:
+1. User-facing simulation geometry parameters (scintillator/sensor).
+2. Lens-driven geometry extraction from `.zmx` models.
+3. Deterministic macro-file rewriting for Geant4 command inputs.
+
+The intent is to keep geometry choices declarative and reproducible:
+- A lens list (1-2 lenses) is the optical input.
+- Derived lens quantities (diameter/length/image-circle) come from `LensModels`.
+- Geant4 macro commands are generated from one validated config object.
+"""
 
 from __future__ import annotations
 
@@ -32,10 +43,17 @@ except ModuleNotFoundError:
 class SimConfig(BaseModel):
     """High-level geometry + lens-stack configuration for g4emi.
 
-    Key behavior:
-    - Accepts a lens list of size 1 or 2.
-    - Loads `.zmx` lens models through `src.optics.LensModels`.
-    - Exposes derived geometry (diameter and length) for placement logic.
+    Core behavior:
+    - Accepts one or two lenses through `lenses`.
+    - Resolves and loads corresponding `.zmx` models via `LensModels`.
+    - Exposes derived lens geometry used for simulation setup:
+      clear diameter, lens length, image-circle metadata.
+    - Produces Geant4 macro commands for scintillator/sensor configuration.
+
+    Modeling convention:
+    - `lenses[0]` is treated as the primary/object-side lens for defaults.
+    - Sensor diameter defaults to primary lens clear diameter unless overridden.
+    - Sensor Z placement is computed from requested back-face standoff.
     """
 
     model_config = ConfigDict(validate_assignment=True)
@@ -70,17 +88,26 @@ class SimConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_lens_count(self) -> "SimConfig":
+        """Ensure lens-list cardinality matches supported configurations."""
+
         if not (1 <= len(self.lenses) <= 2):
             raise ValueError("`lenses` must contain 1 or 2 entries.")
         return self
 
     def lens_models(self) -> list[LensModel]:
-        """Load lens models from `self.lenses` references."""
+        """Load `LensModel` objects from current lens references.
+
+        Each call re-resolves and re-parses from source files to keep behavior
+        stateless and fully dependent on current config values.
+        """
 
         return load_lens_models(self.lenses)
 
     def primary_lens(self) -> LensModel:
-        """Return the first (object-side) lens model."""
+        """Return primary lens model (`lenses[0]`).
+
+        This method exists to make the default-diameter assumption explicit.
+        """
 
         return self.lens_models()[0]
 
@@ -90,6 +117,12 @@ class SimConfig(BaseModel):
         Priority:
         1. explicit `sensor_diameter_mm`
         2. primary lens clear diameter
+
+        Why this default:
+        - In single-lens workflows, sensor capture area typically tracks lens
+          clear aperture/image coverage constraints.
+        - For two-lens workflows, users can override with `sensor_diameter_mm`
+          if they prefer a different sizing policy.
         """
 
         if self.sensor_diameter_mm is not None:
@@ -97,12 +130,24 @@ class SimConfig(BaseModel):
         return lens_clear_diameter_mm(self.primary_lens())
 
     def lens_stack_length_total_mm(self) -> float:
-        """Return sum of extracted lens stack lengths for all configured lenses."""
+        """Return total lens-stack depth (mm) across configured lenses.
+
+        This simply sums per-lens extracted `lens_stack_length_mm` and does not
+        include adapters/air gaps between separate lens bodies.
+        """
 
         return sum(lens_stack_length_mm(lens) for lens in self.lens_models())
 
     def lens_geometry_summary(self) -> list[dict[str, Any]]:
-        """Return a compact geometry summary for each configured lens."""
+        """Return lens geometry summary records for reporting/serialization.
+
+        Included per lens:
+        - clear aperture diameter
+        - extracted lens stack length
+        - total track length
+        - image-plane aperture and inferred image circle
+        - inferred 3:2 sensor width/height from image-circle diagonal
+        """
 
         summary: list[dict[str, Any]] = []
         for lens in self.lens_models():
@@ -123,7 +168,13 @@ class SimConfig(BaseModel):
         return summary
 
     def resolved_aperture_radius_mm(self) -> float | None:
-        """Return aperture radius in mm, or None to disable aperture command."""
+        """Return aperture radius in mm for scintillator-face circular mask.
+
+        Behavior:
+        - Returns `None` when aperture masking is disabled.
+        - Uses explicit `aperture_radius_mm` when provided.
+        - Otherwise derives radius as half of resolved sensor diameter.
+        """
 
         if not self.use_aperture_mask:
             return None
@@ -132,7 +183,16 @@ class SimConfig(BaseModel):
         return 0.5 * self.resolved_sensor_diameter_mm()
 
     def sensor_center_z_mm(self) -> float:
-        """Compute sensor center z-position in mm from back-face standoff."""
+        """Compute sensor center z-position (mm) from configured standoff.
+
+        Definitions:
+        - Scintillator back face z:
+          `scint_pos_z + scint_z/2`
+        - Sensor front face z:
+          `scintillator_back_face_z + scint_back_to_sensor_mm`
+        - Sensor center z:
+          `sensor_front_face_z + sensor_thickness/2`
+        """
 
         scint_center_z_mm = self.scint_pos_z_cm * 10.0
         scint_half_thickness_mm = 0.5 * self.scint_z_cm * 10.0
@@ -145,7 +205,13 @@ class SimConfig(BaseModel):
         )
 
     def geometry_commands(self) -> list[str]:
-        """Build Geant4 geometry commands from this configuration."""
+        """Build Geant4 geometry commands from this configuration.
+
+        Output order is stable and groups commands by subsystem:
+        1. scintillator material and dimensions
+        2. optional aperture command
+        3. sensor dimensions and placement
+        """
 
         sensor_diameter_mm = self.resolved_sensor_diameter_mm()
         aperture_radius_mm = self.resolved_aperture_radius_mm()
@@ -177,7 +243,14 @@ class SimConfig(BaseModel):
         return commands
 
     def apply_geometry_to_macro(self, macro_path: str | Path) -> None:
-        """Replace or insert geometry commands in a Geant4 macro file."""
+        """Apply generated geometry commands to an existing macro in-place.
+
+        Update strategy:
+        - Replace any existing lines with matching command prefixes.
+        - Preserve comments/blank lines and unrelated commands.
+        - Insert still-missing geometry commands immediately before
+          `/run/initialize` (or append to end if not present).
+        """
 
         path = Path(macro_path)
         if not path.exists():
@@ -190,17 +263,20 @@ class SimConfig(BaseModel):
         out_lines: list[str] = []
         for line in lines:
             stripped = line.strip()
+            # Preserve comments/whitespace verbatim for readability.
             if not stripped or stripped.startswith("#"):
                 out_lines.append(line)
                 continue
 
             prefix = stripped.split()[0]
+            # Replace only known geometry command prefixes.
             if prefix in replacements:
                 out_lines.append(replacements[prefix])
                 replaced.add(prefix)
                 continue
             out_lines.append(line)
 
+        # Inject any missing geometry commands at canonical insertion point.
         missing = [p for p in replacements if p not in replaced]
         if missing:
             insert_idx = next(
@@ -212,7 +288,14 @@ class SimConfig(BaseModel):
         path.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialize configuration and derived lens geometry into a dict."""
+        """Serialize config plus derived lens geometry into a plain dict.
+
+        Returned payload includes:
+        - direct model fields (`model_dump`)
+        - derived lens summary list
+        - total lens-stack length
+        - resolved sensor diameter
+        """
 
         out = self.model_dump(mode="json")
         out["lens_geometry"] = self.lens_geometry_summary()
@@ -222,12 +305,23 @@ class SimConfig(BaseModel):
 
 
 def default_single_lens_config() -> SimConfig:
-    """Return default single-lens config (Canon EF50mm preset)."""
+    """Return default single-lens config (`canon50`)."""
 
     return SimConfig(lenses=["canon50"])
 
 
 def _cli() -> None:
+    """Command-line entry point for quick inspection and macro patching.
+
+    Typical usage:
+    - Inspect lens-derived geometry:
+      `python src/config/SimConfig.py --lens canon50`
+    - Inspect two-lens geometry:
+      `python src/config/SimConfig.py --lens canon50 --lens nikkor80-200`
+    - Patch macros in place:
+      `python src/config/SimConfig.py --macro sim/macros/microscope_run.mac`
+    """
+
     parser = argparse.ArgumentParser(description="Apply SimConfig geometry to macros.")
     parser.add_argument(
         "--lens",
