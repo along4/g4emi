@@ -6,18 +6,20 @@
 
 /scintillator/geom/material EJ200
 /scintillator/geom/scintX 2 cm
-/scintillator/geom/scintY 5 cm
+/scintillator/geom/scintY 2 cm
 /scintillator/geom/scintZ 1 cm
 /scintillator/geom/posX 0 cm
 /scintillator/geom/posY 0 cm
 /scintillator/geom/posZ 0 cm
+/scintillator/geom/apertureRadius 8 mm
 
-/sensor/geom/sensorX 5 cm
+
+/sensor/geom/sensorX 2 cm
 /sensor/geom/sensorY 2 cm
 /sensor/geom/sensorThickness 0.1 mm
 /sensor/geom/posX 0 cm
 /sensor/geom/posY 0 cm
-/sensor/geom/posZ 50.00 mm
+/sensor/geom/posZ 17.526 mm
 
 /run/initialize
 
@@ -43,5 +45,5 @@
 /gps/pos/radius 1.0 cm
 /gps/direction 0 0 1
 /gps/ene/type Mono
-/gps/ene/mono 2 MeV
+/gps/ene/mono 6 MeV
 

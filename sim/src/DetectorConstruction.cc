@@ -11,8 +11,10 @@
 #include "G4NistManager.hh"
 #include "G4PVPlacement.hh"
 #include "G4SDManager.hh"
+#include "G4SubtractionSolid.hh"
 #include "G4SystemOfUnits.hh"
 #include "G4ThreeVector.hh"
+#include "G4Tubs.hh"
 #include "G4VisAttributes.hh"
 #include "G4ios.hh"
 
@@ -101,6 +103,32 @@ G4Material* BuildOrGetEJ200(G4NistManager* nist) {
 
   return scintMaterial;
 }
+
+/**
+ * Build (once) and return a highly absorbing optical material for aperture masks.
+ */
+G4Material* BuildOrGetApertureAbsorber(G4NistManager* nist) {
+  if (auto* existing = G4Material::GetMaterial("ApertureAbsorber", false)) {
+    return existing;
+  }
+
+  auto* carbon = nist->FindOrBuildElement("C");
+  auto* absorber = new G4Material("ApertureAbsorber", 2.0 * g / cm3, 1);
+  absorber->AddElement(carbon, 1);
+
+  G4double photonEnergy[kNEntries] = {2.00 * eV, 2.40 * eV, 2.76 * eV, 3.10 * eV,
+                                      3.50 * eV};
+  G4double rIndex[kNEntries] = {1.5, 1.5, 1.5, 1.5, 1.5};
+  G4double absLength[kNEntries] = {1.0 * um, 1.0 * um, 1.0 * um, 1.0 * um,
+                                   1.0 * um};
+
+  auto* mpt = new G4MaterialPropertiesTable();
+  mpt->AddProperty("RINDEX", photonEnergy, rIndex, kNEntries);
+  mpt->AddProperty("ABSLENGTH", photonEnergy, absLength, kNEntries);
+  absorber->SetMaterialPropertiesTable(mpt);
+
+  return absorber;
+}
 }  // namespace
 
 /**
@@ -177,6 +205,10 @@ G4VPhysicalVolume* DetectorConstruction::Construct() {
   auto sensorPosY = std::numeric_limits<G4double>::quiet_NaN();
   auto sensorPosZ = std::numeric_limits<G4double>::quiet_NaN();
 
+  // Optional circular aperture pass-through radius at scintillator +Z face.
+  auto apertureRadius = 0.0 * mm;
+  const auto apertureThickness = 0.01 * mm;
+
   if (fConfig) {
     scintX = PositiveOrDefault(fConfig->GetScintX(), scintX);
     scintY = PositiveOrDefault(fConfig->GetScintY(), scintY);
@@ -194,19 +226,36 @@ G4VPhysicalVolume* DetectorConstruction::Construct() {
     sensorPosX = fConfig->GetSensorPosX();
     sensorPosY = fConfig->GetSensorPosY();
     sensorPosZ = fConfig->GetSensorPosZ();
+    apertureRadius = std::max(0.0, fConfig->GetApertureRadius());
+  }
+
+  const auto scintBackFaceZ = scintPosZ + 0.5 * scintZ;
+  const auto apertureCenterZ = scintBackFaceZ + 0.5 * apertureThickness;
+  const auto apertureMaxRadius = std::hypot(0.5 * scintX, 0.5 * scintY);
+  auto apertureEnabled = apertureRadius > 0.0;
+
+  if (apertureEnabled && apertureRadius >= apertureMaxRadius) {
+    G4cout << "[Geom] apertureRadius (" << apertureRadius / mm
+           << " mm) is larger than the scintillator half-diagonal ("
+           << apertureMaxRadius / mm << " mm). Aperture mask disabled."
+           << G4endl;
+    apertureEnabled = false;
   }
 
   const auto defaultSensorX = scintPosX;
   const auto defaultSensorY = scintPosY;
-  const auto defaultSensorZ = scintPosZ + 0.5 * scintZ + 0.5 * sensorThickness;
+  const auto defaultSensorZ =
+      scintBackFaceZ + (apertureEnabled ? apertureThickness : 0.0) +
+      0.5 * sensorThickness;
 
   const auto sensorCenterX = std::isnan(sensorPosX) ? defaultSensorX : sensorPosX;
   const auto sensorCenterY = std::isnan(sensorPosY) ? defaultSensorY : sensorPosY;
   const auto sensorCenterZ = std::isnan(sensorPosZ) ? defaultSensorZ : sensorPosZ;
 
-  G4cout << "[Geom] Scint(mm)=(" << scintPosX / mm << "," << scintPosY / mm << ","
-         << scintPosZ / mm << ") Sensor(mm)=(" << sensorCenterX / mm << ","
-         << sensorCenterY / mm << "," << sensorCenterZ / mm << ")" << G4endl;
+  G4cout << "[Geom] Scint(mm)=(" << scintPosX / mm << "," << scintPosY / mm
+         << "," << scintPosZ / mm << ") Sensor(mm)=(" << sensorCenterX / mm
+         << "," << sensorCenterY / mm << "," << sensorCenterZ / mm
+         << ") ApertureR(mm)=" << apertureRadius / mm << G4endl;
 
   // Keep world automatically large enough even when volumes are shifted.
   // We size from required half-extents with a 4x safety factor.
@@ -214,8 +263,12 @@ G4VPhysicalVolume* DetectorConstruction::Construct() {
                                       std::abs(sensorCenterX) + 0.5 * sensorX);
   const auto requiredHalfY = std::max(std::abs(scintPosY) + 0.5 * scintY,
                                       std::abs(sensorCenterY) + 0.5 * sensorY);
-  const auto requiredHalfZ = std::max(std::abs(scintPosZ) + 0.5 * scintZ,
-                                      std::abs(sensorCenterZ) + 0.5 * sensorThickness);
+  auto requiredHalfZ = std::max(std::abs(scintPosZ) + 0.5 * scintZ,
+                                std::abs(sensorCenterZ) + 0.5 * sensorThickness);
+  if (apertureEnabled) {
+    requiredHalfZ =
+        std::max(requiredHalfZ, std::abs(apertureCenterZ) + 0.5 * apertureThickness);
+  }
 
   const auto worldX = std::max(1.0 * m, 8.0 * requiredHalfX);
   const auto worldY = std::max(1.0 * m, 8.0 * requiredHalfY);
@@ -248,6 +301,41 @@ G4VPhysicalVolume* DetectorConstruction::Construct() {
     return vis;
   }();
   fScoringVolume->SetVisAttributes(scintVisAttributes);
+
+  if (apertureEnabled) {
+    constexpr auto kApertureClearance = 1.0 * um;
+    const auto maskHalfX = std::max(0.0 * mm, 0.5 * scintX - kApertureClearance);
+    const auto maskHalfY = std::max(0.0 * mm, 0.5 * scintY - kApertureClearance);
+
+    if (maskHalfX > 0.0 && maskHalfY > 0.0) {
+      auto* apertureOuter = new G4Box("ScintApertureOuterSolid", maskHalfX, maskHalfY,
+                                      0.5 * apertureThickness);
+      auto* apertureHole =
+          new G4Tubs("ScintApertureHoleSolid", 0.0, apertureRadius,
+                     0.5 * apertureThickness + kApertureClearance, 0.0, 360.0 * deg);
+      auto* apertureSolid =
+          new G4SubtractionSolid("ScintApertureSolid", apertureOuter, apertureHole);
+      auto* apertureLV = new G4LogicalVolume(
+          apertureSolid, BuildOrGetApertureAbsorber(nist), "ScintApertureLV");
+
+      static auto* apertureVisAttributes = []() {
+        auto* vis = new G4VisAttributes(G4Colour(0.0, 0.2, 1.0, 0.9));
+        vis->SetVisibility(true);
+        vis->SetForceSolid(true);
+        return vis;
+      }();
+      apertureLV->SetVisAttributes(apertureVisAttributes);
+
+      new G4PVPlacement(nullptr,
+                        G4ThreeVector(scintPosX, scintPosY, apertureCenterZ),
+                        apertureLV,
+                        "ScintAperturePV",
+                        worldLV,
+                        false,
+                        0,
+                        true);
+    }
+  }
 
   // Photon sensor is a dedicated logical volume used only for hit collection.
   auto* sensorSolid = new G4Box("PhotonSensorSolid", 0.5 * sensorX, 0.5 * sensorY,

@@ -28,6 +28,7 @@ Config::Config()
       fScintPosX(0.0),
       fScintPosY(0.0),
       fScintPosZ(0.0),
+      fApertureRadius(0.0),
       fSensorX(0.0),
       fSensorY(0.0),
       fSensorThickness(0.1 * mm),
@@ -156,6 +157,12 @@ G4double Config::GetScintPosZ() const {
   return fScintPosZ;
 }
 
+/// Thread-safe geometry getter: aperture radius at scintillator +Z face.
+G4double Config::GetApertureRadius() const {
+  std::lock_guard<std::mutex> lock(fMutex);
+  return fApertureRadius;
+}
+
 /// Thread-safe geometry getter: sensor size in X.
 G4double Config::GetSensorX() const {
   std::lock_guard<std::mutex> lock(fMutex);
@@ -226,6 +233,12 @@ void Config::SetScintPosY(G4double value) {
 void Config::SetScintPosZ(G4double value) {
   std::lock_guard<std::mutex> lock(fMutex);
   fScintPosZ = value;
+}
+
+/// Thread-safe geometry setter: aperture radius at scintillator +Z face.
+void Config::SetApertureRadius(G4double value) {
+  std::lock_guard<std::mutex> lock(fMutex);
+  fApertureRadius = value;
 }
 
 /// Thread-safe geometry setter: sensor size in X.

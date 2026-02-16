@@ -90,6 +90,16 @@ Messenger::Messenger(Config* config) : fConfig(config) {
   fGeomScintPosZCmd->SetUnitCategory("Length");
   fGeomScintPosZCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 
+  // Aperture radius command for circular pass-through region at scintillator +Z face.
+  fGeomApertureRadiusCmd =
+      new G4UIcmdWithADoubleAndUnit("/scintillator/geom/apertureRadius", this);
+  fGeomApertureRadiusCmd->SetGuidance(
+      "Set circular aperture radius on scintillator +Z face (0 disables aperture)");
+  fGeomApertureRadiusCmd->SetParameterName("apertureRadius", false);
+  fGeomApertureRadiusCmd->SetUnitCategory("Length");
+  fGeomApertureRadiusCmd->SetRange("apertureRadius >= 0.");
+  fGeomApertureRadiusCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
+
   // Sensor dimensions (X, Y) and thickness (Z).
   fSensorXCmd = new G4UIcmdWithADoubleAndUnit("/sensor/geom/sensorX", this);
   fSensorXCmd->SetGuidance("Set sensor size in X (0 means inherit scintillator X)");
@@ -179,6 +189,7 @@ Messenger::~Messenger() {
   delete fGeomScintPosZCmd;
   delete fGeomScintPosYCmd;
   delete fGeomScintPosXCmd;
+  delete fGeomApertureRadiusCmd;
   delete fGeomScintZCmd;
   delete fGeomScintYCmd;
   delete fGeomScintXCmd;
@@ -247,6 +258,13 @@ void Messenger::SetNewValue(G4UIcommand* command, G4String newValue) {
 
   if (command == fGeomScintPosZCmd) {
     fConfig->SetScintPosZ(fGeomScintPosZCmd->GetNewDoubleValue(newValue));
+    NotifyGeometryChanged();
+    return;
+  }
+
+  if (command == fGeomApertureRadiusCmd) {
+    fConfig->SetApertureRadius(
+        fGeomApertureRadiusCmd->GetNewDoubleValue(newValue));
     NotifyGeometryChanged();
     return;
   }

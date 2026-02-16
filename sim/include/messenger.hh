@@ -41,6 +41,7 @@ class Messenger : public G4UImessenger {
   G4UIcmdWithADoubleAndUnit* fGeomScintPosXCmd = nullptr;
   G4UIcmdWithADoubleAndUnit* fGeomScintPosYCmd = nullptr;
   G4UIcmdWithADoubleAndUnit* fGeomScintPosZCmd = nullptr;
+  G4UIcmdWithADoubleAndUnit* fGeomApertureRadiusCmd = nullptr;
 
   /// Sensor geometry commands (size + thickness).
   G4UIcmdWithADoubleAndUnit* fSensorXCmd = nullptr;
