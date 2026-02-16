@@ -261,7 +261,35 @@ Dataset schemas:
   `secondary_origin_z_mm`, `secondary_origin_energy_MeV`
 - `/photons`: `gun_call_id`, `primary_track_id`, `secondary_track_id`,
   `photon_track_id`, `photon_origin_x_mm`, `photon_origin_y_mm`,
-  `photon_origin_z_mm`, `sensor_hit_x_mm`, `sensor_hit_y_mm`
+  `photon_origin_z_mm`, `sensor_hit_x_mm`, `sensor_hit_y_mm`,
+  `sensor_hit_dir_x`, `sensor_hit_dir_y`, `sensor_hit_dir_z`,
+  `sensor_hit_pol_x`, `sensor_hit_pol_y`, `sensor_hit_pol_z`,
+  `sensor_hit_energy_eV`, `sensor_hit_wavelength_nm`
+
+### `/photons` sensor-crossing fields
+
+The `/photons` dataset now stores enough optical state at the sensor crossing
+to seed downstream lens propagation in external tools (e.g. Python ray tracing).
+
+| Field | Units | Meaning |
+|---|---|---|
+| `sensor_hit_x_mm` | mm | Sensor entry position x at pre-step boundary crossing. |
+| `sensor_hit_y_mm` | mm | Sensor entry position y at pre-step boundary crossing. |
+| `sensor_hit_dir_x` | unitless | x-component of momentum direction unit vector at crossing. |
+| `sensor_hit_dir_y` | unitless | y-component of momentum direction unit vector at crossing. |
+| `sensor_hit_dir_z` | unitless | z-component of momentum direction unit vector at crossing. |
+| `sensor_hit_pol_x` | unitless | x-component of photon polarization vector at crossing. |
+| `sensor_hit_pol_y` | unitless | y-component of photon polarization vector at crossing. |
+| `sensor_hit_pol_z` | unitless | z-component of photon polarization vector at crossing. |
+| `sensor_hit_energy_eV` | eV | Photon total energy at sensor crossing. |
+| `sensor_hit_wavelength_nm` | nm | Photon wavelength derived as `lambda = h*c/E` from crossing energy. |
+
+Notes:
+
+- Direction and polarization components are written in world coordinates.
+- `sensor_hit_energy_eV` and `sensor_hit_wavelength_nm` are both stored so
+  post-processing does not need to recompute spectral values.
+- CSV output remains unchanged; these new fields are HDF5-only in `/photons`.
 
 Naming semantics:
 
@@ -280,4 +308,16 @@ Important interpretation note:
 Units are the same as CSV:
 
 - Positions in `mm`
-- Energies in `MeV`
+- Energies in `/primaries` and `/secondaries` are in `MeV`
+- Photon crossing energy in `/photons` is in `eV`
+- Photon crossing wavelength in `/photons` is in `nm`
+- Direction and polarization components are unitless
+
+### HDF5 schema update behavior
+
+HDF5 compound datasets are not migrated in-place.
+
+- If you append to an existing older `photon_sensor_hits.h5`, it keeps the old
+  `/photons` compound layout.
+- To get the new `/photons` fields, write to a fresh file:
+  use a new `/output/runname`, or remove/rename the existing HDF5 file first.

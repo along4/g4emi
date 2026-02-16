@@ -36,20 +36,34 @@ class EventAction : public G4UserEventAction {
 
   /// Finalized sensor-hit record (one entry per detected optical photon).
   struct PhotonHitRecord {
+    /// Geant4 track IDs (event-local).
     G4int primaryID = -1;
     G4int secondaryID = -1;
     G4int photonID = -1;
 
+    /// Event primary metadata carried into each hit row for convenience.
     std::string primarySpecies = "unknown";
     G4double primaryX = -1.0;
     G4double primaryY = -1.0;
 
+    /// Parent-secondary metadata resolved during ancestry reconstruction.
     std::string secondarySpecies = "unknown";
     G4ThreeVector secondaryOriginPosition;
     G4double secondaryOriginEnergy = -1.0;
 
+    /// Optical-photon creation point inside the scintillator volume.
     G4ThreeVector scintOriginPosition;
+
+    /// Sensor-crossing position (world frame) at pre-step boundary entry.
     G4ThreeVector sensorHitPosition;
+    /// Unit momentum-direction vector (dx,dy,dz) at sensor crossing.
+    G4ThreeVector sensorHitDirection;
+    /// Polarization vector at sensor crossing (world frame components).
+    G4ThreeVector sensorHitPolarization;
+    /// Photon total energy at sensor crossing (Geant4 internal energy units).
+    G4double sensorHitEnergy = -1.0;
+    /// Photon wavelength at sensor crossing (Geant4 length units).
+    G4double sensorHitWavelength = -1.0;
   };
 
   /// Stores pointer to shared run configuration.
@@ -82,7 +96,7 @@ class EventAction : public G4UserEventAction {
   bool ConsumePendingPhotonOrigin(const G4Track* photonTrack,
                                   G4ThreeVector* origin);
 
-  /// Append one finalized sensor hit.
+  /// Append one finalized sensor hit including crossing ray state metadata.
   void RecordPhotonHit(const PhotonHitRecord& hit);
   /// Event primary species label.
   const std::string& GetPrimarySpecies() const { return fPrimarySpecies; }

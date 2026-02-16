@@ -50,17 +50,44 @@ struct SecondaryInfo {
 
 /**
  * Optical-photon information container.
+ *
+ * Represents one detected optical photon row destined for the `/photons`
+ * dataset in HDF5 output. This includes both creation-point metadata and
+ * sensor-crossing state needed for downstream optical propagation.
  */
 struct PhotonInfo {
+  /// Geant4 event ID (`G4Event::GetEventID()`).
   std::int64_t gunCallId = -1;
+  /// Geant4 primary-track ID linked to this photon (event-local).
   std::int32_t primaryTrackId = -1;
+  /// Geant4 parent-secondary track ID linked to this photon (event-local).
   std::int32_t secondaryTrackId = -1;
+  /// Geant4 optical-photon track ID (event-local).
   std::int32_t photonTrackId = -1;
+
+  /// Photon creation-point position in the scintillator frame, expressed in mm.
   double photonOriginXmm = 0.0;
   double photonOriginYmm = 0.0;
   double photonOriginZmm = 0.0;
+
+  /// Sensor entry-point coordinates in mm at the pre-step boundary crossing.
   double sensorHitXmm = 0.0;
   double sensorHitYmm = 0.0;
+
+  /// Unit momentum-direction components at sensor crossing.
+  double sensorHitDirX = 0.0;
+  double sensorHitDirY = 0.0;
+  double sensorHitDirZ = 0.0;
+
+  /// Polarization-vector components at sensor crossing.
+  double sensorHitPolX = 0.0;
+  double sensorHitPolY = 0.0;
+  double sensorHitPolZ = 0.0;
+
+  /// Total photon energy at sensor crossing in eV.
+  double sensorHitEnergyEV = -1.0;
+  /// Photon wavelength at sensor crossing in nm.
+  double sensorHitWavelengthNm = -1.0;
 };
 
 /**
@@ -134,6 +161,9 @@ struct Hdf5SecondaryNativeRow {
 
 /**
  * Binary/native row layout for `/photons` HDF5 dataset.
+ *
+ * Field names/ordering mirror the semantic PhotonInfo container above. Keep
+ * this struct POD-compatible for HDF5 compound writes.
  */
 struct Hdf5PhotonNativeRow {
   std::int64_t gun_call_id;
@@ -145,6 +175,14 @@ struct Hdf5PhotonNativeRow {
   double photon_origin_z_mm;
   double sensor_hit_x_mm;
   double sensor_hit_y_mm;
+  double sensor_hit_dir_x;
+  double sensor_hit_dir_y;
+  double sensor_hit_dir_z;
+  double sensor_hit_pol_x;
+  double sensor_hit_pol_y;
+  double sensor_hit_pol_z;
+  double sensor_hit_energy_eV;
+  double sensor_hit_wavelength_nm;
 };
 
 /**

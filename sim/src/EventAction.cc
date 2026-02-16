@@ -140,6 +140,9 @@ void EventAction::BeginOfEventAction(const G4Event* event) {
  * Workflow:
  * 1. Emit lightweight progress every 1000 simulated events.
  * 2. Build row containers for enabled output mode(s).
+ *    - CSV rows keep the legacy flat sensor-hit schema.
+ *    - HDF5 photon rows include sensor-crossing ray metadata
+ *      (direction, polarization, energy, wavelength).
  * 3. Serialize rows through SimIO under a shared file-write mutex.
  */
 void EventAction::EndOfEventAction(const G4Event* event) {
@@ -248,6 +251,11 @@ void EventAction::EndOfEventAction(const G4Event* event) {
     }
 
     // Photons: one output row per detected optical photon hit.
+    // Capture both scintillation-origin location and sensor-crossing ray state.
+    // Unit conversions:
+    // - positions -> mm
+    // - energy -> eV
+    // - wavelength -> nm
     photonRows.reserve(fPhotonHits.size());
     for (const auto& hit : fPhotonHits) {
       SimIO::PhotonInfo row;
@@ -260,6 +268,14 @@ void EventAction::EndOfEventAction(const G4Event* event) {
       row.photonOriginZmm = hit.scintOriginPosition.z() / mm;
       row.sensorHitXmm = hit.sensorHitPosition.x() / mm;
       row.sensorHitYmm = hit.sensorHitPosition.y() / mm;
+      row.sensorHitDirX = hit.sensorHitDirection.x();
+      row.sensorHitDirY = hit.sensorHitDirection.y();
+      row.sensorHitDirZ = hit.sensorHitDirection.z();
+      row.sensorHitPolX = hit.sensorHitPolarization.x();
+      row.sensorHitPolY = hit.sensorHitPolarization.y();
+      row.sensorHitPolZ = hit.sensorHitPolarization.z();
+      row.sensorHitEnergyEV = hit.sensorHitEnergy / eV;
+      row.sensorHitWavelengthNm = hit.sensorHitWavelength / nm;
       photonRows.push_back(row);
     }
   }
@@ -357,6 +373,12 @@ bool EventAction::ConsumePendingPhotonOrigin(const G4Track* photonTrack,
 
 /**
  * Append one finalized photon sensor-hit record for the current event.
+ *
+ * The record is expected to already contain:
+ * - ancestry linkage (primary/secondary IDs and species),
+ * - scintillation origin,
+ * - sensor-crossing optical state (position, direction, polarization,
+ *   energy, wavelength).
  */
 void EventAction::RecordPhotonHit(const PhotonHitRecord& hit) {
   fPhotonHits.push_back(hit);

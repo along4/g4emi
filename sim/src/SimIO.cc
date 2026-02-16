@@ -201,6 +201,10 @@ bool AppendNativeRows(hid_t dataset,
  * - Closes and reopens all handles when path changes.
  * - Opens existing file in read/write mode, otherwise creates a new file.
  * - Ensures required datasets and compound row types are ready.
+ *
+ * Schema compatibility note:
+ * - Existing datasets are opened as-is and are not migrated in place.
+ * - New HDF5 fields appear when `/photons` is created in a fresh file.
  */
 bool EnsureReady(const std::string& hdf5Path, std::string* errorMessage) {
   auto& s = GetState();
@@ -308,6 +312,32 @@ bool EnsureReady(const std::string& hdf5Path, std::string* errorMessage) {
             HOFFSET(detail::Hdf5PhotonNativeRow, sensor_hit_y_mm),
             H5T_NATIVE_DOUBLE);
 
+  // Sensor-crossing optical state used for downstream lens/ray propagation.
+  H5Tinsert(s.photonType, "sensor_hit_dir_x",
+            HOFFSET(detail::Hdf5PhotonNativeRow, sensor_hit_dir_x),
+            H5T_NATIVE_DOUBLE);
+  H5Tinsert(s.photonType, "sensor_hit_dir_y",
+            HOFFSET(detail::Hdf5PhotonNativeRow, sensor_hit_dir_y),
+            H5T_NATIVE_DOUBLE);
+  H5Tinsert(s.photonType, "sensor_hit_dir_z",
+            HOFFSET(detail::Hdf5PhotonNativeRow, sensor_hit_dir_z),
+            H5T_NATIVE_DOUBLE);
+  H5Tinsert(s.photonType, "sensor_hit_pol_x",
+            HOFFSET(detail::Hdf5PhotonNativeRow, sensor_hit_pol_x),
+            H5T_NATIVE_DOUBLE);
+  H5Tinsert(s.photonType, "sensor_hit_pol_y",
+            HOFFSET(detail::Hdf5PhotonNativeRow, sensor_hit_pol_y),
+            H5T_NATIVE_DOUBLE);
+  H5Tinsert(s.photonType, "sensor_hit_pol_z",
+            HOFFSET(detail::Hdf5PhotonNativeRow, sensor_hit_pol_z),
+            H5T_NATIVE_DOUBLE);
+  H5Tinsert(s.photonType, "sensor_hit_energy_eV",
+            HOFFSET(detail::Hdf5PhotonNativeRow, sensor_hit_energy_eV),
+            H5T_NATIVE_DOUBLE);
+  H5Tinsert(s.photonType, "sensor_hit_wavelength_nm",
+            HOFFSET(detail::Hdf5PhotonNativeRow, sensor_hit_wavelength_nm),
+            H5T_NATIVE_DOUBLE);
+
   H5Tclose(speciesType);
 
   s.primariesDs = CreateExtendableDataset(s.file, "/primaries", s.primaryType);
@@ -373,6 +403,10 @@ std::vector<detail::Hdf5SecondaryNativeRow> ToNative(
 
 /**
  * Convert semantic photon row containers into HDF5-native POD rows.
+ *
+ * This maps one semantic PhotonInfo row into the exact `/photons` binary
+ * layout, including sensor crossing position, direction, polarization,
+ * and spectrally relevant fields (energy and wavelength).
  */
 std::vector<detail::Hdf5PhotonNativeRow> ToNative(
     const std::vector<PhotonInfo>& rows) {
@@ -389,6 +423,14 @@ std::vector<detail::Hdf5PhotonNativeRow> ToNative(
     native.photon_origin_z_mm = row.photonOriginZmm;
     native.sensor_hit_x_mm = row.sensorHitXmm;
     native.sensor_hit_y_mm = row.sensorHitYmm;
+    native.sensor_hit_dir_x = row.sensorHitDirX;
+    native.sensor_hit_dir_y = row.sensorHitDirY;
+    native.sensor_hit_dir_z = row.sensorHitDirZ;
+    native.sensor_hit_pol_x = row.sensorHitPolX;
+    native.sensor_hit_pol_y = row.sensorHitPolY;
+    native.sensor_hit_pol_z = row.sensorHitPolZ;
+    native.sensor_hit_energy_eV = row.sensorHitEnergyEV;
+    native.sensor_hit_wavelength_nm = row.sensorHitWavelengthNm;
     out.push_back(native);
   }
   return out;
@@ -527,7 +569,8 @@ bool AppendCsv(const std::string& csvPath,
  * Dataset mapping:
  * - /primaries   <- primaryRows
  * - /secondaries <- secondaryRows
- * - /photons     <- photonRows
+ * - /photons     <- photonRows (includes sensor-crossing direction,
+ *                   polarization, energy, wavelength)
  */
 bool AppendHdf5(const std::string& hdf5Path,
                 const std::vector<PrimaryInfo>& primaryRows,

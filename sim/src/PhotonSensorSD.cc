@@ -4,8 +4,10 @@
 
 #include "G4OpticalPhoton.hh"
 #include "G4ParticleDefinition.hh"
+#include "G4PhysicalConstants.hh"
 #include "G4Step.hh"
 #include "G4StepPoint.hh"
+#include "G4SystemOfUnits.hh"
 #include "G4Track.hh"
 #include "G4TrackStatus.hh"
 
@@ -24,6 +26,9 @@ PhotonSensorSD::PhotonSensorSD(const G4String& name) : G4VSensitiveDetector(name
  * Behavior and intent:
  * - Accept only optical-photon tracks; all other particles are ignored.
  * - Build one EventAction::PhotonHitRecord per accepted photon crossing.
+ * - Capture sensor-entry ray state from the pre-step point:
+ *   position, momentum direction, polarization, and total energy.
+ * - Derive wavelength from energy (`lambda = h*c/E`) and store both.
  * - Prefer rich ancestry metadata precomputed in TrackingAction
  *   (FindPhotonCreationInfo).
  * - Fall back to minimal track-derived fields when ancestry metadata is missing.
@@ -62,8 +67,19 @@ G4bool PhotonSensorSD::ProcessHits(G4Step* step, G4TouchableHistory*) {
   hit.primaryX = eventAction->GetPrimaryPosition().x();
   hit.primaryY = eventAction->GetPrimaryPosition().y();
 
-  // Use pre-step position as the sensor-face crossing point.
-  hit.sensorHitPosition = step->GetPreStepPoint()->GetPosition();
+  // Pre-step point corresponds to entry into the sensitive volume.
+  // We capture full ray state here for downstream optical propagation.
+  const auto* preStep = step->GetPreStepPoint();
+  hit.sensorHitPosition = preStep->GetPosition();
+  hit.sensorHitDirection = preStep->GetMomentumDirection();
+  hit.sensorHitPolarization = preStep->GetPolarization();
+  hit.sensorHitEnergy = preStep->GetTotalEnergy();
+
+  // Convert energy to wavelength using Geant4 physical constants.
+  // Keep the default sentinel (-1) when energy is non-positive.
+  if (hit.sensorHitEnergy > 0.0) {
+    hit.sensorHitWavelength = (h_Planck * c_light) / hit.sensorHitEnergy;
+  }
 
   // Preferred path: TrackingAction already resolved primary/secondary ancestry
   // and scintillation origin for this optical photon track.
