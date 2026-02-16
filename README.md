@@ -43,14 +43,15 @@ If you need reproducible runs, explicitly set seeds in your macro before `/run/b
 /random/setSeeds 12345 67890
 ```
 
-## Configuration via Messenger (`/scintillator/geom/...` + `/output/...`)
+## Configuration via Messenger (`/scintillator/geom/...` + `/sensor/geom/...` + `/output/...`)
 
 The app now exposes UI commands so you can set geometry and output directly in
 macro files (or interactively) instead of relying on environment variables.
 
 Command groups:
 
-- `/scintillator/geom/*`: geometry/material
+- `/scintillator/geom/*`: scintillator geometry/material
+- `/sensor/geom/*`: sensor geometry
 - `/output/*`: output format and base filename
 
 ### Supported commands
@@ -62,7 +63,15 @@ Command groups:
 - `/scintillator/geom/scintX <value> <unit>`
 - `/scintillator/geom/scintY <value> <unit>`
 - `/scintillator/geom/scintZ <value> <unit>`
-- `/scintillator/geom/sensorThickness <value> <unit>`
+- `/scintillator/geom/posX <value> <unit>`
+- `/scintillator/geom/posY <value> <unit>`
+- `/scintillator/geom/posZ <value> <unit>`
+- `/sensor/geom/sensorX <value> <unit>` (0 means inherit scintillator X)
+- `/sensor/geom/sensorY <value> <unit>` (0 means inherit scintillator Y)
+- `/sensor/geom/sensorThickness <value> <unit>`
+- `/sensor/geom/posX <value> <unit>`
+- `/sensor/geom/posY <value> <unit>`
+- `/sensor/geom/posZ <value> <unit>` (optional; if unset, defaults to flush on scintillator +Z face)
 
 After changing geometry commands, run:
 
@@ -82,7 +91,15 @@ before `/run/beamOn`.
 /scintillator/geom/scintX 5 cm
 /scintillator/geom/scintY 5 cm
 /scintillator/geom/scintZ 1 cm
-/scintillator/geom/sensorThickness 0.1 mm
+/scintillator/geom/posX 0 cm
+/scintillator/geom/posY 0 cm
+/scintillator/geom/posZ 0 cm
+/sensor/geom/sensorX 5 cm
+/sensor/geom/sensorY 5 cm
+/sensor/geom/sensorThickness 0.1 mm
+/sensor/geom/posX 0 cm
+/sensor/geom/posY 0 cm
+# /sensor/geom/posZ 5 mm  # optional absolute Z override (otherwise flush default)
 /run/initialize
 ```
 

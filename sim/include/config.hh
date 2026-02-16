@@ -34,8 +34,30 @@ class Config {
   G4double GetScintY() const;
   /// Scintillator Z thickness.
   G4double GetScintZ() const;
-  /// Back-face sensor thickness.
+
+  /// Scintillator center X position in world coordinates.
+  G4double GetScintPosX() const;
+  /// Scintillator center Y position in world coordinates.
+  G4double GetScintPosY() const;
+  /// Scintillator center Z position in world coordinates.
+  G4double GetScintPosZ() const;
+
+  /// Sensor X length (0 means inherit scintillator X).
+  G4double GetSensorX() const;
+  /// Sensor Y length (0 means inherit scintillator Y).
+  G4double GetSensorY() const;
+  /// Sensor Z thickness.
   G4double GetSensorThickness() const;
+
+  /// Sensor center X position in world coordinates.
+  /// If unset, geometry code aligns sensor X with scintillator center X.
+  G4double GetSensorPosX() const;
+  /// Sensor center Y position in world coordinates.
+  /// If unset, geometry code aligns sensor Y with scintillator center Y.
+  G4double GetSensorPosY() const;
+  /// Sensor center Z position in world coordinates.
+  /// If unset, geometry code uses default flush placement on scintillator +Z face.
+  G4double GetSensorPosZ() const;
 
   /// Set scintillator X length.
   void SetScintX(G4double value);
@@ -43,8 +65,27 @@ class Config {
   void SetScintY(G4double value);
   /// Set scintillator Z thickness.
   void SetScintZ(G4double value);
-  /// Set back-face sensor thickness.
+
+  /// Set scintillator center X position in world coordinates.
+  void SetScintPosX(G4double value);
+  /// Set scintillator center Y position in world coordinates.
+  void SetScintPosY(G4double value);
+  /// Set scintillator center Z position in world coordinates.
+  void SetScintPosZ(G4double value);
+
+  /// Set sensor X length.
+  void SetSensorX(G4double value);
+  /// Set sensor Y length.
+  void SetSensorY(G4double value);
+  /// Set sensor Z thickness.
   void SetSensorThickness(G4double value);
+
+  /// Set sensor center X position in world coordinates.
+  void SetSensorPosX(G4double value);
+  /// Set sensor center Y position in world coordinates.
+  void SetSensorPosY(G4double value);
+  /// Set sensor center Z position in world coordinates.
+  void SetSensorPosZ(G4double value);
 
   /// Get scintillator material name.
   std::string GetScintMaterial() const;
@@ -73,11 +114,27 @@ class Config {
   /// Selected output format.
   OutputFormat fOutputFormat = OutputFormat::kCsv;
 
-  /// Scintillator dimensions and sensor thickness in Geant4 internal units.
+  /// Scintillator dimensions in Geant4 internal units.
   G4double fScintX = 0.0;
   G4double fScintY = 0.0;
   G4double fScintZ = 0.0;
+
+  /// Scintillator center position in world coordinates.
+  G4double fScintPosX = 0.0;
+  G4double fScintPosY = 0.0;
+  G4double fScintPosZ = 0.0;
+
+  /// Sensor dimensions in Geant4 internal units.
+  /// `fSensorX`/`fSensorY` may be zero to indicate "inherit scintillator size".
+  G4double fSensorX = 0.0;
+  G4double fSensorY = 0.0;
   G4double fSensorThickness = 0.0;
+
+  /// Sensor center position in world coordinates.
+  /// Values may be NaN to indicate "use default alignment/placement behavior".
+  G4double fSensorPosX = 0.0;
+  G4double fSensorPosY = 0.0;
+  G4double fSensorPosZ = 0.0;
 
   /// Material and output settings.
   std::string fScintMaterial;

@@ -9,7 +9,7 @@ class G4UIcmdWithADoubleAndUnit;
 class G4UIcmdWithAString;
 class G4UIcommand;
 
-/// Geant4 UI messenger that maps `/scintillator/geom/*` and `/output/*` commands into `Config` updates.
+/// Geant4 UI messenger that maps `/scintillator/geom/*`, `/sensor/geom/*`, and `/output/*` commands into `Config` updates.
 class Messenger : public G4UImessenger {
  public:
   /// `config` is a shared mutable settings object updated by UI commands.
@@ -26,17 +26,31 @@ class Messenger : public G4UImessenger {
   /// Shared runtime configuration sink.
   Config* fConfig = nullptr;
 
-  /// Command directories for geometry (`/scintillator`) and output (`/output`).
+  /// Command directories for scintillator, sensor, and output controls.
   G4UIdirectory* fScintillatorDir = nullptr;
-  G4UIdirectory* fGeomDir = nullptr;
+  G4UIdirectory* fScintillatorGeomDir = nullptr;
+  G4UIdirectory* fSensorDir = nullptr;
+  G4UIdirectory* fSensorGeomDir = nullptr;
   G4UIdirectory* fOutputDir = nullptr;
 
-  /// Geometry/material commands.
+  /// Scintillator geometry/material commands.
   G4UIcmdWithAString* fGeomMaterialCmd = nullptr;
   G4UIcmdWithADoubleAndUnit* fGeomScintXCmd = nullptr;
   G4UIcmdWithADoubleAndUnit* fGeomScintYCmd = nullptr;
   G4UIcmdWithADoubleAndUnit* fGeomScintZCmd = nullptr;
-  G4UIcmdWithADoubleAndUnit* fGeomSensorThicknessCmd = nullptr;
+  G4UIcmdWithADoubleAndUnit* fGeomScintPosXCmd = nullptr;
+  G4UIcmdWithADoubleAndUnit* fGeomScintPosYCmd = nullptr;
+  G4UIcmdWithADoubleAndUnit* fGeomScintPosZCmd = nullptr;
+
+  /// Sensor geometry commands (size + thickness).
+  G4UIcmdWithADoubleAndUnit* fSensorXCmd = nullptr;
+  G4UIcmdWithADoubleAndUnit* fSensorYCmd = nullptr;
+  G4UIcmdWithADoubleAndUnit* fSensorThicknessCmd = nullptr;
+
+  /// Sensor center-position commands in world coordinates.
+  G4UIcmdWithADoubleAndUnit* fSensorPosXCmd = nullptr;
+  G4UIcmdWithADoubleAndUnit* fSensorPosYCmd = nullptr;
+  G4UIcmdWithADoubleAndUnit* fSensorPosZCmd = nullptr;
 
   /// Output configuration commands.
   G4UIcmdWithAString* fOutputFormatCmd = nullptr;

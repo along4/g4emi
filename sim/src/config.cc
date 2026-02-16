@@ -4,12 +4,19 @@
 
 #include "G4SystemOfUnits.hh"
 
+#include <limits>
+
 /**
  * Construct simulation defaults used when no UI command overrides are provided.
  *
  * Defaults are intentionally conservative and mirror the original hard-coded
  * application setup:
  * - Geometry: 5x5x1 cm scintillator with a 0.1 mm sensor plane.
+ * - Scintillator position defaults to world origin (0,0,0).
+ * - Sensor X/Y default to 0, which means "inherit scintillator X/Y".
+ * - Sensor position defaults to NaN on all axes, which means:
+ *   - X/Y align to scintillator center,
+ *   - Z uses default flush placement at scintillator +Z face.
  * - Material: EJ200.
  * - Output: CSV mode (enum default in header), output base name
  *   "data/photon_sensor_hits", and no run-name subdirectory.
@@ -18,7 +25,15 @@ Config::Config()
     : fScintX(5.0 * cm),
       fScintY(5.0 * cm),
       fScintZ(1.0 * cm),
+      fScintPosX(0.0),
+      fScintPosY(0.0),
+      fScintPosZ(0.0),
+      fSensorX(0.0),
+      fSensorY(0.0),
       fSensorThickness(0.1 * mm),
+      fSensorPosX(std::numeric_limits<G4double>::quiet_NaN()),
+      fSensorPosY(std::numeric_limits<G4double>::quiet_NaN()),
+      fSensorPosZ(std::numeric_limits<G4double>::quiet_NaN()),
       fScintMaterial("EJ200"),
       fOutputFilename("data/photon_sensor_hits"),
       fOutputRunName("") {}
@@ -123,10 +138,58 @@ G4double Config::GetScintZ() const {
   return fScintZ;
 }
 
-/// Thread-safe geometry getter: sensor thickness.
+/// Thread-safe geometry getter: scintillator center position X.
+G4double Config::GetScintPosX() const {
+  std::lock_guard<std::mutex> lock(fMutex);
+  return fScintPosX;
+}
+
+/// Thread-safe geometry getter: scintillator center position Y.
+G4double Config::GetScintPosY() const {
+  std::lock_guard<std::mutex> lock(fMutex);
+  return fScintPosY;
+}
+
+/// Thread-safe geometry getter: scintillator center position Z.
+G4double Config::GetScintPosZ() const {
+  std::lock_guard<std::mutex> lock(fMutex);
+  return fScintPosZ;
+}
+
+/// Thread-safe geometry getter: sensor size in X.
+G4double Config::GetSensorX() const {
+  std::lock_guard<std::mutex> lock(fMutex);
+  return fSensorX;
+}
+
+/// Thread-safe geometry getter: sensor size in Y.
+G4double Config::GetSensorY() const {
+  std::lock_guard<std::mutex> lock(fMutex);
+  return fSensorY;
+}
+
+/// Thread-safe geometry getter: sensor thickness in Z.
 G4double Config::GetSensorThickness() const {
   std::lock_guard<std::mutex> lock(fMutex);
   return fSensorThickness;
+}
+
+/// Thread-safe geometry getter: sensor center position X.
+G4double Config::GetSensorPosX() const {
+  std::lock_guard<std::mutex> lock(fMutex);
+  return fSensorPosX;
+}
+
+/// Thread-safe geometry getter: sensor center position Y.
+G4double Config::GetSensorPosY() const {
+  std::lock_guard<std::mutex> lock(fMutex);
+  return fSensorPosY;
+}
+
+/// Thread-safe geometry getter: sensor center position Z.
+G4double Config::GetSensorPosZ() const {
+  std::lock_guard<std::mutex> lock(fMutex);
+  return fSensorPosZ;
 }
 
 /// Thread-safe geometry setter: scintillator size in X.
@@ -147,10 +210,58 @@ void Config::SetScintZ(G4double value) {
   fScintZ = value;
 }
 
-/// Thread-safe geometry setter: sensor thickness.
+/// Thread-safe geometry setter: scintillator center position X.
+void Config::SetScintPosX(G4double value) {
+  std::lock_guard<std::mutex> lock(fMutex);
+  fScintPosX = value;
+}
+
+/// Thread-safe geometry setter: scintillator center position Y.
+void Config::SetScintPosY(G4double value) {
+  std::lock_guard<std::mutex> lock(fMutex);
+  fScintPosY = value;
+}
+
+/// Thread-safe geometry setter: scintillator center position Z.
+void Config::SetScintPosZ(G4double value) {
+  std::lock_guard<std::mutex> lock(fMutex);
+  fScintPosZ = value;
+}
+
+/// Thread-safe geometry setter: sensor size in X.
+void Config::SetSensorX(G4double value) {
+  std::lock_guard<std::mutex> lock(fMutex);
+  fSensorX = value;
+}
+
+/// Thread-safe geometry setter: sensor size in Y.
+void Config::SetSensorY(G4double value) {
+  std::lock_guard<std::mutex> lock(fMutex);
+  fSensorY = value;
+}
+
+/// Thread-safe geometry setter: sensor thickness in Z.
 void Config::SetSensorThickness(G4double value) {
   std::lock_guard<std::mutex> lock(fMutex);
   fSensorThickness = value;
+}
+
+/// Thread-safe geometry setter: sensor center position X.
+void Config::SetSensorPosX(G4double value) {
+  std::lock_guard<std::mutex> lock(fMutex);
+  fSensorPosX = value;
+}
+
+/// Thread-safe geometry setter: sensor center position Y.
+void Config::SetSensorPosY(G4double value) {
+  std::lock_guard<std::mutex> lock(fMutex);
+  fSensorPosY = value;
+}
+
+/// Thread-safe geometry setter: sensor center position Z.
+void Config::SetSensorPosZ(G4double value) {
+  std::lock_guard<std::mutex> lock(fMutex);
+  fSensorPosZ = value;
 }
 
 /// Thread-safe material-name getter.

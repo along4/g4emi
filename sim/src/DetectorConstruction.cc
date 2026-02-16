@@ -15,6 +15,8 @@
 #include "G4ios.hh"
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include <string>
 
 namespace {
@@ -110,8 +112,9 @@ DetectorConstruction::DetectorConstruction(const Config* config) : fConfig(confi
  *
  * Geometry layout:
  * - World: air box, auto-sized to stay comfortably larger than active volumes.
- * - Scintillator: centered EJ200 (or requested material) slab.
- * - Sensor: thin plane at +Z face of the scintillator to record optical hits.
+ * - Scintillator: centered EJ200 (or requested material) slab with configurable
+ *   size and world position.
+ * - Sensor: thin plane (size/position configurable) used to record optical hits.
  *
  * Optical transport:
  * - World air gets RINDEX/ABSLENGTH to avoid undefined optical boundaries.
@@ -151,25 +154,67 @@ G4VPhysicalVolume* DetectorConstruction::Construct() {
   worldMpt->AddProperty("ABSLENGTH", photonEnergy, airAbsLength, kNEntries);
   worldMaterial->SetMaterialPropertiesTable(worldMpt);
 
-  // Geometry defaults match the original baseline setup and may be overridden
-  // by /scintillator/geom/* commands before /run/initialize.
+  // Geometry defaults match the baseline setup and may be overridden by
+  // /scintillator/geom/* and /sensor/geom/* commands before /run/initialize.
   auto scintX = 5.0 * cm;
   auto scintY = 5.0 * cm;
   auto scintZ = 1.0 * cm;
+
+  // Scintillator defaults to world origin.
+  auto scintPosX = 0.0 * mm;
+  auto scintPosY = 0.0 * mm;
+  auto scintPosZ = 0.0 * mm;
+
+  // Sensor defaults to covering the scintillator back face unless overridden.
+  auto sensorX = scintX;
+  auto sensorY = scintY;
   auto sensorThickness = 0.1 * mm;
+
+  // Sensor default center: aligned with scintillator X/Y and flush on +Z face.
+  auto sensorPosX = std::numeric_limits<G4double>::quiet_NaN();
+  auto sensorPosY = std::numeric_limits<G4double>::quiet_NaN();
+  auto sensorPosZ = std::numeric_limits<G4double>::quiet_NaN();
+
   if (fConfig) {
     scintX = PositiveOrDefault(fConfig->GetScintX(), scintX);
     scintY = PositiveOrDefault(fConfig->GetScintY(), scintY);
     scintZ = PositiveOrDefault(fConfig->GetScintZ(), scintZ);
+
+    scintPosX = fConfig->GetScintPosX();
+    scintPosY = fConfig->GetScintPosY();
+    scintPosZ = fConfig->GetScintPosZ();
+
+    sensorX = PositiveOrDefault(fConfig->GetSensorX(), scintX);
+    sensorY = PositiveOrDefault(fConfig->GetSensorY(), scintY);
     sensorThickness =
         PositiveOrDefault(fConfig->GetSensorThickness(), sensorThickness);
+
+    sensorPosX = fConfig->GetSensorPosX();
+    sensorPosY = fConfig->GetSensorPosY();
+    sensorPosZ = fConfig->GetSensorPosZ();
   }
 
-  // Keep world automatically large enough even when the scintillator is scaled.
-  // Padding factors are simple safety margins to reduce boundary-side effects.
-  const auto worldX = std::max(1.0 * m, 4.0 * scintX);
-  const auto worldY = std::max(1.0 * m, 4.0 * scintY);
-  const auto worldZ = std::max(1.0 * m, 8.0 * (scintZ + sensorThickness));
+  const auto defaultSensorX = scintPosX;
+  const auto defaultSensorY = scintPosY;
+  const auto defaultSensorZ = scintPosZ + 0.5 * scintZ + 0.5 * sensorThickness;
+
+  const auto sensorCenterX = std::isnan(sensorPosX) ? defaultSensorX : sensorPosX;
+  const auto sensorCenterY = std::isnan(sensorPosY) ? defaultSensorY : sensorPosY;
+  const auto sensorCenterZ = std::isnan(sensorPosZ) ? defaultSensorZ : sensorPosZ;
+
+  // Keep world automatically large enough even when volumes are shifted.
+  // We size from required half-extents with a 4x safety factor.
+  const auto requiredHalfX = std::max(std::abs(scintPosX) + 0.5 * scintX,
+                                      std::abs(sensorCenterX) + 0.5 * sensorX);
+  const auto requiredHalfY = std::max(std::abs(scintPosY) + 0.5 * scintY,
+                                      std::abs(sensorCenterY) + 0.5 * sensorY);
+  const auto requiredHalfZ = std::max(std::abs(scintPosZ) + 0.5 * scintZ,
+                                      std::abs(sensorCenterZ) + 0.5 * sensorThickness);
+
+  const auto worldX = std::max(1.0 * m, 8.0 * requiredHalfX);
+  const auto worldY = std::max(1.0 * m, 8.0 * requiredHalfY);
+  const auto worldZ = std::max(1.0 * m, 8.0 * requiredHalfZ);
+
   auto* worldSolid = new G4Box("WorldSolid", 0.5 * worldX, 0.5 * worldY, 0.5 * worldZ);
   auto* worldLV = new G4LogicalVolume(worldSolid, worldMaterial, "WorldLV");
   auto* worldPV =
@@ -180,19 +225,29 @@ G4VPhysicalVolume* DetectorConstruction::Construct() {
   fScoringVolume =
       new G4LogicalVolume(scintSolid, scintMaterial, "ScintillatorLV");
 
-  new G4PVPlacement(nullptr, {}, fScoringVolume, "ScintillatorPV", worldLV, false, 0,
+  new G4PVPlacement(nullptr,
+                    G4ThreeVector(scintPosX, scintPosY, scintPosZ),
+                    fScoringVolume,
+                    "ScintillatorPV",
+                    worldLV,
+                    false,
+                    0,
                     true);
 
   // Photon sensor is a dedicated logical volume used only for hit collection.
-  // It is placed flush with the positive-Z scintillator face.
-  auto* sensorSolid = new G4Box("PhotonSensorSolid", 0.5 * scintX, 0.5 * scintY,
+  auto* sensorSolid = new G4Box("PhotonSensorSolid", 0.5 * sensorX, 0.5 * sensorY,
                                 0.5 * sensorThickness);
   fPhotonSensorVolume =
       new G4LogicalVolume(sensorSolid, worldMaterial, "PhotonSensorLV");
 
-  const auto sensorZ = 0.5 * scintZ + 0.5 * sensorThickness;
-  new G4PVPlacement(nullptr, G4ThreeVector(0., 0., sensorZ), fPhotonSensorVolume,
-                    "PhotonSensorPV", worldLV, false, 0, true);
+  new G4PVPlacement(nullptr,
+                    G4ThreeVector(sensorCenterX, sensorCenterY, sensorCenterZ),
+                    fPhotonSensorVolume,
+                    "PhotonSensorPV",
+                    worldLV,
+                    false,
+                    0,
+                    true);
 
   return worldPV;
 }

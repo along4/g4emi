@@ -13,19 +13,28 @@
  * Geant4 UI messenger responsible for runtime configuration commands.
  *
  * Responsibilities:
- * - Register `/scintillator/geom/...` and `/output/...` command hierarchy.
+ * - Register `/scintillator/geom/...`, `/sensor/geom/...`, and `/output/...`
+ *   command hierarchy.
  * - Parse user-provided command values.
  * - Forward validated values into the shared Config object.
  * - Notify the run manager when geometry-affecting fields are modified.
  */
 Messenger::Messenger(Config* config) : fConfig(config) {
-  // Top-level namespace for this application's custom commands.
+  // Top-level namespace for scintillator configuration commands.
   fScintillatorDir = new G4UIdirectory("/scintillator/");
-  fScintillatorDir->SetGuidance("Application controls");
+  fScintillatorDir->SetGuidance("Scintillator controls");
 
-  // Geometry subtree (material and dimensions).
-  fGeomDir = new G4UIdirectory("/scintillator/geom/");
-  fGeomDir->SetGuidance("Geometry controls");
+  // Scintillator geometry/material subtree.
+  fScintillatorGeomDir = new G4UIdirectory("/scintillator/geom/");
+  fScintillatorGeomDir->SetGuidance("Scintillator geometry and material controls");
+
+  // Top-level namespace for sensor geometry commands.
+  fSensorDir = new G4UIdirectory("/sensor/");
+  fSensorDir->SetGuidance("Sensor controls");
+
+  // Sensor geometry subtree.
+  fSensorGeomDir = new G4UIdirectory("/sensor/geom/");
+  fSensorGeomDir->SetGuidance("Sensor geometry controls");
 
   // Output subtree (format and file destination controls).
   fOutputDir = new G4UIdirectory("/output/");
@@ -61,14 +70,69 @@ Messenger::Messenger(Config* config) : fConfig(config) {
   fGeomScintZCmd->SetRange("scintZ > 0.");
   fGeomScintZCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 
-  // Sensor thickness command; still treated as geometry-changing.
-  fGeomSensorThicknessCmd =
-      new G4UIcmdWithADoubleAndUnit("/scintillator/geom/sensorThickness", this);
-  fGeomSensorThicknessCmd->SetGuidance("Set back-face sensor thickness");
-  fGeomSensorThicknessCmd->SetParameterName("sensorThickness", false);
-  fGeomSensorThicknessCmd->SetUnitCategory("Length");
-  fGeomSensorThicknessCmd->SetRange("sensorThickness > 0.");
-  fGeomSensorThicknessCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
+  // Scintillator absolute center-position commands in world coordinates.
+  fGeomScintPosXCmd = new G4UIcmdWithADoubleAndUnit("/scintillator/geom/posX", this);
+  fGeomScintPosXCmd->SetGuidance("Set scintillator center X position in world coordinates");
+  fGeomScintPosXCmd->SetParameterName("posX", false);
+  fGeomScintPosXCmd->SetUnitCategory("Length");
+  fGeomScintPosXCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
+
+  fGeomScintPosYCmd = new G4UIcmdWithADoubleAndUnit("/scintillator/geom/posY", this);
+  fGeomScintPosYCmd->SetGuidance("Set scintillator center Y position in world coordinates");
+  fGeomScintPosYCmd->SetParameterName("posY", false);
+  fGeomScintPosYCmd->SetUnitCategory("Length");
+  fGeomScintPosYCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
+
+  fGeomScintPosZCmd = new G4UIcmdWithADoubleAndUnit("/scintillator/geom/posZ", this);
+  fGeomScintPosZCmd->SetGuidance("Set scintillator center Z position in world coordinates");
+  fGeomScintPosZCmd->SetParameterName("posZ", false);
+  fGeomScintPosZCmd->SetUnitCategory("Length");
+  fGeomScintPosZCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
+
+  // Sensor dimensions (X, Y) and thickness (Z).
+  fSensorXCmd = new G4UIcmdWithADoubleAndUnit("/sensor/geom/sensorX", this);
+  fSensorXCmd->SetGuidance("Set sensor size in X (0 means inherit scintillator X)");
+  fSensorXCmd->SetParameterName("sensorX", false);
+  fSensorXCmd->SetUnitCategory("Length");
+  fSensorXCmd->SetRange("sensorX >= 0.");
+  fSensorXCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
+
+  fSensorYCmd = new G4UIcmdWithADoubleAndUnit("/sensor/geom/sensorY", this);
+  fSensorYCmd->SetGuidance("Set sensor size in Y (0 means inherit scintillator Y)");
+  fSensorYCmd->SetParameterName("sensorY", false);
+  fSensorYCmd->SetUnitCategory("Length");
+  fSensorYCmd->SetRange("sensorY >= 0.");
+  fSensorYCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
+
+  fSensorThicknessCmd =
+      new G4UIcmdWithADoubleAndUnit("/sensor/geom/sensorThickness", this);
+  fSensorThicknessCmd->SetGuidance("Set sensor thickness in Z");
+  fSensorThicknessCmd->SetParameterName("sensorThickness", false);
+  fSensorThicknessCmd->SetUnitCategory("Length");
+  fSensorThicknessCmd->SetRange("sensorThickness > 0.");
+  fSensorThicknessCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
+
+  // Sensor center-position commands in world coordinates.
+  fSensorPosXCmd = new G4UIcmdWithADoubleAndUnit("/sensor/geom/posX", this);
+  fSensorPosXCmd->SetGuidance(
+      "Set sensor center X position in world coordinates (default aligns with scintillator center)");
+  fSensorPosXCmd->SetParameterName("posX", false);
+  fSensorPosXCmd->SetUnitCategory("Length");
+  fSensorPosXCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
+
+  fSensorPosYCmd = new G4UIcmdWithADoubleAndUnit("/sensor/geom/posY", this);
+  fSensorPosYCmd->SetGuidance(
+      "Set sensor center Y position in world coordinates (default aligns with scintillator center)");
+  fSensorPosYCmd->SetParameterName("posY", false);
+  fSensorPosYCmd->SetUnitCategory("Length");
+  fSensorPosYCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
+
+  fSensorPosZCmd = new G4UIcmdWithADoubleAndUnit("/sensor/geom/posZ", this);
+  fSensorPosZCmd->SetGuidance(
+      "Set sensor center Z position in world coordinates (default is flush on scintillator +Z face when not set)");
+  fSensorPosZCmd->SetParameterName("posZ", false);
+  fSensorPosZCmd->SetUnitCategory("Length");
+  fSensorPosZCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 
   // Output format command. Allowed values are constrained by SetCandidates.
   fOutputFormatCmd = new G4UIcmdWithAString("/output/format", this);
@@ -103,14 +167,26 @@ Messenger::~Messenger() {
   delete fOutputFilenameCmd;
   delete fOutputFormatCmd;
 
-  delete fGeomSensorThicknessCmd;
+  delete fSensorPosZCmd;
+  delete fSensorPosYCmd;
+  delete fSensorPosXCmd;
+
+  delete fSensorThicknessCmd;
+  delete fSensorYCmd;
+  delete fSensorXCmd;
+
+  delete fGeomScintPosZCmd;
+  delete fGeomScintPosYCmd;
+  delete fGeomScintPosXCmd;
   delete fGeomScintZCmd;
   delete fGeomScintYCmd;
   delete fGeomScintXCmd;
   delete fGeomMaterialCmd;
 
   delete fOutputDir;
-  delete fGeomDir;
+  delete fSensorGeomDir;
+  delete fSensorDir;
+  delete fScintillatorGeomDir;
   delete fScintillatorDir;
 }
 
@@ -137,7 +213,7 @@ void Messenger::SetNewValue(G4UIcommand* command, G4String newValue) {
     return;
   }
 
-  // Dimension updates are parsed in configured units by Geant4 command helpers.
+  // Scintillator dimensions are parsed in configured units by Geant4 helpers.
   if (command == fGeomScintXCmd) {
     fConfig->SetScintX(fGeomScintXCmd->GetNewDoubleValue(newValue));
     NotifyGeometryChanged();
@@ -156,9 +232,58 @@ void Messenger::SetNewValue(G4UIcommand* command, G4String newValue) {
     return;
   }
 
-  if (command == fGeomSensorThicknessCmd) {
-    fConfig->SetSensorThickness(
-        fGeomSensorThicknessCmd->GetNewDoubleValue(newValue));
+  if (command == fGeomScintPosXCmd) {
+    fConfig->SetScintPosX(fGeomScintPosXCmd->GetNewDoubleValue(newValue));
+    NotifyGeometryChanged();
+    return;
+  }
+
+  if (command == fGeomScintPosYCmd) {
+    fConfig->SetScintPosY(fGeomScintPosYCmd->GetNewDoubleValue(newValue));
+    NotifyGeometryChanged();
+    return;
+  }
+
+  if (command == fGeomScintPosZCmd) {
+    fConfig->SetScintPosZ(fGeomScintPosZCmd->GetNewDoubleValue(newValue));
+    NotifyGeometryChanged();
+    return;
+  }
+
+  // Sensor dimensions are controlled in dedicated /sensor/geom subtree.
+  if (command == fSensorXCmd) {
+    fConfig->SetSensorX(fSensorXCmd->GetNewDoubleValue(newValue));
+    NotifyGeometryChanged();
+    return;
+  }
+
+  if (command == fSensorYCmd) {
+    fConfig->SetSensorY(fSensorYCmd->GetNewDoubleValue(newValue));
+    NotifyGeometryChanged();
+    return;
+  }
+
+  if (command == fSensorThicknessCmd) {
+    fConfig->SetSensorThickness(fSensorThicknessCmd->GetNewDoubleValue(newValue));
+    NotifyGeometryChanged();
+    return;
+  }
+
+  // Sensor absolute center position controls.
+  if (command == fSensorPosXCmd) {
+    fConfig->SetSensorPosX(fSensorPosXCmd->GetNewDoubleValue(newValue));
+    NotifyGeometryChanged();
+    return;
+  }
+
+  if (command == fSensorPosYCmd) {
+    fConfig->SetSensorPosY(fSensorPosYCmd->GetNewDoubleValue(newValue));
+    NotifyGeometryChanged();
+    return;
+  }
+
+  if (command == fSensorPosZCmd) {
+    fConfig->SetSensorPosZ(fSensorPosZCmd->GetNewDoubleValue(newValue));
     NotifyGeometryChanged();
     return;
   }
