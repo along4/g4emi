@@ -5,7 +5,7 @@ files so higher-level orchestration code (for example `SimConfig`) can consume
 clean, validated geometry values without knowing Zemax text details.
 
 Design goals:
-- Keep parsing deterministic and explicit (no hidden global state).
+- Keep parsing deterministic and explicit.
 - Preserve traceability back to source `.zmx` file path.
 - Expose practical geometry values in millimeters:
   - clear aperture diameter

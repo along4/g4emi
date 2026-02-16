@@ -14,6 +14,7 @@ The intent is to keep geometry choices declarative and reproducible:
 from __future__ import annotations
 
 import argparse
+import math
 from pathlib import Path
 import sys
 from typing import Any
@@ -60,6 +61,11 @@ class SimConfig(BaseModel):
 
     # Lens list that drives optical geometry extraction.
     lenses: list[str] = Field(default_factory=lambda: ["canon50"])
+    # Lens orientation flag(s): False means nominal orientation, True means reversed.
+    # Accepts either:
+    # - one bool applied to all configured lenses, or
+    # - one bool per lens, e.g. [True, False] for a two-lens stack.
+    reversed: bool | list[bool] = False
 
     # Scintillator geometry.
     scint_material: str = "EJ200"
@@ -87,12 +93,116 @@ class SimConfig(BaseModel):
     output_runname: str = "microscope"
 
     @model_validator(mode="after")
-    def validate_lens_count(self) -> "SimConfig":
-        """Ensure lens-list cardinality matches supported configurations."""
+    def validate_config(self) -> "SimConfig":
+        """Run full model validation after creation and assignment.
 
+        This validator is intentionally holistic:
+        - structural checks: lens/reversed cardinality
+        - geometric checks: sensor diameter, aperture feasibility, placement
+
+        Because `validate_assignment=True`, these checks also run after field
+        updates, not only at construction time.
+        """
+
+        # Current optical pipeline supports either a single lens or a two-lens
+        # macro stack, so enforce that cardinality centrally.
         if not (1 <= len(self.lenses) <= 2):
             raise ValueError("`lenses` must contain 1 or 2 entries.")
+
+        # Per-lens orientation list must align one-to-one with configured lenses.
+        if isinstance(self.reversed, list) and len(self.reversed) != len(self.lenses):
+            raise ValueError(
+                "When `reversed` is a list, it must have the same length as `lenses`."
+            )
+
+        self._validate_geometry_invariants()
         return self
+
+    def _scint_back_face_z_mm(self) -> float:
+        """Return scintillator +Z face position in mm."""
+
+        return (self.scint_pos_z_cm * 10.0) + (0.5 * self.scint_z_cm * 10.0)
+
+    def _validate_geometry_invariants(self) -> None:
+        """Validate geometry relationships that span multiple fields.
+
+        Invariants enforced:
+        - Resolved sensor diameter must be strictly positive.
+        - Optional aperture radius must fit inside scintillator half-diagonal.
+        - Sensor center Z must lie beyond scintillator back face.
+        """
+
+        # Resolve effective sensor diameter first, since several downstream
+        # constraints depend on it (including default aperture sizing).
+        sensor_diameter_mm = self.resolved_sensor_diameter_mm()
+        if sensor_diameter_mm <= 0.0:
+            raise ValueError(
+                f"Resolved sensor diameter must be > 0 mm (got {sensor_diameter_mm})."
+            )
+
+        aperture_radius_mm = self.resolved_aperture_radius_mm()
+        if aperture_radius_mm is not None:
+            scint_half_diag_mm = 0.5 * math.hypot(
+                self.scint_x_cm * 10.0, self.scint_y_cm * 10.0
+            )
+            if aperture_radius_mm > scint_half_diag_mm:
+                raise ValueError(
+                    "Aperture radius exceeds scintillator half-diagonal: "
+                    f"{aperture_radius_mm:.3f} mm > {scint_half_diag_mm:.3f} mm."
+                )
+
+        sensor_center_z_mm = self.sensor_center_z_mm()
+        scint_back_face_z_mm = self._scint_back_face_z_mm()
+        if sensor_center_z_mm <= scint_back_face_z_mm:
+            raise ValueError(
+                "Sensor center must be beyond scintillator back face: "
+                f"{sensor_center_z_mm:.3f} mm <= {scint_back_face_z_mm:.3f} mm."
+            )
+
+    def validate_geometry(self) -> "SimConfig":
+        """Explicit geometry re-validation helper.
+
+        Useful when callers want an intentional validation checkpoint in scripts.
+        Returns `self` to allow chaining.
+        """
+
+        self._validate_geometry_invariants()
+        return self
+
+    def validated_copy_with_updates(self, **updates: Any) -> "SimConfig":
+        """Return a fully validated copy with atomic updates applied.
+
+        This avoids transient invalid states during multi-field edits
+        (for example updating `lenses` and `reversed` together).
+        """
+
+        # Apply updates against a full snapshot and re-validate once, avoiding
+        # transient assignment failures from intermediate invalid states.
+        payload = self.model_dump(mode="python")
+        payload.update(updates)
+        return SimConfig.model_validate(payload)
+
+    def with_geometry_updates(self, **updates: Any) -> "SimConfig":
+        """Return a new config with geometry updates atomically validated.
+
+        This is a geometry-oriented alias around `validated_copy_with_updates`
+        intended for simulation scripts that frequently tune multiple fields
+        together (for example scintillator size + sensor standoff).
+        """
+
+        return self.validated_copy_with_updates(**updates)
+
+    def lens_reversed_flags(self) -> list[bool]:
+        """Return one orientation flag per configured lens.
+
+        Normalization behavior:
+        - scalar bool -> duplicated across all lenses
+        - list[bool]  -> returned as-is (validated to same lens count)
+        """
+
+        if isinstance(self.reversed, bool):
+            return [self.reversed] * len(self.lenses)
+        return self.reversed
 
     def lens_models(self) -> list[LensModel]:
         """Load `LensModel` objects from current lens references.
@@ -150,10 +260,13 @@ class SimConfig(BaseModel):
         """
 
         summary: list[dict[str, Any]] = []
-        for lens in self.lens_models():
+        for lens, is_reversed in zip(
+            self.lens_models(), self.lens_reversed_flags(), strict=True
+        ):
             summary.append(
                 {
                     "name": lens.name,
+                    "reversed": is_reversed,
                     "zmx_path": str(lens.zmx_path),
                     "clear_diameter_mm": lens_clear_diameter_mm(lens),
                     "lens_stack_length_mm": lens_stack_length_mm(lens),
@@ -299,6 +412,7 @@ class SimConfig(BaseModel):
 
         out = self.model_dump(mode="json")
         out["lens_geometry"] = self.lens_geometry_summary()
+        out["lens_reversed_flags"] = self.lens_reversed_flags()
         out["lens_stack_length_total_mm"] = self.lens_stack_length_total_mm()
         out["resolved_sensor_diameter_mm"] = self.resolved_sensor_diameter_mm()
         return out
@@ -344,6 +458,7 @@ def _cli() -> None:
         for entry in cfg.lens_geometry_summary():
             print(
                 f"  - {entry['name']}: "
+                f"reversed={entry['reversed']}, "
                 f"diameter={entry['clear_diameter_mm']:.3f} mm, "
                 f"length={entry['lens_stack_length_mm']:.3f} mm, "
                 f"image_circle={entry['image_circle_diameter_mm']:.3f} mm"
