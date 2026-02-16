@@ -50,8 +50,8 @@ pixi run python-repl
 
 ## Python Geometry Config Module
 
-`src/config/SimConfig.py` can derive lens-linked geometry from 1-2 lens `.zmx`
-models and patch macro files.
+`src/config/SimConfig.py` is an import-only module (no CLI entrypoint). It can
+derive lens-linked geometry from 1-2 lens `.zmx` models and patch macro files.
 
 Canon 50mm preset behavior:
 
@@ -59,24 +59,14 @@ Canon 50mm preset behavior:
 - Optical-interface standoff: `20 cm` from scintillator back face to optical-interface front face
 - Optical-interface diameter: derived from `src/optics/zmxFiles/CanonEF50mmf1.0L.zmx`
 
-Preview resolved geometry commands (single lens default):
+Use it from Python code:
 
-```bash
-pixi run python src/config/SimConfig.py
-```
+```python
+from src.config.SimConfig import SimConfig
 
-Preview two-lens geometry extraction:
-
-```bash
-pixi run python src/config/SimConfig.py --lens canon50 --lens nikkor80-200
-```
-
-Apply the preset geometry to one or more macros in place:
-
-```bash
-pixi run python src/config/SimConfig.py \
-  --macro sim/macros/microscope_vis.mac \
-  --macro sim/macros/microscope_run.mac
+cfg = SimConfig(lenses=["canon50"], reversed=False)
+print(cfg.geometry_commands())
+cfg.apply_geometry_to_macro("sim/macros/microscope_run.mac")
 ```
 
 ## Run (batch GPS neutrons)

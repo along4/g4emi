@@ -13,7 +13,6 @@ The intent is to keep geometry choices declarative and reproducible:
 
 from __future__ import annotations
 
-import argparse
 import math
 from pathlib import Path
 import sys
@@ -30,7 +29,7 @@ try:
         load_lens_models,
     )
 except ModuleNotFoundError:
-    # Support direct script execution: `python src/config/SimConfig.py`.
+    # Support imports when repository root is not already on sys.path.
     sys.path.append(str(Path(__file__).resolve().parents[2]))
     from src.optics.LensModels import (
         LensModel,
@@ -465,67 +464,3 @@ def default_single_lens_config() -> SimConfig:
     """Return default single-lens config (`canon50`)."""
 
     return SimConfig(lenses=["canon50"])
-
-
-def _cli() -> None:
-    """Command-line entry point for quick inspection and macro patching.
-
-    Typical usage:
-    - Inspect lens-derived geometry:
-      `python src/config/SimConfig.py --lens canon50`
-    - Inspect two-lens geometry:
-      `python src/config/SimConfig.py --lens canon50 --lens nikkor80-200`
-    - Patch macros in place:
-      `python src/config/SimConfig.py --macro sim/macros/microscope_run.mac`
-    """
-
-    parser = argparse.ArgumentParser(description="Apply SimConfig geometry to macros.")
-    parser.add_argument(
-        "--lens",
-        action="append",
-        default=None,
-        help="Lens reference (alias/path). Repeat to configure 1-2 lenses.",
-    )
-    parser.add_argument(
-        "--macro",
-        action="append",
-        default=[],
-        help="Macro file to patch in place (repeat to patch multiple macros).",
-    )
-    args = parser.parse_args()
-
-    cfg = SimConfig(lenses=args.lens or ["canon50"])
-
-    if not args.macro:
-        print("Configured lenses:")
-        for entry in cfg.lens_geometry_summary():
-            print(
-                f"  - {entry['name']}: "
-                f"reversed={entry['reversed']}, "
-                f"diameter={entry['clear_diameter_mm']:.3f} mm, "
-                f"length={entry['lens_stack_length_mm']:.3f} mm, "
-                f"image_circle={entry['image_circle_diameter_mm']:.3f} mm"
-            )
-        print(
-            "Total configured lens stack length (mm):",
-            f"{cfg.lens_stack_length_total_mm():.3f}",
-        )
-        print("Primary optical-interface side:", cfg.primary_optical_interface_side())
-        print(
-            "Resolved optical-interface diameter source:",
-            cfg.resolved_optical_interface_diameter_source(),
-        )
-        print("Resolved optical-interface diameter (mm):", f"{cfg.resolved_optical_interface_diameter_mm():.3f}")
-        print("Resolved optical-interface center Z (mm):", f"{cfg.optical_interface_center_z_mm():.3f}")
-        print("Geometry commands:")
-        for cmd in cfg.geometry_commands():
-            print(cmd)
-        return
-
-    for macro in args.macro:
-        cfg.apply_geometry_to_macro(macro)
-        print(f"Updated macro: {macro}")
-
-
-if __name__ == "__main__":
-    _cli()
