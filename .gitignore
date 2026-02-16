@@ -36,3 +36,8 @@ compile_commands.json
 *.swo
 .idea/
 .vscode/
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
