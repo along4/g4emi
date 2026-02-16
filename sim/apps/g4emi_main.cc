@@ -11,6 +11,7 @@
 #include "G4UIExecutive.hh"
 #include "G4UImanager.hh"
 #include "G4VisExecutive.hh"
+#include "G4ios.hh"
 
 #include <memory>
 
@@ -40,7 +41,10 @@ int main(int argc, char** argv) {
     uiManager->ApplyCommand(command + argv[1]);
   } else {
     auto* ui = new G4UIExecutive(argc, argv);
-    uiManager->ApplyCommand("/control/execute sim/macros/vis.mac");
+    G4cout << "Interactive session started without auto-running a visualization macro."
+           << G4endl
+           << "Run one macro explicitly, e.g. /control/execute sim/macros/microscope_vis.mac"
+           << G4endl;
     ui->SessionStart();
     delete ui;
   }

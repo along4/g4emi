@@ -4,6 +4,7 @@
 
 #include "G4ApplicationState.hh"
 #include "G4RunManager.hh"
+#include "G4SystemOfUnits.hh"
 #include "G4UIcmdWithADoubleAndUnit.hh"
 #include "G4UIcmdWithAString.hh"
 #include "G4UIdirectory.hh"
@@ -271,19 +272,25 @@ void Messenger::SetNewValue(G4UIcommand* command, G4String newValue) {
 
   // Sensor absolute center position controls.
   if (command == fSensorPosXCmd) {
-    fConfig->SetSensorPosX(fSensorPosXCmd->GetNewDoubleValue(newValue));
+    const auto value = fSensorPosXCmd->GetNewDoubleValue(newValue);
+    fConfig->SetSensorPosX(value);
+    G4cout << "Sensor posX set to " << value / mm << " mm." << G4endl;
     NotifyGeometryChanged();
     return;
   }
 
   if (command == fSensorPosYCmd) {
-    fConfig->SetSensorPosY(fSensorPosYCmd->GetNewDoubleValue(newValue));
+    const auto value = fSensorPosYCmd->GetNewDoubleValue(newValue);
+    fConfig->SetSensorPosY(value);
+    G4cout << "Sensor posY set to " << value / mm << " mm." << G4endl;
     NotifyGeometryChanged();
     return;
   }
 
   if (command == fSensorPosZCmd) {
-    fConfig->SetSensorPosZ(fSensorPosZCmd->GetNewDoubleValue(newValue));
+    const auto value = fSensorPosZCmd->GetNewDoubleValue(newValue);
+    fConfig->SetSensorPosZ(value);
+    G4cout << "Sensor posZ set to " << value / mm << " mm." << G4endl;
     NotifyGeometryChanged();
     return;
   }
@@ -352,7 +359,13 @@ void Messenger::SetNewValue(G4UIcommand* command, G4String newValue) {
 void Messenger::NotifyGeometryChanged() const {
   auto* runManager = G4RunManager::GetRunManager();
   if (runManager) {
+    // Mark detector geometry as dirty. We intentionally avoid forcing an
+    // immediate destructive rebuild from this callback because active
+    // visualization scenes can still reference old physical-volume models.
+    // A forced rebuild in that state can trigger model invalidation warnings
+    // and, on some Geant4/OGL stacks, a segmentation fault.
     runManager->GeometryHasBeenModified();
   }
-  G4cout << "Geometry updated. Run /run/initialize before /beamOn." << G4endl;
+  G4cout << "Geometry updated. Run /run/reinitializeGeometry, then /run/initialize, then /vis/drawVolume."
+         << G4endl;
 }

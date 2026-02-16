@@ -3,6 +3,7 @@
 #include "config.hh"
 
 #include "G4Box.hh"
+#include "G4Colour.hh"
 #include "G4Element.hh"
 #include "G4LogicalVolume.hh"
 #include "G4Material.hh"
@@ -12,6 +13,7 @@
 #include "G4SDManager.hh"
 #include "G4SystemOfUnits.hh"
 #include "G4ThreeVector.hh"
+#include "G4VisAttributes.hh"
 #include "G4ios.hh"
 
 #include <algorithm>
@@ -202,6 +204,10 @@ G4VPhysicalVolume* DetectorConstruction::Construct() {
   const auto sensorCenterY = std::isnan(sensorPosY) ? defaultSensorY : sensorPosY;
   const auto sensorCenterZ = std::isnan(sensorPosZ) ? defaultSensorZ : sensorPosZ;
 
+  G4cout << "[Geom] Scint(mm)=(" << scintPosX / mm << "," << scintPosY / mm << ","
+         << scintPosZ / mm << ") Sensor(mm)=(" << sensorCenterX / mm << ","
+         << sensorCenterY / mm << "," << sensorCenterZ / mm << ")" << G4endl;
+
   // Keep world automatically large enough even when volumes are shifted.
   // We size from required half-extents with a 4x safety factor.
   const auto requiredHalfX = std::max(std::abs(scintPosX) + 0.5 * scintX,
@@ -234,11 +240,29 @@ G4VPhysicalVolume* DetectorConstruction::Construct() {
                     0,
                     true);
 
+  // Visualization: tint scintillator so sensor motion is easier to see.
+  static auto* scintVisAttributes = []() {
+    auto* vis = new G4VisAttributes(G4Colour(0.1, 0.5, 0.9, 0.35));
+    vis->SetVisibility(true);
+    vis->SetForceSolid(true);
+    return vis;
+  }();
+  fScoringVolume->SetVisAttributes(scintVisAttributes);
+
   // Photon sensor is a dedicated logical volume used only for hit collection.
   auto* sensorSolid = new G4Box("PhotonSensorSolid", 0.5 * sensorX, 0.5 * sensorY,
                                 0.5 * sensorThickness);
   fPhotonSensorVolume =
       new G4LogicalVolume(sensorSolid, worldMaterial, "PhotonSensorLV");
+
+  // Visualization: draw the sensor in solid red so it is easy to identify in OGL.
+  static auto* sensorVisAttributes = []() {
+    auto* vis = new G4VisAttributes(G4Colour(1.0, 0.0, 0.0));
+    vis->SetVisibility(true);
+    vis->SetForceSolid(true);
+    return vis;
+  }();
+  fPhotonSensorVolume->SetVisAttributes(sensorVisAttributes);
 
   new G4PVPlacement(nullptr,
                     G4ThreeVector(sensorCenterX, sensorCenterY, sensorCenterZ),
@@ -264,7 +288,17 @@ void DetectorConstruction::ConstructSDandField() {
   }
 
   auto* sdManager = G4SDManager::GetSDMpointer();
-  auto* photonSensor = new PhotonSensorSD("PhotonSensorSD");
-  sdManager->AddNewDetector(photonSensor);
+
+  // Reuse the existing SD across geometry reinitializations. This avoids
+  // duplicate-registration warnings (DET1010) when geometry commands trigger
+  // /run/reinitializeGeometry in interactive sessions.
+  auto* existing = sdManager->FindSensitiveDetector("PhotonSensorSD", false);
+  auto* photonSensor = existing ? static_cast<PhotonSensorSD*>(existing)
+                                : new PhotonSensorSD("PhotonSensorSD");
+
+  if (!existing) {
+    sdManager->AddNewDetector(photonSensor);
+  }
+
   SetSensitiveDetector(fPhotonSensorVolume, photonSensor);
 }
