@@ -1,0 +1,17 @@
+[workspace]
+name = "g4emi"
+version = "0.1.0"
+description = "Python tooling for lens propagation studies using Geant4 sensor-hit output."
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+
+[dependencies]
+python = ">=3.11,<3.13"
+pip = ">=24.0"
+
+[pypi-dependencies]
+rayoptics = ">=0.9,<1"
+
+[tasks]
+check-ray-optics = "python -c \"import rayoptics; print('rayoptics import OK')\""
+python-repl = "python"

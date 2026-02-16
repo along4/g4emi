@@ -26,6 +26,28 @@ cmake -S . -B build
 cmake --build build -j
 ```
 
+## Python Environment (Pixi + ray-optics)
+
+This repository includes a `pixi.toml` for Python optics analysis workflows.
+
+Create the environment:
+
+```bash
+pixi install
+```
+
+Verify the `ray-optics` import:
+
+```bash
+pixi run check-ray-optics
+```
+
+Open an interactive Python REPL inside the Pixi environment:
+
+```bash
+pixi run python-repl
+```
+
 ## Run (batch GPS neutrons)
 
 ```bash
