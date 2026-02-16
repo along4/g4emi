@@ -53,7 +53,9 @@ class SimConfig(BaseModel):
 
     Modeling convention:
     - `lenses[0]` is treated as the primary/object-side lens for defaults.
-    - Optical-interface diameter defaults to primary lens clear diameter unless overridden.
+    - Optical-interface diameter defaults to a primary-lens side-dependent value:
+      - lens not reversed  -> lens-side clear diameter
+      - lens reversed      -> sensor-side image-circle diameter
     - Optical-interface Z placement is computed from requested back-face standoff.
     """
 
@@ -221,23 +223,56 @@ class SimConfig(BaseModel):
 
         return self.lens_models()[0]
 
+    def primary_lens_is_reversed(self) -> bool:
+        """Return orientation state for the primary lens at the interface."""
+
+        return self.lens_reversed_flags()[0]
+
+    def primary_optical_interface_side(self) -> str:
+        """Return which primary-lens side defines the optical interface.
+
+        Returns:
+        - `"lens_side"`   when the primary lens is in nominal orientation.
+        - `"sensor_side"` when the primary lens is reversed.
+        """
+
+        return "sensor_side" if self.primary_lens_is_reversed() else "lens_side"
+
+    def resolved_optical_interface_diameter_source(self) -> str:
+        """Describe where resolved optical-interface diameter is sourced from."""
+
+        if self.optical_interface_diameter_mm is not None:
+            return "manual_override"
+        if self.primary_lens_is_reversed():
+            return "primary_lens_image_circle_diameter_mm"
+        return "primary_lens_clear_diameter_mm"
+
+    def default_optical_interface_diameter_mm(self) -> float:
+        """Return default interface diameter from primary-lens orientation.
+
+        Side-dependent default rule:
+        - lens-side interface (`reversed=False`)  -> clear diameter
+        - sensor-side interface (`reversed=True`) -> image-circle diameter
+        """
+
+        lens = self.primary_lens()
+        if self.primary_lens_is_reversed():
+            return lens_image_circle_diameter_mm(lens)
+        return lens_clear_diameter_mm(lens)
+
     def resolved_optical_interface_diameter_mm(self) -> float:
         """Return optical-interface diameter in mm.
 
         Priority:
         1. explicit `optical_interface_diameter_mm`
-        2. primary lens clear diameter
-
-        Why this default:
-        - In single-lens workflows, optical-interface capture area typically tracks lens
-          clear aperture/image coverage constraints.
-        - For two-lens workflows, users can override with `optical_interface_diameter_mm`
-          if they prefer a different sizing policy.
+        2. side-dependent primary-lens default:
+           - lens-side clear diameter when not reversed
+           - sensor-side image-circle diameter when reversed
         """
 
         if self.optical_interface_diameter_mm is not None:
             return self.optical_interface_diameter_mm
-        return lens_clear_diameter_mm(self.primary_lens())
+        return self.default_optical_interface_diameter_mm()
 
     def lens_stack_length_total_mm(self) -> float:
         """Return total lens-stack depth (mm) across configured lenses.
@@ -267,6 +302,7 @@ class SimConfig(BaseModel):
                 {
                     "name": lens.name,
                     "reversed": is_reversed,
+                    "interface_side": "sensor_side" if is_reversed else "lens_side",
                     "zmx_path": str(lens.zmx_path),
                     "clear_diameter_mm": lens_clear_diameter_mm(lens),
                     "lens_stack_length_mm": lens_stack_length_mm(lens),
@@ -413,6 +449,13 @@ class SimConfig(BaseModel):
         out = self.model_dump(mode="json")
         out["lens_geometry"] = self.lens_geometry_summary()
         out["lens_reversed_flags"] = self.lens_reversed_flags()
+        out["primary_optical_interface_side"] = self.primary_optical_interface_side()
+        out[
+            "resolved_optical_interface_diameter_source"
+        ] = self.resolved_optical_interface_diameter_source()
+        out["default_optical_interface_diameter_mm"] = (
+            self.default_optical_interface_diameter_mm()
+        )
         out["lens_stack_length_total_mm"] = self.lens_stack_length_total_mm()
         out["resolved_optical_interface_diameter_mm"] = self.resolved_optical_interface_diameter_mm()
         return out
@@ -466,6 +509,11 @@ def _cli() -> None:
         print(
             "Total configured lens stack length (mm):",
             f"{cfg.lens_stack_length_total_mm():.3f}",
+        )
+        print("Primary optical-interface side:", cfg.primary_optical_interface_side())
+        print(
+            "Resolved optical-interface diameter source:",
+            cfg.resolved_optical_interface_diameter_source(),
         )
         print("Resolved optical-interface diameter (mm):", f"{cfg.resolved_optical_interface_diameter_mm():.3f}")
         print("Resolved optical-interface center Z (mm):", f"{cfg.optical_interface_center_z_mm():.3f}")
