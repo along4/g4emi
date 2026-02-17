@@ -80,7 +80,7 @@ def main() -> None:
         "Expected HDF5 target: "
         f"{resolve_output_stage_directory(config) / 'photon_optical_interface_hits.h5'}"
     )
-    print(f"Run with: ./build/g4emi {effective_macro_path}")
+    print(f"Run with: pixi run g4emi {effective_macro_path}")
 
 
 if __name__ == "__main__":
