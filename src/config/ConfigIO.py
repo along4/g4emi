@@ -10,7 +10,8 @@ The public API mirrors the practical workflow used in simulation scripts:
 2. Generate macro command blocks (`output_commands`, `macro_commands`).
 3. Create directory roots (`ensure_directory`).
 4. Prepare stage output directories (`ensure_output_directories`).
-5. Read configuration YAML (`from_yaml`).
+5. Read raw YAML mappings (`load_yaml_mapping`) and validated config
+   (`from_yaml`).
 6. Write configuration YAML (`write_yaml`).
 7. Write a full macro from scratch (`write_macro`).
 8. Patch only geometry lines in-place in an existing macro
@@ -301,6 +302,17 @@ def from_yaml(yaml_path: str | Path) -> SimConfig:
     - Validates through `SimConfig.model_validate(...)`.
     """
 
+    parsed = load_yaml_mapping(yaml_path)
+    return SimConfig.model_validate(parsed)
+
+
+def load_yaml_mapping(yaml_path: str | Path) -> dict[str, Any]:
+    """Load and validate a top-level YAML mapping/object.
+
+    This helper is intentionally unopinionated about keys so callers can
+    combine strict `SimConfig` fields with script-level settings in one file.
+    """
+
     module_yaml = _require_yaml_dependency()
     path = Path(yaml_path)
     if not path.exists():
@@ -310,11 +322,8 @@ def from_yaml(yaml_path: str | Path) -> SimConfig:
     if parsed is None:
         parsed = {}
     if not isinstance(parsed, dict):
-        raise ValueError(
-            f"YAML config at {path} must be a mapping/object at top level."
-        )
-
-    return SimConfig.model_validate(parsed)
+        raise ValueError(f"YAML config at {path} must be a mapping/object at top level.")
+    return parsed
 
 
 def write_yaml(
@@ -371,6 +380,39 @@ def ensure_directory(path: str | Path) -> Path:
         directory = _repo_root() / directory
     directory.mkdir(parents=True, exist_ok=True)
     return directory.resolve()
+
+
+def resolve_optional_path(
+    value: Any,
+    *,
+    key_name: str,
+    base_directory: str | Path | None = None,
+) -> Path | None:
+    """Resolve an optional YAML path-like value into an absolute path.
+
+    Validation behavior:
+    - `None` or blank string -> `None`
+    - non-string non-null -> `ValueError`
+    - relative string -> resolved against `base_directory` (or repo root)
+    """
+
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"YAML key `{key_name}` must be a string when provided.")
+    if not value.strip():
+        return None
+
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        if base_directory is None:
+            base = _repo_root()
+        else:
+            base = Path(base_directory).expanduser()
+            if not base.is_absolute():
+                base = _repo_root() / base
+        path = base / path
+    return path.resolve()
 
 
 def _strip_known_output_extension(filename: str) -> str:
@@ -597,6 +639,39 @@ def write_macro(
         )
     )
     path.write_text(payload + "\n", encoding="utf-8")
+
+
+def append_macro_commands(
+    macro_path: str | Path,
+    commands: Any,
+    *,
+    key_name: str = "commands",
+) -> None:
+    """Append command lines to an existing macro file.
+
+    Parameters
+    ----------
+    macro_path:
+        Existing macro file path.
+    commands:
+        Expected to be a list of strings.
+    key_name:
+        Validation label used in error messages.
+    """
+
+    path = Path(macro_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Macro file not found: {path}")
+    if not isinstance(commands, list) or not all(
+        isinstance(item, str) for item in commands
+    ):
+        raise ValueError(f"YAML key `{key_name}` must be a list of strings.")
+    if not commands:
+        return
+
+    body = path.read_text(encoding="utf-8")
+    sep = "" if body.endswith("\n") else "\n"
+    path.write_text(body + sep + "\n".join(commands) + "\n", encoding="utf-8")
 
 
 def apply_geometry_to_macro(config: SimConfig, macro_path: str | Path) -> None:
