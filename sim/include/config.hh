@@ -109,8 +109,10 @@ class Config {
   /// Get optional run name used to place outputs under a run-specific subdirectory.
   std::string GetOutputRunName() const;
   /// Set optional run name (empty string disables run-specific subdirectory).
-  /// With output-path override set, run outputs go under `<outputPath>/<runName>/`.
-  /// Without output-path override, run outputs go under `data/<runName>/`.
+  /// With output-path override set, run outputs go under
+  /// `<outputPath>/<runName>/simulatedPhotons/`.
+  /// Without output-path override, run outputs go under
+  /// `data/<runName>/simulatedPhotons/`.
   void SetOutputRunName(const std::string& value);
 
   /// Get CSV output file path derived from output settings.

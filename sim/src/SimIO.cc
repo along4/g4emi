@@ -24,6 +24,9 @@
  */
 namespace SimIO {
 namespace {
+/// Stage subdirectory for raw Geant4-produced photon outputs.
+constexpr const char* kSimulatedPhotonsDir = "simulatedPhotons";
+
 /**
  * Access the process-global HDF5 writer state singleton.
  *
@@ -84,12 +87,14 @@ void CopyLabel(const std::string& in, char out[detail::kSpeciesLabelSize]) {
 }
 
 /**
- * Ensure parent directory exists for an output file path.
+ * Verify parent directory exists for an output file path.
  *
  * Returns true when:
  * - file has no parent directory (current directory target), or
- * - parent directory already exists, or
- * - directory creation succeeded.
+ * - parent directory already exists.
+ *
+ * Directory creation is intentionally handled by Python config utilities
+ * (`ConfigIO`) so runtime IO remains a pure validation/write layer.
  */
 bool EnsureParentDirectory(const std::string& filePath) {
   const std::filesystem::path path(filePath);
@@ -99,16 +104,7 @@ bool EnsureParentDirectory(const std::string& filePath) {
   }
 
   std::error_code ec;
-  if (std::filesystem::exists(parent, ec)) {
-    return !ec;
-  }
-
-  std::filesystem::create_directories(parent, ec);
-  if (ec) {
-    return false;
-  }
-
-  return std::filesystem::exists(parent);
+  return std::filesystem::exists(parent, ec) && !ec;
 }
 
 /**
@@ -218,7 +214,7 @@ bool EnsureReady(const std::string& hdf5Path, std::string* errorMessage) {
 
   if (!EnsureParentDirectory(hdf5Path)) {
     if (errorMessage) {
-      *errorMessage = "Failed to create output directory for " + hdf5Path;
+      *errorMessage = "Output directory does not exist for " + hdf5Path;
     }
     return false;
   }
@@ -490,6 +486,19 @@ std::filesystem::path ResolveAgainstRepositoryRoot(std::filesystem::path path) {
 }
 
 /**
+ * Ensure simulation outputs are grouped under the `simulatedPhotons` stage dir.
+ *
+ * This avoids writing simulation and downstream-transport products into the
+ * same directory as the workflow expands (for example transportedPhotons).
+ */
+std::filesystem::path AppendSimulatedPhotonsDir(std::filesystem::path root) {
+  if (root.filename() == kSimulatedPhotonsDir) {
+    return root;
+  }
+  return root / kSimulatedPhotonsDir;
+}
+
+/**
  * Compose an absolute output file path from base name, optional output-path
  * override, optional run-name, and output extension.
  */
@@ -510,24 +519,35 @@ std::string ComposeOutputPath(const std::string& base,
     if (!runName.empty()) {
       explicitDir /= runName;
     }
+    explicitDir = AppendSimulatedPhotonsDir(explicitDir);
     return (explicitDir / baseLeaf).string() + extension;
   }
 
   if (runName.empty()) {
-    // Legacy behavior: no output-path override and no run name means base path
-    // (which may already include directory components) determines output path.
-    return basePath.string() + extension;
+    // No explicit output-path override and no run name: preserve base-path
+    // parent semantics, but place simulation output under simulatedPhotons/.
+    std::filesystem::path root = basePath.parent_path();
+    if (root.empty()) {
+#ifdef G4EMI_REPO_ROOT
+      root = std::filesystem::path(G4EMI_REPO_ROOT) / "data";
+#else
+      root = std::filesystem::current_path() / "data";
+#endif
+    }
+    root = AppendSimulatedPhotonsDir(root);
+    return (root / baseLeaf).string() + extension;
   }
 
-  // Legacy behavior with run-name routing: use data/<runName>/ regardless of
-  // whether output filename includes directory components.
+  // Run-name routing without explicit output path uses data/<runName>/ and
+  // then places simulation output under simulatedPhotons/.
 #ifdef G4EMI_REPO_ROOT
-  const std::filesystem::path runDir =
+  std::filesystem::path runDir =
       std::filesystem::path(G4EMI_REPO_ROOT) / "data" / runName;
 #else
-  const std::filesystem::path runDir =
+  std::filesystem::path runDir =
       std::filesystem::current_path() / "data" / runName;
 #endif
+  runDir = AppendSimulatedPhotonsDir(runDir);
 
   return (runDir / baseLeaf).string() + extension;
 }
@@ -543,7 +563,7 @@ bool AppendCsv(const std::string& csvPath,
                std::string* errorMessage) {
   if (!EnsureParentDirectory(csvPath)) {
     if (errorMessage) {
-      *errorMessage = "Failed to create output directory for " + csvPath;
+      *errorMessage = "Output directory does not exist for " + csvPath;
     }
     return false;
   }

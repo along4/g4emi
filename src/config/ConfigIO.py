@@ -8,8 +8,10 @@ This module intentionally owns all macro I/O responsibilities so
 The public API mirrors the practical workflow used in simulation scripts:
 1. Load an existing macro into a `SimConfig` (`from_macro`).
 2. Generate macro command blocks (`output_commands`, `macro_commands`).
-3. Write a full macro from scratch (`write_macro`).
-4. Patch only geometry lines in-place in an existing macro
+3. Create directory roots (`ensure_directory`).
+4. Prepare stage output directories (`ensure_output_directories`).
+5. Write a full macro from scratch (`write_macro`).
+6. Patch only geometry lines in-place in an existing macro
    (`apply_geometry_to_macro`).
 """
 
@@ -26,6 +28,9 @@ except ModuleNotFoundError:
     sys.path.append(str(Path(__file__).resolve().parents[2]))
     from src.config.SimConfig import SimConfig
 
+
+# Stage folder used for Geant4-produced photon data.
+SIMULATED_PHOTONS_STAGE_DIR = "simulatedPhotons"
 
 # Geant4-style length unit conversion table (values converted to mm).
 _LENGTH_UNIT_TO_MM: dict[str, float] = {
@@ -100,6 +105,14 @@ def _parse_length_tokens(tokens: list[str], command: str) -> float:
     return _length_to_mm(value, tokens[2])
 
 
+def _unquote_token(token: str) -> str:
+    """Strip one matching quote layer from a macro string token."""
+
+    if len(token) >= 2 and token[0] == token[-1] and token[0] in {"'", '"'}:
+        return token[1:-1]
+    return token
+
+
 def from_macro(
     macro_path: str | Path,
     *,
@@ -147,11 +160,15 @@ def from_macro(
         if command == "/output/format" and len(tokens) >= 2:
             updates["output_format"] = tokens[1]
             continue
+        if command == "/output/path" and len(tokens) >= 2:
+            parsed = _unquote_token(tokens[1])
+            updates["output_path"] = parsed or None
+            continue
         if command == "/output/filename" and len(tokens) >= 2:
-            updates["output_filename"] = tokens[1]
+            updates["output_filename"] = _unquote_token(tokens[1])
             continue
         if command == "/output/runname" and len(tokens) >= 2:
-            updates["output_runname"] = tokens[1]
+            updates["output_runname"] = _unquote_token(tokens[1])
             continue
 
         if command == "/scintillator/geom/material" and len(tokens) >= 2:
@@ -249,11 +266,90 @@ def from_macro(
 def output_commands(config: SimConfig) -> list[str]:
     """Return output control command lines for a validated config."""
 
-    return [
+    commands = [
         f"/output/format {config.output_format}",
-        f"/output/filename {config.output_filename}",
-        f"/output/runname {config.output_runname}",
     ]
+    if config.output_path is None:
+        commands.append('/output/path ""')
+    else:
+        commands.append(f"/output/path {config.output_path}")
+    commands.extend(
+        [
+            f"/output/filename {config.output_filename}",
+            f"/output/runname {config.output_runname}",
+        ]
+    )
+    return commands
+
+
+def _repo_root() -> Path:
+    """Return repository root inferred from this module location."""
+
+    return Path(__file__).resolve().parents[2]
+
+
+def ensure_directory(path: str | Path) -> Path:
+    """Create a directory path (including parents) and return its resolved Path."""
+
+    directory = Path(path).expanduser()
+    if not directory.is_absolute():
+        directory = _repo_root() / directory
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory.resolve()
+
+
+def _strip_known_output_extension(filename: str) -> str:
+    """Strip known output extensions so callers can pass base-or-full filenames."""
+
+    suffix = Path(filename).suffix.lower()
+    if suffix in {".csv", ".h5", ".hdf5"}:
+        return str(Path(filename).with_suffix(""))
+    return filename
+
+
+def resolve_output_stage_directory(config: SimConfig) -> Path:
+    """Resolve the final stage directory for simulation output files.
+
+    This mirrors the C++ runtime path-routing behavior:
+    - with `output_path`: `<output_path>/<runname?>/simulatedPhotons/`
+    - without `output_path` and with runname:
+      `<repo>/data/<runname>/simulatedPhotons/`
+    - without `output_path` and without runname:
+      `<repo>/<output_filename parent or data>/simulatedPhotons/`
+    """
+
+    run_name = (config.output_runname or "").strip()
+    if config.output_path is not None:
+        base = Path(config.output_path).expanduser()
+        if not base.is_absolute():
+            base = _repo_root() / base
+        if run_name:
+            base = base / run_name
+        return (base / SIMULATED_PHOTONS_STAGE_DIR).resolve()
+
+    filename_path = Path(_strip_known_output_extension(config.output_filename))
+    filename_parent = filename_path.parent
+    if filename_parent == Path("."):
+        base = _repo_root() / "data"
+    else:
+        base = filename_parent
+        if not base.is_absolute():
+            base = _repo_root() / base
+
+    if run_name:
+        return (_repo_root() / "data" / run_name / SIMULATED_PHOTONS_STAGE_DIR).resolve()
+    return (base / SIMULATED_PHOTONS_STAGE_DIR).resolve()
+
+
+def ensure_output_directories(config: SimConfig) -> Path:
+    """Create and return the simulation output stage directory.
+
+    This helper is the intended Python-side directory creation entrypoint.
+    """
+
+    output_stage_dir = resolve_output_stage_directory(config)
+    output_stage_dir.mkdir(parents=True, exist_ok=True)
+    return output_stage_dir
 
 
 def macro_commands(
@@ -285,6 +381,7 @@ def write_macro(
     *,
     include_output: bool = True,
     include_run_initialize: bool = True,
+    create_output_directories: bool = True,
     overwrite: bool = True,
 ) -> None:
     """Write a macro file from config.
@@ -299,6 +396,9 @@ def write_macro(
         Include `/output/*` commands before geometry commands.
     include_run_initialize:
         Append `/run/initialize` at end of emitted block.
+    create_output_directories:
+        When `True`, create resolved simulation output stage directory before
+        writing the macro. This keeps directory creation on the Python side.
     overwrite:
         If `False`, raise `FileExistsError` when destination already exists.
     """
@@ -306,6 +406,9 @@ def write_macro(
     path = Path(macro_path)
     if path.exists() and not overwrite:
         raise FileExistsError(f"Refusing to overwrite existing file: {path}")
+
+    if create_output_directories:
+        ensure_output_directories(config)
 
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = "\n".join(
@@ -360,4 +463,3 @@ def apply_geometry_to_macro(config: SimConfig, macro_path: str | Path) -> None:
         out_lines[insert_idx:insert_idx] = [replacements[prefix] for prefix in missing]
 
     path.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
-

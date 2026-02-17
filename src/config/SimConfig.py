@@ -38,6 +38,8 @@ except ModuleNotFoundError:
         load_lens_models,
     )
 
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
 
 class SimConfig(BaseModel):
     """High-level geometry + lens-stack configuration for g4emi.
@@ -88,7 +90,12 @@ class SimConfig(BaseModel):
     aperture_radius_mm: float | None = Field(default=None, gt=0.0)
 
     # Output metadata.
+    # `output_path` is optional; when set, C++ runtime routes output under:
+    #   <output_path>/<optional_runname>/simulatedPhotons/
+    # and this model validates that the provided base directory already exists.
+    # Directory creation is intentionally delegated to ConfigIO helpers.
     output_format: str = "hdf5"
+    output_path: str | None = "data"
     output_filename: str = "data/photon_optical_interface_hits"
     output_runname: str = "microscope"
 
@@ -115,8 +122,47 @@ class SimConfig(BaseModel):
                 "When `reversed` is a list, it must have the same length as `lenses`."
             )
 
+        self._validate_path_invariants()
         self._validate_geometry_invariants()
         return self
+
+    def _validate_path_invariants(self) -> None:
+        """Validate optional path fields that should reference existing paths.
+
+        Validation policy:
+        - `output_path`: when provided (not None), it must already exist and be a directory.
+        - `output_filename`: when `output_path` is None and filename embeds a parent
+          directory, that parent directory must already exist.
+
+        Rationale:
+        - This model only validates path state.
+        - Directory creation lives in `ConfigIO` helper functions.
+        """
+
+        if self.output_path is not None:
+            output_path = Path(self.output_path).expanduser()
+            if not output_path.is_absolute():
+                output_path = _REPO_ROOT / output_path
+            if not output_path.exists():
+                raise ValueError(
+                    f"`output_path` does not exist: {output_path}. "
+                    "Create it first with ConfigIO directory helpers."
+                )
+            if not output_path.is_dir():
+                raise ValueError(f"`output_path` must be a directory: {output_path}.")
+
+        output_filename_path = Path(self.output_filename).expanduser()
+        parent = output_filename_path.parent
+        # Only enforce parent existence when caller did not provide output_path.
+        # If output_path is provided, directory routing comes from output_path.
+        if self.output_path is None and parent != Path("."):
+            if not parent.is_absolute():
+                parent = _REPO_ROOT / parent
+            if not parent.exists():
+                raise ValueError(
+                    f"`output_filename` parent directory does not exist: {parent}. "
+                    "Create it first with ConfigIO directory helpers."
+                )
 
     def _scint_back_face_z_mm(self) -> float:
         """Return scintillator +Z face position in mm."""

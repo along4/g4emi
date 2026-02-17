@@ -53,11 +53,14 @@ std::string StripKnownOutputExtension(const std::string& value);
  *
  * Behavior summary:
  * - If `outputPath` is empty:
- *   - `runName` empty    -> preserve legacy base-path behavior.
- *   - `runName` nonempty -> route into repository `data/<runName>/`.
+ *   - `runName` empty    -> route to `<baseParent>/simulatedPhotons/`.
+ *   - `runName` nonempty -> route into repository
+ *                           `data/<runName>/simulatedPhotons/`.
  * - If `outputPath` is set:
- *   - `runName` empty    -> write to `<outputPath>/<baseLeaf><extension>`.
- *   - `runName` nonempty -> write to `<outputPath>/<runName>/<baseLeaf><extension>`.
+ *   - `runName` empty    -> write to
+ *                           `<outputPath>/simulatedPhotons/<baseLeaf><extension>`.
+ *   - `runName` nonempty -> write to
+ *                           `<outputPath>/<runName>/simulatedPhotons/<baseLeaf><extension>`.
  *
  * Relative paths are anchored to the repository root.
  */

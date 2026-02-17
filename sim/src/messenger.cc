@@ -380,7 +380,7 @@ void Messenger::SetNewValue(G4UIcommand* command, G4String newValue) {
     return;
   }
 
-  // Run name controls optional output routing under data/<runname>/.
+  // Run name controls optional output routing under run-specific output folders.
   if (command == fOutputRunNameCmd) {
     fConfig->SetOutputRunName(newValue);
     const auto runName = fConfig->GetOutputRunName();

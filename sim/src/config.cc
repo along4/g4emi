@@ -361,7 +361,8 @@ std::string Config::GetOutputRunName() const {
  * Set optional run-name output directory.
  *
  * An empty value clears run-name routing. Non-empty values are normalized so
- * they map to exactly one directory under `data/`.
+ * they map to exactly one directory token. Final output placement is handled
+ * by SimIO and includes a `simulatedPhotons/` stage subdirectory.
  */
 void Config::SetOutputRunName(const std::string& value) {
   std::lock_guard<std::mutex> lock(fMutex);

@@ -75,13 +75,20 @@ apply_geometry_to_macro(cfg, "sim/macros/microscope_run.mac")
 Load from an existing macro, then write a new macro from scratch:
 
 ```python
-from src.config.ConfigIO import from_macro, write_macro
+from src.config.ConfigIO import (
+    ensure_directory,
+    ensure_output_directories,
+    from_macro,
+    write_macro,
+)
 
 loaded = from_macro(
     "sim/macros/microscope_run.mac",
     lenses=["canon50"],
     reversed=False,
 )
+ensure_directory("data")
+ensure_output_directories(loaded)
 write_macro(loaded, "sim/macros/generated_from_config.mac")
 ```
 
@@ -118,7 +125,7 @@ Command groups:
 - `/output/format [csv|hdf5|both]`
 - `/output/path <directory_path>` (optional; empty string clears explicit path override)
 - `/output/filename <base_or_path>`
-- `/output/runname <name>` (optional; with `/output/path`, writes into `<path>/<runname>/`; otherwise writes into `data/<runname>/`)
+- `/output/runname <name>` (optional; with `/output/path`, writes into `<path>/<runname>/simulatedPhotons/`; otherwise writes into `data/<runname>/simulatedPhotons/`)
 - `/scintillator/geom/material <name>` (e.g. `EJ200` or a NIST material name)
 - `/scintillator/geom/scintX <value> <unit>`
 - `/scintillator/geom/scintY <value> <unit>`
@@ -190,15 +197,20 @@ the back-face optical-interface.
 
 ### File location (all output modes)
 
+Output parent directories must exist before running Geant4.
+Directory creation is handled on the Python side (for example
+`src.config.ConfigIO.ensure_directory(...)` and
+`src.config.ConfigIO.ensure_output_directories(...)`), not by runtime IO.
+
 Default behavior (no `/output/path` override):
 
-- Outputs are written to `./data/photon_optical_interface_hits.csv` and/or `./data/photon_optical_interface_hits.h5` (repo root).
-- If `/output/runname <name>` is set, outputs are written to `./data/<name>/photon_optical_interface_hits.csv` and/or `./data/<name>/photon_optical_interface_hits.h5`.
+- Outputs are written to `./data/simulatedPhotons/photon_optical_interface_hits.csv` and/or `./data/simulatedPhotons/photon_optical_interface_hits.h5`.
+- If `/output/runname <name>` is set, outputs are written to `./data/<name>/simulatedPhotons/photon_optical_interface_hits.csv` and/or `./data/<name>/simulatedPhotons/photon_optical_interface_hits.h5`.
 
 With `/output/path <directory_path>`:
 
-- Outputs are written to `<directory_path>/photon_optical_interface_hits.csv` and/or `.h5`.
-- If `/output/runname <name>` is also set, outputs are written to `<directory_path>/<name>/photon_optical_interface_hits.csv` and/or `.h5`.
+- Outputs are written to `<directory_path>/simulatedPhotons/photon_optical_interface_hits.csv` and/or `.h5`.
+- If `/output/runname <name>` is also set, outputs are written to `<directory_path>/<name>/simulatedPhotons/photon_optical_interface_hits.csv` and/or `.h5`.
 
 ### Column schema
 
