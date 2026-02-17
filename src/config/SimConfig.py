@@ -1,14 +1,13 @@
 """Pydantic simulation configuration for lens-aware g4emi geometry macros.
 
-This module binds together three concerns:
+This module binds together two concerns:
 1. User-facing simulation geometry parameters (scintillator/optical-interface).
 2. Lens-driven geometry extraction from `.zmx` models.
-3. Deterministic macro-file rewriting for Geant4 command inputs.
 
 The intent is to keep geometry choices declarative and reproducible:
 - A lens list (1-2 lenses) is the optical input.
 - Derived lens quantities (diameter/length/image-circle) come from `LensModels`.
-- Geant4 macro commands are generated from one validated config object.
+- Geant4 geometry command lists are generated from one validated config object.
 """
 
 from __future__ import annotations
@@ -389,51 +388,6 @@ class SimConfig(BaseModel):
             ]
         )
         return commands
-
-    def apply_geometry_to_macro(self, macro_path: str | Path) -> None:
-        """Apply generated geometry commands to an existing macro in-place.
-
-        Update strategy:
-        - Replace any existing lines with matching command prefixes.
-        - Preserve comments/blank lines and unrelated commands.
-        - Insert still-missing geometry commands immediately before
-          `/run/initialize` (or append to end if not present).
-        """
-
-        path = Path(macro_path)
-        if not path.exists():
-            raise FileNotFoundError(f"Macro file not found: {path}")
-
-        lines = path.read_text(encoding="utf-8").splitlines()
-        replacements = {cmd.split()[0]: cmd for cmd in self.geometry_commands()}
-
-        replaced: set[str] = set()
-        out_lines: list[str] = []
-        for line in lines:
-            stripped = line.strip()
-            # Preserve comments/whitespace verbatim for readability.
-            if not stripped or stripped.startswith("#"):
-                out_lines.append(line)
-                continue
-
-            prefix = stripped.split()[0]
-            # Replace only known geometry command prefixes.
-            if prefix in replacements:
-                out_lines.append(replacements[prefix])
-                replaced.add(prefix)
-                continue
-            out_lines.append(line)
-
-        # Inject any missing geometry commands at canonical insertion point.
-        missing = [p for p in replacements if p not in replaced]
-        if missing:
-            insert_idx = next(
-                (i for i, line in enumerate(out_lines) if line.strip() == "/run/initialize"),
-                len(out_lines),
-            )
-            out_lines[insert_idx:insert_idx] = [replacements[p] for p in missing]
-
-        path.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize config plus derived lens geometry into a plain dict.
