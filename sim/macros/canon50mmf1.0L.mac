@@ -1,0 +1,46 @@
+/control/verbose 0
+/run/verbose 0
+/event/verbose 0
+/tracking/verbose 0
+/run/printProgress 1000
+
+/output/format hdf5
+/output/filename data/photon_optical_interface_hits
+/output/runname canon50_working_distance
+
+# Canon EF 50 mm f/1.0L setup:
+# - Scintillator: 10 cm x 10 cm x 2 cm
+# - Optical interface diameter: 60.55 mm (clear diameter from Canon .zmx model)
+# - Working distance assumption: 200 mm from scintillator back face to optical-interface front face
+#   -> optical-interface center Z = 10 mm (scint half-thickness) + 200 mm + 0.05 mm = 210.05 mm
+/scintillator/geom/material EJ200
+/scintillator/geom/scintX 10 cm
+/scintillator/geom/scintY 10 cm
+/scintillator/geom/scintZ 2 cm
+/scintillator/geom/posX 0 cm
+/scintillator/geom/posY 0 cm
+/scintillator/geom/posZ 0 cm
+/scintillator/geom/apertureRadius 30.275 mm
+
+/optical_interface/geom/sizeX 60.550 mm
+/optical_interface/geom/sizeY 60.550 mm
+/optical_interface/geom/thickness 0.1 mm
+/optical_interface/geom/posX 0 cm
+/optical_interface/geom/posY 0 cm
+/optical_interface/geom/posZ 210.050 mm
+
+/run/initialize
+
+/gps/particle neutron
+/gps/pos/type Plane
+/gps/pos/shape Circle
+/gps/pos/centre 0.0 0.0 -10.0 cm
+/gps/pos/radius 1.0 cm
+/gps/ang/type beam2d
+/gps/ang/rot1 1 0 0
+/gps/ang/rot2 0 1 0
+/gps/direction 0 0 1
+/gps/ene/type Mono
+/gps/ene/mono 6 MeV
+
+/run/beamOn 1000
