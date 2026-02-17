@@ -26,11 +26,11 @@ scint_back_to_optical_interface_mm: 200.0
 optical_interface_diameter_mm: null
 
 use_aperture_mask: true
-aperture_radius_mm: null
+aperture_radius_mm: 50.0
 
 output_format: hdf5
 output_filename: photon_optical_interface_hits
-output_runname: CanonEF50mmf1p0L_example
+output_runname: CanonEF50mmf1p0L_run
 
 # ---- Example script fields ----
 append_macro_commands:

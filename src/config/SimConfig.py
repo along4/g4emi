@@ -62,7 +62,7 @@ class SimConfig(BaseModel):
     model_config = ConfigDict(validate_assignment=True)
 
     # Lens list that drives optical geometry extraction.
-    lenses: list[str] = Field(default_factory=lambda: ["canon50"])
+    lenses: list[str] = Field(default_factory=lambda: ["CanonEF50mmf1.0L.zmx"])
     # Lens orientation flag(s): False means nominal orientation, True means reversed.
     # Accepts either:
     # - one bool applied to all configured lenses, or
@@ -97,7 +97,7 @@ class SimConfig(BaseModel):
     output_format: str = "hdf5"
     output_path: str | None = "data"
     output_filename: str = "data/photon_optical_interface_hits"
-    output_runname: str = "microscope"
+    output_runname: str = "example"
 
     @model_validator(mode="after")
     def validate_config(self) -> "SimConfig":
