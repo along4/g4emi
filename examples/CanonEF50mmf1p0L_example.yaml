@@ -1,0 +1,48 @@
+# Canon EF 50 mm f/1.0L YAML-driven example configuration.
+#
+# This file intentionally contains:
+# 1. All SimConfig fields (top-level keys consumed by ConfigIO.from_yaml).
+# 2. Script-level keys used by examples/CanonEF50mmf1p0L_example.py:
+#    - macro_output_path (optional; when omitted, ConfigIO default is used)
+#    - append_macro_commands
+
+# ---- SimConfig fields ----
+lenses:
+  - CanonEF50mmf1.0L.zmx
+reversed: false
+
+scint_material: EJ200
+scint_x_cm: 10.0
+scint_y_cm: 10.0
+scint_z_cm: 2.0
+scint_pos_x_cm: 0.0
+scint_pos_y_cm: 0.0
+scint_pos_z_cm: 0.0
+
+optical_interface_thickness_mm: 0.1
+optical_interface_pos_x_cm: 0.0
+optical_interface_pos_y_cm: 0.0
+scint_back_to_optical_interface_mm: 200.0
+optical_interface_diameter_mm: null
+
+use_aperture_mask: true
+aperture_radius_mm: null
+
+output_format: hdf5
+output_filename: photon_optical_interface_hits
+output_runname: CanonEF50mmf1p0L_example
+
+# ---- Example script fields ----
+append_macro_commands:
+  - /gps/particle neutron
+  - /gps/pos/type Plane
+  - /gps/pos/shape Circle
+  - /gps/pos/centre 0.0 0.0 -10.0 cm
+  - /gps/pos/radius 1.0 cm
+  - /gps/ang/type beam2d
+  - /gps/ang/rot1 1 0 0
+  - /gps/ang/rot2 0 1 0
+  - /gps/direction 0 0 1
+  - /gps/ene/type Mono
+  - /gps/ene/mono 6 MeV
+  - /run/beamOn 10000

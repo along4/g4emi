@@ -130,32 +130,21 @@ class SimConfig(BaseModel):
         """Validate optional path fields that should reference existing paths.
 
         Validation policy:
-        - `output_path`: when provided (not None), it must already exist and be a directory.
-        - `output_filename`: when `output_path` is None and filename embeds a parent
-          directory, that parent directory must already exist.
+        - `output_path`: accepted as-is; resolution/fallback is handled by ConfigIO.
+        - `output_filename`: if no explicit `output_path` and no `output_runname`
+          are provided, embedded parent directory must exist.
 
         Rationale:
-        - This model only validates path state.
-        - Directory creation lives in `ConfigIO` helper functions.
+        - Directory creation and fallback-to-`data` behavior live in ConfigIO.
+        - This model avoids rejecting configs that may be resolved/fallbacked
+          during Python-side IO preparation.
         """
-
-        if self.output_path is not None:
-            output_path = Path(self.output_path).expanduser()
-            if not output_path.is_absolute():
-                output_path = _REPO_ROOT / output_path
-            if not output_path.exists():
-                raise ValueError(
-                    f"`output_path` does not exist: {output_path}. "
-                    "Create it first with ConfigIO directory helpers."
-                )
-            if not output_path.is_dir():
-                raise ValueError(f"`output_path` must be a directory: {output_path}.")
 
         output_filename_path = Path(self.output_filename).expanduser()
         parent = output_filename_path.parent
-        # Only enforce parent existence when caller did not provide output_path.
-        # If output_path is provided, directory routing comes from output_path.
-        if self.output_path is None and parent != Path("."):
+        # Parent existence check applies only when filename parent would actually
+        # be used as output root (no explicit output_path and no runname).
+        if self.output_path is None and not self.output_runname and parent != Path("."):
             if not parent.is_absolute():
                 parent = _REPO_ROOT / parent
             if not parent.exists():

@@ -92,6 +92,26 @@ ensure_output_directories(loaded)
 write_macro(loaded, "sim/macros/generated_from_config.mac")
 ```
 
+If no macro path is supplied, `write_macro(...)` defaults to:
+
+- `<effective_output_root>/<runname>/macros/<runname>.mac` when runname is set
+- `<effective_output_root>/macros/generated_from_config.mac` when runname is empty
+
+and `effective_output_root` falls back to `data/` when `output_path` is
+missing or cannot be resolved.
+
+Read/write `SimConfig` from YAML:
+
+```python
+from src.config.ConfigIO import from_yaml, write_yaml
+from src.config.SimConfig import SimConfig
+
+cfg = SimConfig(lenses=["canon50"], reversed=False)
+write_yaml(cfg, "examples/canon50_config.yaml")
+cfg2 = from_yaml("examples/canon50_config.yaml")
+print(cfg2.output_format)
+```
+
 ## Run (batch GPS neutrons)
 
 ```bash
@@ -123,7 +143,7 @@ Command groups:
 ### Supported commands
 
 - `/output/format [csv|hdf5|both]`
-- `/output/path <directory_path>` (optional; empty string clears explicit path override)
+- `/output/path <directory_path>` (optional; if missing or unresolved, falls back to `data/`)
 - `/output/filename <base_or_path>`
 - `/output/runname <name>` (optional; with `/output/path`, writes into `<path>/<runname>/simulatedPhotons/`; otherwise writes into `data/<runname>/simulatedPhotons/`)
 - `/scintillator/geom/material <name>` (e.g. `EJ200` or a NIST material name)
@@ -211,6 +231,11 @@ With `/output/path <directory_path>`:
 
 - Outputs are written to `<directory_path>/simulatedPhotons/photon_optical_interface_hits.csv` and/or `.h5`.
 - If `/output/runname <name>` is also set, outputs are written to `<directory_path>/<name>/simulatedPhotons/photon_optical_interface_hits.csv` and/or `.h5`.
+
+Fallback behavior:
+
+- If `output_path` is not provided or cannot be resolved to an existing directory, Python config IO falls back to `data/`.
+- With runname set, fallback target is `data/<runname>/simulatedPhotons/`.
 
 ### Column schema
 

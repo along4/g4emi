@@ -10,8 +10,10 @@ The public API mirrors the practical workflow used in simulation scripts:
 2. Generate macro command blocks (`output_commands`, `macro_commands`).
 3. Create directory roots (`ensure_directory`).
 4. Prepare stage output directories (`ensure_output_directories`).
-5. Write a full macro from scratch (`write_macro`).
-6. Patch only geometry lines in-place in an existing macro
+5. Read configuration YAML (`from_yaml`).
+6. Write configuration YAML (`write_yaml`).
+7. Write a full macro from scratch (`write_macro`).
+8. Patch only geometry lines in-place in an existing macro
    (`apply_geometry_to_macro`).
 """
 
@@ -20,6 +22,7 @@ from __future__ import annotations
 import math
 from pathlib import Path
 import sys
+from typing import Any
 
 try:
     from src.config.SimConfig import SimConfig
@@ -28,9 +31,16 @@ except ModuleNotFoundError:
     sys.path.append(str(Path(__file__).resolve().parents[2]))
     from src.config.SimConfig import SimConfig
 
+try:
+    import yaml
+except ModuleNotFoundError:  # pragma: no cover - dependency availability varies
+    yaml = None
+
 
 # Stage folder used for Geant4-produced photon data.
 SIMULATED_PHOTONS_STAGE_DIR = "simulatedPhotons"
+MACROS_STAGE_DIR = "macros"
+DEFAULT_GENERATED_MACRO_FILENAME = "generated_from_config.mac"
 
 # Geant4-style length unit conversion table (values converted to mm).
 _LENGTH_UNIT_TO_MM: dict[str, float] = {
@@ -111,6 +121,21 @@ def _unquote_token(token: str) -> str:
     if len(token) >= 2 and token[0] == token[-1] and token[0] in {"'", '"'}:
         return token[1:-1]
     return token
+
+
+def _require_yaml_dependency() -> Any:
+    """Return PyYAML module or raise a clear dependency error.
+
+    YAML functionality is optional at import time; we only require the
+    dependency when YAML-specific helpers are called.
+    """
+
+    if yaml is None:
+        raise ModuleNotFoundError(
+            "PyYAML is required for YAML config IO. "
+            "Install it in your environment (for example: pixi add pyyaml)."
+        )
+    return yaml
 
 
 def from_macro(
@@ -263,23 +288,72 @@ def from_macro(
     return SimConfig(lenses=effective_lenses, reversed=reversed, **updates)
 
 
-def output_commands(config: SimConfig) -> list[str]:
-    """Return output control command lines for a validated config."""
+def from_yaml(yaml_path: str | Path) -> SimConfig:
+    """Load a :class:`SimConfig` from a YAML file.
 
-    commands = [
-        f"/output/format {config.output_format}",
-    ]
-    if config.output_path is None:
-        commands.append('/output/path ""')
+    Expected YAML shape:
+    - top-level mapping where keys correspond to `SimConfig` fields.
+
+    Validation behavior:
+    - Fails if file is missing.
+    - Parses with `yaml.safe_load`.
+    - Validates through `SimConfig.model_validate(...)`.
+    """
+
+    module_yaml = _require_yaml_dependency()
+    path = Path(yaml_path)
+    if not path.exists():
+        raise FileNotFoundError(f"YAML config file not found: {path}")
+
+    parsed = module_yaml.safe_load(path.read_text(encoding="utf-8"))
+    if parsed is None:
+        parsed = {}
+    if not isinstance(parsed, dict):
+        raise ValueError(
+            f"YAML config at {path} must be a mapping/object at top level."
+        )
+
+    return SimConfig.model_validate(parsed)
+
+
+def write_yaml(
+    config: SimConfig,
+    yaml_path: str | Path,
+    *,
+    include_derived: bool = False,
+    overwrite: bool = True,
+) -> None:
+    """Write a :class:`SimConfig` to a YAML file.
+
+    Parameters
+    ----------
+    config:
+        Source simulation configuration.
+    yaml_path:
+        Destination YAML file path.
+    include_derived:
+        When `False`, write only direct model fields.
+        When `True`, include derived lens/geometry summary via `to_dict()`.
+    overwrite:
+        If `False`, raise `FileExistsError` when destination already exists.
+    """
+
+    module_yaml = _require_yaml_dependency()
+    path = Path(yaml_path)
+    if path.exists() and not overwrite:
+        raise FileExistsError(f"Refusing to overwrite existing file: {path}")
+
+    payload: dict[str, Any]
+    if include_derived:
+        payload = config.to_dict()
     else:
-        commands.append(f"/output/path {config.output_path}")
-    commands.extend(
-        [
-            f"/output/filename {config.output_filename}",
-            f"/output/runname {config.output_runname}",
-        ]
+        payload = config.model_dump(mode="python")
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        module_yaml.safe_dump(payload, sort_keys=False, default_flow_style=False),
+        encoding="utf-8",
     )
-    return commands
 
 
 def _repo_root() -> Path:
@@ -307,38 +381,114 @@ def _strip_known_output_extension(filename: str) -> str:
     return filename
 
 
-def resolve_output_stage_directory(config: SimConfig) -> Path:
-    """Resolve the final stage directory for simulation output files.
+def _effective_output_root(config: SimConfig) -> Path:
+    """Return effective output root directory with fallback-to-`data`.
 
-    This mirrors the C++ runtime path-routing behavior:
-    - with `output_path`: `<output_path>/<runname?>/simulatedPhotons/`
-    - without `output_path` and with runname:
-      `<repo>/data/<runname>/simulatedPhotons/`
-    - without `output_path` and without runname:
-      `<repo>/<output_filename parent or data>/simulatedPhotons/`
+    Fallback policy:
+    - If `output_path` is missing/blank -> `<repo>/data`
+    - If `output_path` resolves to an existing directory -> use it
+    - Otherwise -> `<repo>/data`
+    """
+
+    default_root = _repo_root() / "data"
+    raw_path = config.output_path
+    if raw_path is None or not str(raw_path).strip():
+        return default_root
+
+    candidate = Path(raw_path).expanduser()
+    if not candidate.is_absolute():
+        candidate = _repo_root() / candidate
+
+    try:
+        if candidate.exists() and candidate.is_dir():
+            return candidate.resolve()
+    except OSError:
+        pass
+    return default_root
+
+
+def _effective_output_path_command_value(config: SimConfig) -> str:
+    """Return macro `/output/path` value with fallback-to-`data` semantics."""
+
+    root = _effective_output_root(config)
+    default_root = (_repo_root() / "data").resolve()
+    if root == default_root:
+        return "data"
+    return str(root)
+
+
+def _effective_run_root(config: SimConfig) -> Path:
+    """Resolve effective root directory shared by stage subdirectories.
+
+    This root is the parent directory under which stage folders (for example
+    `simulatedPhotons/` and `macros/`) are created.
     """
 
     run_name = (config.output_runname or "").strip()
-    if config.output_path is not None:
-        base = Path(config.output_path).expanduser()
-        if not base.is_absolute():
-            base = _repo_root() / base
-        if run_name:
-            base = base / run_name
-        return (base / SIMULATED_PHOTONS_STAGE_DIR).resolve()
-
-    filename_path = Path(_strip_known_output_extension(config.output_filename))
-    filename_parent = filename_path.parent
-    if filename_parent == Path("."):
-        base = _repo_root() / "data"
-    else:
-        base = filename_parent
-        if not base.is_absolute():
-            base = _repo_root() / base
-
+    base = _effective_output_root(config)
     if run_name:
-        return (_repo_root() / "data" / run_name / SIMULATED_PHOTONS_STAGE_DIR).resolve()
-    return (base / SIMULATED_PHOTONS_STAGE_DIR).resolve()
+        return (base / run_name).resolve()
+
+    # When runname is absent and output_path falls back to data, preserve
+    # output_filename-parent behavior so non-runname legacy paths stay usable.
+    if base == (_repo_root() / "data").resolve() and (
+        config.output_path is None or not str(config.output_path).strip()
+    ):
+        filename_path = Path(_strip_known_output_extension(config.output_filename))
+        filename_parent = filename_path.parent
+        if filename_parent == Path("."):
+            base = _repo_root() / "data"
+        else:
+            base = filename_parent
+            if not base.is_absolute():
+                base = _repo_root() / base
+        return base.resolve()
+
+    return base.resolve()
+
+
+def resolve_output_stage_directory(config: SimConfig) -> Path:
+    """Resolve the final stage directory for simulation output files."""
+
+    return (_effective_run_root(config) / SIMULATED_PHOTONS_STAGE_DIR).resolve()
+
+
+def resolve_macro_stage_directory(config: SimConfig) -> Path:
+    """Resolve the macros stage directory sibling to `simulatedPhotons`."""
+
+    return (_effective_run_root(config) / MACROS_STAGE_DIR).resolve()
+
+
+def resolve_default_macro_path(config: SimConfig) -> Path:
+    """Resolve default macro output path for `write_macro(..., macro_path=None)`.
+
+    Default filename policy:
+    - use `<runname>.mac` when runname is non-empty
+    - otherwise use `generated_from_config.mac`
+    """
+
+    run_name = (config.output_runname or "").strip()
+    macro_filename = (
+        f"{run_name}.mac" if run_name else DEFAULT_GENERATED_MACRO_FILENAME
+    )
+    return (resolve_macro_stage_directory(config) / macro_filename).resolve()
+
+
+def output_commands(config: SimConfig) -> list[str]:
+    """Return output control command lines for a validated config.
+
+    Output-path behavior:
+    - If configured output_path is missing/unresolvable, emits `/output/path data`
+      so runtime output routing falls back to repository `data/`.
+    """
+
+    commands = [
+        f"/output/format {config.output_format}",
+        f"/output/path {_effective_output_path_command_value(config)}",
+        f"/output/filename {config.output_filename}",
+        f"/output/runname {config.output_runname}",
+    ]
+    return commands
 
 
 def ensure_output_directories(config: SimConfig) -> Path:
@@ -350,6 +500,14 @@ def ensure_output_directories(config: SimConfig) -> Path:
     output_stage_dir = resolve_output_stage_directory(config)
     output_stage_dir.mkdir(parents=True, exist_ok=True)
     return output_stage_dir
+
+
+def ensure_macro_directories(config: SimConfig) -> Path:
+    """Create and return the macros stage directory for this config."""
+
+    macro_stage_dir = resolve_macro_stage_directory(config)
+    macro_stage_dir.mkdir(parents=True, exist_ok=True)
+    return macro_stage_dir
 
 
 def macro_commands(
@@ -377,7 +535,7 @@ def macro_commands(
 
 def write_macro(
     config: SimConfig,
-    macro_path: str | Path,
+    macro_path: str | Path | None = None,
     *,
     include_output: bool = True,
     include_run_initialize: bool = True,
@@ -391,7 +549,10 @@ def write_macro(
     config:
         Source simulation configuration.
     macro_path:
-        Destination macro file path.
+        Destination macro file path. When omitted, defaults to:
+        `<effective-root>/<runname?>/macros/<runname or generated_from_config>.mac`
+        where effective-root falls back to `data/` if output_path is
+        missing/unresolvable.
     include_output:
         Include `/output/*` commands before geometry commands.
     include_run_initialize:
@@ -403,12 +564,17 @@ def write_macro(
         If `False`, raise `FileExistsError` when destination already exists.
     """
 
-    path = Path(macro_path)
+    if macro_path is None:
+        path = resolve_default_macro_path(config)
+    else:
+        path = Path(macro_path)
+
     if path.exists() and not overwrite:
         raise FileExistsError(f"Refusing to overwrite existing file: {path}")
 
     if create_output_directories:
         ensure_output_directories(config)
+        ensure_macro_directories(config)
 
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = "\n".join(
