@@ -19,3 +19,6 @@ rayoptics = ">=0.9,<1"
 [tasks]
 check-ray-optics = "python -c \"import rayoptics; print('rayoptics import OK')\""
 python-repl = "python"
+build-sim = { cmd = "cmake -S . -B build && cmake --build build && ln -sf $PIXI_PROJECT_ROOT/build/g4emi $CONDA_PREFIX/bin/g4emi" }
+clean-sim = "make -C build clean"
+rebuild-sim = { depends-on = ["clean-sim", "build-sim"] }
