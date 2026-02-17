@@ -27,6 +27,7 @@ try:
         lens_stack_length_mm,
         load_lens_models,
     )
+    from src.config.utilsConfig import resolve_path
 except ModuleNotFoundError:
     # Support imports when repository root is not already on sys.path.
     sys.path.append(str(Path(__file__).resolve().parents[2]))
@@ -37,8 +38,7 @@ except ModuleNotFoundError:
         lens_stack_length_mm,
         load_lens_models,
     )
-
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+    from src.config.utilsConfig import resolve_path
 
 
 class SimConfig(BaseModel):
@@ -146,7 +146,7 @@ class SimConfig(BaseModel):
         # be used as output root (no explicit output_path and no runname).
         if self.output_path is None and not self.output_runname and parent != Path("."):
             if not parent.is_absolute():
-                parent = _REPO_ROOT / parent
+                parent = resolve_path(parent)
             if not parent.exists():
                 raise ValueError(
                     f"`output_filename` parent directory does not exist: {parent}. "

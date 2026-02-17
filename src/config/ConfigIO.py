@@ -27,10 +27,24 @@ from typing import Any
 
 try:
     from src.config.SimConfig import SimConfig
+    from src.config.utilsConfig import (
+        ensure_directory,
+        repo_root,
+        resolve_optional_path,
+        resolve_path,
+        strip_known_output_extension,
+    )
 except ModuleNotFoundError:
     # Support imports when repository root is not already on sys.path.
     sys.path.append(str(Path(__file__).resolve().parents[2]))
     from src.config.SimConfig import SimConfig
+    from src.config.utilsConfig import (
+        ensure_directory,
+        repo_root,
+        resolve_optional_path,
+        resolve_path,
+        strip_known_output_extension,
+    )
 
 try:
     import yaml
@@ -366,64 +380,6 @@ def write_yaml(
     )
 
 
-def _repo_root() -> Path:
-    """Return repository root inferred from this module location."""
-
-    return Path(__file__).resolve().parents[2]
-
-
-def ensure_directory(path: str | Path) -> Path:
-    """Create a directory path (including parents) and return its resolved Path."""
-
-    directory = Path(path).expanduser()
-    if not directory.is_absolute():
-        directory = _repo_root() / directory
-    directory.mkdir(parents=True, exist_ok=True)
-    return directory.resolve()
-
-
-def resolve_optional_path(
-    value: Any,
-    *,
-    key_name: str,
-    base_directory: str | Path | None = None,
-) -> Path | None:
-    """Resolve an optional YAML path-like value into an absolute path.
-
-    Validation behavior:
-    - `None` or blank string -> `None`
-    - non-string non-null -> `ValueError`
-    - relative string -> resolved against `base_directory` (or repo root)
-    """
-
-    if value is None:
-        return None
-    if not isinstance(value, str):
-        raise ValueError(f"YAML key `{key_name}` must be a string when provided.")
-    if not value.strip():
-        return None
-
-    path = Path(value).expanduser()
-    if not path.is_absolute():
-        if base_directory is None:
-            base = _repo_root()
-        else:
-            base = Path(base_directory).expanduser()
-            if not base.is_absolute():
-                base = _repo_root() / base
-        path = base / path
-    return path.resolve()
-
-
-def _strip_known_output_extension(filename: str) -> str:
-    """Strip known output extensions so callers can pass base-or-full filenames."""
-
-    suffix = Path(filename).suffix.lower()
-    if suffix in {".csv", ".h5", ".hdf5"}:
-        return str(Path(filename).with_suffix(""))
-    return filename
-
-
 def _effective_output_root(config: SimConfig) -> Path:
     """Return effective output root directory with fallback-to-`data`.
 
@@ -433,14 +389,12 @@ def _effective_output_root(config: SimConfig) -> Path:
     - Otherwise -> `<repo>/data`
     """
 
-    default_root = _repo_root() / "data"
+    default_root = repo_root() / "data"
     raw_path = config.output_path
     if raw_path is None or not str(raw_path).strip():
         return default_root
 
-    candidate = Path(raw_path).expanduser()
-    if not candidate.is_absolute():
-        candidate = _repo_root() / candidate
+    candidate = resolve_path(raw_path)
 
     try:
         if candidate.exists() and candidate.is_dir():
@@ -454,7 +408,7 @@ def _effective_output_path_command_value(config: SimConfig) -> str:
     """Return macro `/output/path` value with fallback-to-`data` semantics."""
 
     root = _effective_output_root(config)
-    default_root = (_repo_root() / "data").resolve()
+    default_root = (repo_root() / "data").resolve()
     if root == default_root:
         return "data"
     return str(root)
@@ -474,17 +428,15 @@ def _effective_run_root(config: SimConfig) -> Path:
 
     # When runname is absent and output_path falls back to data, preserve
     # output_filename-parent behavior so non-runname legacy paths stay usable.
-    if base == (_repo_root() / "data").resolve() and (
+    if base == (repo_root() / "data").resolve() and (
         config.output_path is None or not str(config.output_path).strip()
     ):
-        filename_path = Path(_strip_known_output_extension(config.output_filename))
+        filename_path = Path(strip_known_output_extension(config.output_filename))
         filename_parent = filename_path.parent
         if filename_parent == Path("."):
-            base = _repo_root() / "data"
+            base = repo_root() / "data"
         else:
-            base = filename_parent
-            if not base.is_absolute():
-                base = _repo_root() / base
+            base = resolve_path(filename_parent)
         return base.resolve()
 
     return base.resolve()
