@@ -476,32 +476,51 @@ std::string StripKnownOutputExtension(const std::string& value) {
 }
 
 /**
- * Compose an absolute output file path from base name, optional run name, and
- * output extension.
+ * Resolve a filesystem path against repository-root context when relative.
+ */
+std::filesystem::path ResolveAgainstRepositoryRoot(std::filesystem::path path) {
+  if (!path.is_relative()) {
+    return path;
+  }
+#ifdef G4EMI_REPO_ROOT
+  return std::filesystem::path(G4EMI_REPO_ROOT) / path;
+#else
+  return std::filesystem::current_path() / path;
+#endif
+}
+
+/**
+ * Compose an absolute output file path from base name, optional output-path
+ * override, optional run-name, and output extension.
  */
 std::string ComposeOutputPath(const std::string& base,
+                              const std::string& outputPath,
                               const std::string& runName,
                               const char* extension) {
-  const std::string safeBase = base.empty() ? "data/photon_optical_interface_hits" : base;
+  const std::string safeBase =
+      base.empty() ? "data/photon_optical_interface_hits" : base;
 
-  std::filesystem::path basePath(safeBase);
-  if (basePath.is_relative()) {
-#ifdef G4EMI_REPO_ROOT
-    basePath = std::filesystem::path(G4EMI_REPO_ROOT) / basePath;
-#else
-    basePath = std::filesystem::current_path() / basePath;
-#endif
+  std::filesystem::path basePath = ResolveAgainstRepositoryRoot(safeBase);
+  const std::string baseLeaf = basePath.filename().string().empty()
+                                   ? "photon_optical_interface_hits"
+                                   : basePath.filename().string();
+
+  if (!outputPath.empty()) {
+    std::filesystem::path explicitDir = ResolveAgainstRepositoryRoot(outputPath);
+    if (!runName.empty()) {
+      explicitDir /= runName;
+    }
+    return (explicitDir / baseLeaf).string() + extension;
   }
 
   if (runName.empty()) {
+    // Legacy behavior: no output-path override and no run name means base path
+    // (which may already include directory components) determines output path.
     return basePath.string() + extension;
   }
 
-  std::string leaf = basePath.filename().string();
-  if (leaf.empty()) {
-    leaf = "photon_optical_interface_hits";
-  }
-
+  // Legacy behavior with run-name routing: use data/<runName>/ regardless of
+  // whether output filename includes directory components.
 #ifdef G4EMI_REPO_ROOT
   const std::filesystem::path runDir =
       std::filesystem::path(G4EMI_REPO_ROOT) / "data" / runName;
@@ -510,7 +529,7 @@ std::string ComposeOutputPath(const std::string& base,
       std::filesystem::current_path() / "data" / runName;
 #endif
 
-  return (runDir / leaf).string() + extension;
+  return (runDir / baseLeaf).string() + extension;
 }
 
 /**

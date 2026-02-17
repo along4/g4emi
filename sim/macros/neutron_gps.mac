@@ -4,6 +4,7 @@
 /tracking/verbose 0
 /run/printProgress 1000
 /output/format hdf5
+/output/path data
 /output/filename data/photon_optical_interface_hits
 /output/runname example
 /scintillator/geom/material EJ200

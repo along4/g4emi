@@ -4,6 +4,7 @@
 
 #include "G4SystemOfUnits.hh"
 
+#include <filesystem>
 #include <limits>
 
 /**
@@ -19,7 +20,8 @@
  *   - Z uses default flush placement at scintillator +Z face.
  * - Material: EJ200.
  * - Output: CSV mode (enum default in header), output base name
- *   "data/photon_optical_interface_hits", and no run-name subdirectory.
+ *   "data/photon_optical_interface_hits", no explicit output-path override,
+ *   and no run-name subdirectory.
  */
 Config::Config()
     : fScintX(5.0 * cm),
@@ -37,6 +39,7 @@ Config::Config()
       fOpticalInterfacePosZ(std::numeric_limits<G4double>::quiet_NaN()),
       fScintMaterial("EJ200"),
       fOutputFilename("data/photon_optical_interface_hits"),
+      fOutputPath(""),
       fOutputRunName("") {}
 
 /**
@@ -324,6 +327,30 @@ void Config::SetOutputFilename(const std::string& value) {
   fOutputFilename = normalized;
 }
 
+/// Thread-safe getter for optional output directory path override.
+std::string Config::GetOutputPath() const {
+  std::lock_guard<std::mutex> lock(fMutex);
+  return fOutputPath;
+}
+
+/**
+ * Set optional output directory path.
+ *
+ * Behavior:
+ * - Trim and unquote one layer of quoting.
+ * - Empty input clears explicit path override (default behavior resumes).
+ * - Non-empty values are lexically normalized for stable path composition.
+ */
+void Config::SetOutputPath(const std::string& value) {
+  std::string normalized = Utils::Unquote(Utils::Trim(value));
+  if (!normalized.empty()) {
+    normalized = std::filesystem::path(normalized).lexically_normal().string();
+  }
+
+  std::lock_guard<std::mutex> lock(fMutex);
+  fOutputPath = normalized;
+}
+
 /// Thread-safe getter for output run name.
 std::string Config::GetOutputRunName() const {
   std::lock_guard<std::mutex> lock(fMutex);
@@ -344,11 +371,13 @@ void Config::SetOutputRunName(const std::string& value) {
 /// Thread-safe getter for CSV output path derived from output settings.
 std::string Config::GetCsvFilePath() const {
   std::lock_guard<std::mutex> lock(fMutex);
-  return SimIO::ComposeOutputPath(fOutputFilename, fOutputRunName, ".csv");
+  return SimIO::ComposeOutputPath(fOutputFilename, fOutputPath, fOutputRunName,
+                                  ".csv");
 }
 
 /// Thread-safe getter for HDF5 output path derived from output settings.
 std::string Config::GetHdf5FilePath() const {
   std::lock_guard<std::mutex> lock(fMutex);
-  return SimIO::ComposeOutputPath(fOutputFilename, fOutputRunName, ".h5");
+  return SimIO::ComposeOutputPath(fOutputFilename, fOutputPath, fOutputRunName,
+                                  ".h5");
 }

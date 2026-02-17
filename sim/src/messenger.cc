@@ -156,6 +156,13 @@ Messenger::Messenger(Config* config) : fConfig(config) {
   fOutputFormatCmd->SetCandidates("csv hdf5 both");
   fOutputFormatCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 
+  // Output directory command. Empty string clears explicit override.
+  fOutputPathCmd = new G4UIcmdWithAString("/output/path", this);
+  fOutputPathCmd->SetGuidance(
+      "Set output directory path. Use \"\" to clear and fall back to legacy base-path behavior.");
+  fOutputPathCmd->SetParameterName("path", false);
+  fOutputPathCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
+
   // Output filename command.
   fOutputFilenameCmd = new G4UIcmdWithAString("/output/filename", this);
   fOutputFilenameCmd->SetGuidance(
@@ -166,7 +173,7 @@ Messenger::Messenger(Config* config) : fConfig(config) {
   // Optional run-name command used for routing outputs to data/<runname>/.
   fOutputRunNameCmd = new G4UIcmdWithAString("/output/runname", this);
   fOutputRunNameCmd->SetGuidance(
-      "Set optional run name; outputs go under data/<runname>/. Use \"\" to clear.");
+      "Set optional run name; outputs go under <output/path>/<runname>/ when path is set, otherwise data/<runname>/. Use \"\" to clear.");
   fOutputRunNameCmd->SetParameterName("runname", false);
   fOutputRunNameCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 }
@@ -180,6 +187,7 @@ Messenger::Messenger(Config* config) : fConfig(config) {
 Messenger::~Messenger() {
   delete fOutputRunNameCmd;
   delete fOutputFilenameCmd;
+  delete fOutputPathCmd;
   delete fOutputFormatCmd;
 
   delete fOpticalInterfacePosZCmd;
@@ -327,6 +335,30 @@ void Messenger::SetNewValue(G4UIcommand* command, G4String newValue) {
     G4cout << "Output format set to '"
            << Config::OutputFormatToString(fConfig->GetOutputFormat()) << "'."
            << G4endl;
+    return;
+  }
+
+  // Output-path override controls destination directory for output writers.
+  if (command == fOutputPathCmd) {
+    fConfig->SetOutputPath(newValue);
+    const auto configuredPath = fConfig->GetOutputPath();
+    if (configuredPath.empty()) {
+      G4cout << "Output path cleared (using legacy filename-path behavior)."
+             << G4endl;
+    } else {
+      G4cout << "Output path set to '" << configuredPath << "'." << G4endl;
+    }
+
+    const auto mode = fConfig->GetOutputFormat();
+    if (mode == Config::OutputFormat::kCsv) {
+      G4cout << "CSV path: '" << fConfig->GetCsvFilePath() << "'." << G4endl;
+    } else if (mode == Config::OutputFormat::kHdf5) {
+      G4cout << "HDF5 path: '" << fConfig->GetHdf5FilePath() << "'." << G4endl;
+    } else {
+      G4cout << "CSV path: '" << fConfig->GetCsvFilePath()
+             << "', HDF5 path: '" << fConfig->GetHdf5FilePath() << "'."
+             << G4endl;
+    }
     return;
   }
 

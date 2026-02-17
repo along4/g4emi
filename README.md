@@ -111,13 +111,14 @@ Command groups:
 
 - `/scintillator/geom/*`: scintillator geometry/material
 - `/optical_interface/geom/*`: optical-interface geometry
-- `/output/*`: output format and base filename
+- `/output/*`: output format, output directory, and base filename
 
 ### Supported commands
 
 - `/output/format [csv|hdf5|both]`
+- `/output/path <directory_path>` (optional; empty string clears explicit path override)
 - `/output/filename <base_or_path>`
-- `/output/runname <name>` (optional; default empty, writes into `data/<runname>/`)
+- `/output/runname <name>` (optional; with `/output/path`, writes into `<path>/<runname>/`; otherwise writes into `data/<runname>/`)
 - `/scintillator/geom/material <name>` (e.g. `EJ200` or a NIST material name)
 - `/scintillator/geom/scintX <value> <unit>`
 - `/scintillator/geom/scintY <value> <unit>`
@@ -144,6 +145,7 @@ before `/run/beamOn`.
 
 ```text
 /output/format both
+/output/path data
 /output/filename data/photon_optical_interface_hits
 
 /scintillator/geom/material EJ200
@@ -188,10 +190,15 @@ the back-face optical-interface.
 
 ### File location (all output modes)
 
-Output files are written under the repository data directory (`<repo>/data`) regardless of launch directory.
+Default behavior (no `/output/path` override):
 
 - Outputs are written to `./data/photon_optical_interface_hits.csv` and/or `./data/photon_optical_interface_hits.h5` (repo root).
 - If `/output/runname <name>` is set, outputs are written to `./data/<name>/photon_optical_interface_hits.csv` and/or `./data/<name>/photon_optical_interface_hits.h5`.
+
+With `/output/path <directory_path>`:
+
+- Outputs are written to `<directory_path>/photon_optical_interface_hits.csv` and/or `.h5`.
+- If `/output/runname <name>` is also set, outputs are written to `<directory_path>/<name>/photon_optical_interface_hits.csv` and/or `.h5`.
 
 ### Column schema
 

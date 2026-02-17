@@ -101,9 +101,16 @@ class Config {
   /// Set output base filename/path (extension, if provided, is normalized away).
   void SetOutputFilename(const std::string& value);
 
-  /// Get optional run name used to place outputs under `data/<runname>/`.
+  /// Get optional output directory path used to place output files.
+  std::string GetOutputPath() const;
+  /// Set optional output directory path (empty clears explicit path override).
+  void SetOutputPath(const std::string& value);
+
+  /// Get optional run name used to place outputs under a run-specific subdirectory.
   std::string GetOutputRunName() const;
   /// Set optional run name (empty string disables run-specific subdirectory).
+  /// With output-path override set, run outputs go under `<outputPath>/<runName>/`.
+  /// Without output-path override, run outputs go under `data/<runName>/`.
   void SetOutputRunName(const std::string& value);
 
   /// Get CSV output file path derived from output settings.
@@ -145,6 +152,7 @@ class Config {
   /// Material and output settings.
   std::string fScintMaterial;
   std::string fOutputFilename;
+  std::string fOutputPath;
   std::string fOutputRunName;
 };
 

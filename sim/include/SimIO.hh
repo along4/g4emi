@@ -48,10 +48,21 @@ std::string NormalizeRunName(const std::string& value);
 std::string StripKnownOutputExtension(const std::string& value);
 
 /**
- * Compose an absolute output file path from base name, optional run-name, and
- * file extension. Relative base paths are anchored to the repository root.
+ * Compose an absolute output file path from base name, optional output-path
+ * override, optional run-name, and file extension.
+ *
+ * Behavior summary:
+ * - If `outputPath` is empty:
+ *   - `runName` empty    -> preserve legacy base-path behavior.
+ *   - `runName` nonempty -> route into repository `data/<runName>/`.
+ * - If `outputPath` is set:
+ *   - `runName` empty    -> write to `<outputPath>/<baseLeaf><extension>`.
+ *   - `runName` nonempty -> write to `<outputPath>/<runName>/<baseLeaf><extension>`.
+ *
+ * Relative paths are anchored to the repository root.
  */
 std::string ComposeOutputPath(const std::string& base,
+                              const std::string& outputPath,
                               const std::string& runName,
                               const char* extension);
 
