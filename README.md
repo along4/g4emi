@@ -50,8 +50,10 @@ pixi run python-repl
 
 ## Python Geometry Config Module
 
-`src/config/SimConfig.py` is an import-only module (no CLI entrypoint). It can
-derive lens-linked geometry from 1-2 lens `.zmx` models and patch macro files.
+`src/config/SimConfig.py` is an import-only module (no CLI entrypoint). It
+handles validated geometry + lens metadata.
+
+`src/config/ConfigIO.py` owns macro load/save operations for `SimConfig`.
 
 Canon 50mm preset behavior:
 
@@ -62,11 +64,25 @@ Canon 50mm preset behavior:
 Use it from Python code:
 
 ```python
+from src.config.ConfigIO import apply_geometry_to_macro
 from src.config.SimConfig import SimConfig
 
 cfg = SimConfig(lenses=["canon50"], reversed=False)
 print(cfg.geometry_commands())
-cfg.apply_geometry_to_macro("sim/macros/microscope_run.mac")
+apply_geometry_to_macro(cfg, "sim/macros/microscope_run.mac")
+```
+
+Load from an existing macro, then write a new macro from scratch:
+
+```python
+from src.config.ConfigIO import from_macro, write_macro
+
+loaded = from_macro(
+    "sim/macros/microscope_run.mac",
+    lenses=["canon50"],
+    reversed=False,
+)
+write_macro(loaded, "sim/macros/generated_from_config.mac")
 ```
 
 ## Run (batch GPS neutrons)
