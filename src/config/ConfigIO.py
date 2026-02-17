@@ -37,8 +37,9 @@ except ModuleNotFoundError:  # pragma: no cover - dependency availability varies
     yaml = None
 
 
-# Stage folder used for Geant4-produced photon data.
+# Stage folders used under the effective run root.
 SIMULATED_PHOTONS_STAGE_DIR = "simulatedPhotons"
+TRANSPORT_PHOTONS_STAGE_DIR = "transportPhotons"
 MACROS_STAGE_DIR = "macros"
 DEFAULT_GENERATED_MACRO_FILENAME = "generated_from_config.mac"
 
@@ -421,7 +422,7 @@ def _effective_run_root(config: SimConfig) -> Path:
     """Resolve effective root directory shared by stage subdirectories.
 
     This root is the parent directory under which stage folders (for example
-    `simulatedPhotons/` and `macros/`) are created.
+    `simulatedPhotons/`, `transportPhotons/`, and `macros/`) are created.
     """
 
     run_name = (config.output_runname or "").strip()
@@ -451,6 +452,12 @@ def resolve_output_stage_directory(config: SimConfig) -> Path:
     """Resolve the final stage directory for simulation output files."""
 
     return (_effective_run_root(config) / SIMULATED_PHOTONS_STAGE_DIR).resolve()
+
+
+def resolve_transport_photons_stage_directory(config: SimConfig) -> Path:
+    """Resolve the transport-photons stage directory under the run root."""
+
+    return (_effective_run_root(config) / TRANSPORT_PHOTONS_STAGE_DIR).resolve()
 
 
 def resolve_macro_stage_directory(config: SimConfig) -> Path:
@@ -495,10 +502,15 @@ def ensure_output_directories(config: SimConfig) -> Path:
     """Create and return the simulation output stage directory.
 
     This helper is the intended Python-side directory creation entrypoint.
+    It creates both:
+    - `simulatedPhotons/` (current Geant4 output target)
+    - `transportPhotons/` (optical-transport staging)
     """
 
     output_stage_dir = resolve_output_stage_directory(config)
     output_stage_dir.mkdir(parents=True, exist_ok=True)
+    transport_stage_dir = resolve_transport_photons_stage_directory(config)
+    transport_stage_dir.mkdir(parents=True, exist_ok=True)
     return output_stage_dir
 
 
