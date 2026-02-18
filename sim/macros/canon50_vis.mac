@@ -1,0 +1,39 @@
+/control/verbose 1
+/run/verbose 1
+/event/verbose 0
+/tracking/verbose 0
+/tracking/storeTrajectory 1
+
+# Canon EF 50 mm f/1.0L geometry setup (from canon50mmf1.0L.mac)
+/scintillator/geom/material EJ200
+/scintillator/geom/scintX 10 cm
+/scintillator/geom/scintY 10 cm
+/scintillator/geom/scintZ 2 cm
+/scintillator/geom/posX 0 cm
+/scintillator/geom/posY 0 cm
+/scintillator/geom/posZ 0 cm
+/scintillator/geom/apertureRadius 30.275 mm
+
+/optical_interface/geom/sizeX 60.550 mm
+/optical_interface/geom/sizeY 60.550 mm
+/optical_interface/geom/thickness 0.1 mm
+/optical_interface/geom/posX 0 cm
+/optical_interface/geom/posY 0 cm
+/optical_interface/geom/posZ 210.050 mm
+
+/run/initialize
+
+/vis/open OGL
+/vis/drawVolume
+/vis/viewer/set/style surface
+/vis/viewer/set/viewpointThetaPhi 70 20
+/vis/scene/add/axes 0 0 0 20 mm
+/vis/scene/add/trajectories
+/vis/modeling/trajectories/create/drawByParticleID
+/vis/modeling/trajectories/drawByParticleID-0/set opticalphoton cyan
+/vis/modeling/trajectories/drawByParticleID-0/set neutron yellow
+/vis/modeling/trajectories/drawByParticleID-0/default/setDrawStepPts false
+/vis/viewer/set/autoRefresh true
+/vis/scene/endOfEventAction accumulate
+/vis/viewer/rebuild
+/vis/viewer/refresh
