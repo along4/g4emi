@@ -1,455 +1,237 @@
-"""Pydantic simulation configuration for lens-aware g4emi geometry macros.
+"""Hierarchical Pydantic models for GEANT4 simulation configuration.
 
-This module binds together two concerns:
-1. User-facing simulation geometry parameters (scintillator/optical-interface).
-2. Lens-driven geometry extraction from `.zmx` models.
-
-The intent is to keep geometry choices declarative and reproducible:
-- A lens list (1-2 lenses) is the optical input.
-- Derived lens quantities (diameter/length/image-circle) come from `LensModels`.
-- Geant4 geometry command lists are generated from one validated config object.
+The model tree is designed to match YAML structure directly while keeping
+Python attribute names clean and type-safe.
 """
 
 from __future__ import annotations
 
-import math
-from pathlib import Path
-import sys
+from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 
-try:
-    from src.optics.LensModels import (
-        LensModel,
-        lens_clear_diameter_mm,
-        lens_image_circle_diameter_mm,
-        lens_stack_length_mm,
-        load_lens_models,
+
+class StrictModel(BaseModel):
+    """Shared strict defaults across all config models."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_assignment=True,
     )
-    from src.config.utilsConfig import resolve_path
-except ModuleNotFoundError:
-    # Support imports when repository root is not already on sys.path.
-    sys.path.append(str(Path(__file__).resolve().parents[2]))
-    from src.optics.LensModels import (
-        LensModel,
-        lens_clear_diameter_mm,
-        lens_image_circle_diameter_mm,
-        lens_stack_length_mm,
-        load_lens_models,
-    )
-    from src.config.utilsConfig import resolve_path
 
 
-class SimConfig(BaseModel):
-    """High-level geometry + lens-stack configuration for g4emi.
+class Vec3Mm(StrictModel):
+    """3D vector in millimeters."""
 
-    Core behavior:
-    - Accepts one or two lenses through `lenses`.
-    - Resolves and loads corresponding `.zmx` models via `LensModels`.
-    - Exposes derived lens geometry used for simulation setup:
-      clear diameter, lens length, image-circle metadata.
-    - Produces Geant4 macro commands for scintillator/optical-interface configuration.
+    x_mm: float
+    y_mm: float
+    z_mm: float
 
-    Modeling convention:
-    - `lenses[0]` is treated as the primary/object-side lens for defaults.
-    - Optical-interface diameter defaults to a primary-lens side-dependent value:
-      - lens not reversed  -> lens-side clear diameter
-      - lens reversed      -> sensor-side image-circle diameter
-    - Optical-interface Z placement is computed from requested back-face standoff.
-    """
 
-    model_config = ConfigDict(validate_assignment=True)
+class Size3Mm(StrictModel):
+    """3D extents in millimeters; each component must be positive."""
 
-    # Lens list that drives optical geometry extraction.
-    lenses: list[str] = Field(default_factory=lambda: ["CanonEF50mmf1.0L.zmx"])
-    # Lens orientation flag(s): False means nominal orientation, True means reversed.
-    # Accepts either:
-    # - one bool applied to all configured lenses, or
-    # - one bool per lens, e.g. [True, False] for a two-lens stack.
-    reversed: bool | list[bool] = False
+    x_mm: float = Field(gt=0)
+    y_mm: float = Field(gt=0)
+    z_mm: float = Field(gt=0)
 
-    # Scintillator geometry.
-    scint_material: str = "EJ200"
-    scint_x_cm: float = Field(default=10.0, gt=0.0)
-    scint_y_cm: float = Field(default=10.0, gt=0.0)
-    scint_z_cm: float = Field(default=2.0, gt=0.0)
-    scint_pos_x_cm: float = 0.0
-    scint_pos_y_cm: float = 0.0
-    scint_pos_z_cm: float = 0.0
 
-    # Optical-interface geometry + placement.
-    optical_interface_thickness_mm: float = Field(default=0.1, gt=0.0)
-    optical_interface_pos_x_cm: float = 0.0
-    optical_interface_pos_y_cm: float = 0.0
-    scint_back_to_optical_interface_mm: float = Field(default=200.0, gt=0.0)
-    optical_interface_diameter_mm: float | None = Field(default=None, gt=0.0)
+class ScintillatorProperties(StrictModel):
+    """Optical material properties for scintillator definition."""
 
-    # Optional aperture linked to optical-interface diameter by default.
-    use_aperture_mask: bool = True
-    aperture_radius_mm: float | None = Field(default=None, gt=0.0)
-
-    # Output metadata.
-    # `output_path` is optional; when set, C++ runtime routes output under:
-    #   <output_path>/<optional_runname>/simulatedPhotons/
-    # and this model validates that the provided base directory already exists.
-    # Directory creation is intentionally delegated to ConfigIO helpers.
-    output_format: str = "hdf5"
-    output_path: str | None = "data"
-    output_filename: str = "data/photon_optical_interface_hits"
-    output_runname: str = "example"
+    name: str
+    photon_energy: list[float] = Field(alias="photonEnergy", min_length=1)
+    r_index: list[float] = Field(alias="rIndex", min_length=1)
+    n_k_entries: int = Field(alias="nKEntries", gt=0)
+    time_constant: float = Field(alias="timeConstant", gt=0)
 
     @model_validator(mode="after")
-    def validate_config(self) -> "SimConfig":
-        """Run full model validation after creation and assignment.
+    def validate_table_lengths(self) -> "ScintillatorProperties":
+        """Require energy/refractive-index table lengths to match nKEntries."""
 
-        This validator is intentionally holistic:
-        - structural checks: lens/reversed cardinality
-        - geometric checks: optical-interface diameter, aperture feasibility, placement
-
-        Because `validate_assignment=True`, these checks also run after field
-        updates, not only at construction time.
-        """
-
-        # Current optical pipeline supports either a single lens or a two-lens
-        # macro stack, so enforce that cardinality centrally.
-        if not (1 <= len(self.lenses) <= 2):
-            raise ValueError("`lenses` must contain 1 or 2 entries.")
-
-        # Per-lens orientation list must align one-to-one with configured lenses.
-        if isinstance(self.reversed, list) and len(self.reversed) != len(self.lenses):
-            raise ValueError(
-                "When `reversed` is a list, it must have the same length as `lenses`."
-            )
-
-        self._validate_path_invariants()
-        self._validate_geometry_invariants()
+        if len(self.photon_energy) != self.n_k_entries:
+            raise ValueError("`photonEnergy` length must match `nKEntries`.")
+        if len(self.r_index) != self.n_k_entries:
+            raise ValueError("`rIndex` length must match `nKEntries`.")
         return self
 
-    def _validate_path_invariants(self) -> None:
-        """Validate optional path fields that should reference existing paths.
 
-        Validation policy:
-        - `output_path`: accepted as-is; resolution/fallback is handled by ConfigIO.
-        - `output_filename`: if no explicit `output_path` and no `output_runname`
-          are provided, embedded parent directory must exist.
+class ScintillatorConfig(StrictModel):
+    """Scintillator block configuration."""
 
-        Rationale:
-        - Directory creation and fallback-to-`data` behavior live in ConfigIO.
-        - This model avoids rejecting configs that may be resolved/fallbacked
-          during Python-side IO preparation.
-        """
+    position_mm: Vec3Mm
+    dimension_mm: Size3Mm
+    properties: ScintillatorProperties
 
-        output_filename_path = Path(self.output_filename).expanduser()
-        parent = output_filename_path.parent
-        # Parent existence check applies only when filename parent would actually
-        # be used as output root (no explicit output_path and no runname).
-        if self.output_path is None and not self.output_runname and parent != Path("."):
-            if not parent.is_absolute():
-                parent = resolve_path(parent)
-            if not parent.exists():
-                raise ValueError(
-                    f"`output_filename` parent directory does not exist: {parent}. "
-                    "Create it first with ConfigIO directory helpers."
-                )
 
-    def _scint_back_face_z_mm(self) -> float:
-        """Return scintillator +Z face position in mm."""
+class EnergyType(str, Enum):
+    """Supported source energy specification modes."""
 
-        return (self.scint_pos_z_cm * 10.0) + (0.5 * self.scint_z_cm * 10.0)
+    monoenergetic = "monoenergetic"
+    spectrum = "spectrum"
+    distribution = "distribution"
 
-    def _validate_geometry_invariants(self) -> None:
-        """Validate geometry relationships that span multiple fields.
 
-        Invariants enforced:
-        - Resolved optical-interface diameter must be strictly positive.
-        - Optional aperture radius must fit inside scintillator half-diagonal.
-        - Optical-interface center Z must lie beyond scintillator back face.
-        """
+class EnergyInfo(StrictModel):
+    """Source energy configuration."""
 
-        # Resolve effective optical-interface diameter first, since several downstream
-        # constraints depend on it (including default aperture sizing).
-        optical_interface_diameter_mm = self.resolved_optical_interface_diameter_mm()
-        if optical_interface_diameter_mm <= 0.0:
-            raise ValueError(
-                f"Resolved optical-interface diameter must be > 0 mm (got {optical_interface_diameter_mm})."
-            )
+    type: EnergyType
+    value: float = Field(gt=0)
 
-        aperture_radius_mm = self.resolved_aperture_radius_mm()
-        if aperture_radius_mm is not None:
-            scint_half_diag_mm = 0.5 * math.hypot(
-                self.scint_x_cm * 10.0, self.scint_y_cm * 10.0
-            )
-            if aperture_radius_mm > scint_half_diag_mm:
-                raise ValueError(
-                    "Aperture radius exceeds scintillator half-diagonal: "
-                    f"{aperture_radius_mm:.3f} mm > {scint_half_diag_mm:.3f} mm."
-                )
 
-        optical_interface_center_z_mm = self.optical_interface_center_z_mm()
-        scint_back_face_z_mm = self._scint_back_face_z_mm()
-        if optical_interface_center_z_mm <= scint_back_face_z_mm:
-            raise ValueError(
-                "Optical-interface center must be beyond scintillator back face: "
-                f"{optical_interface_center_z_mm:.3f} mm <= {scint_back_face_z_mm:.3f} mm."
-            )
+class Species(str, Enum):
+    """Common GPS species values used in the simulation pipeline."""
 
-    def validate_geometry(self) -> "SimConfig":
-        """Explicit geometry re-validation helper.
+    neutron = "neutron"
+    photon = "photon"
+    alpha = "alpha"
 
-        Useful when callers want an intentional validation checkpoint in scripts.
-        Returns `self` to allow chaining.
-        """
 
-        self._validate_geometry_invariants()
+class SourceConfig(StrictModel):
+    """Source geometry + particle/energy configuration."""
+
+    position_mm: Vec3Mm
+    dimension_mm: Size3Mm
+    energy_info: EnergyInfo = Field(alias="energyInfo")
+    species: Species | str = Field(min_length=1)
+
+
+class LensConfig(StrictModel):
+    """Individual optical lens descriptor."""
+
+    name: str
+    primary: bool
+    zmx_file: str = Field(alias="zmxFile")
+
+
+class OpticalGeometry(StrictModel):
+    """Lens-driven optical geometry envelope values (mm)."""
+
+    entrance_diameter: float = Field(alias="entranceDiameter", gt=0)
+    sensor_max_width: float = Field(alias="sensorMaxWidth", gt=0)
+
+
+class SensitiveDetectorConfig(StrictModel):
+    """Sensitive detector placement + sizing rule."""
+
+    position_mm: Vec3Mm
+    shape: str = Field(min_length=1)
+    diameter_rule: str = Field(alias="diameterRule", min_length=1)
+
+
+class OpticalConfig(StrictModel):
+    """Optical subsystem configuration."""
+
+    lenses: list[LensConfig] = Field(min_length=1)
+    geometry: OpticalGeometry
+    sensitive_detector_config: SensitiveDetectorConfig = Field(
+        alias="sensitiveDetectorConfig"
+    )
+
+    @model_validator(mode="after")
+    def validate_primary_lens_count(self) -> "OpticalConfig":
+        """Require exactly one primary lens entry in the list."""
+
+        primary_count = sum(1 for lens in self.lenses if lens.primary)
+        if primary_count != 1:
+            raise ValueError("`optical.lenses` must contain exactly one primary lens.")
         return self
 
-    def validated_copy_with_updates(self, **updates: Any) -> "SimConfig":
-        """Return a fully validated copy with atomic updates applied.
 
-        This avoids transient invalid states during multi-field edits
-        (for example updating `lenses` and `reversed` together).
-        """
+class OutputInfo(StrictModel):
+    """Output settings with key aliases preserved from YAML."""
 
-        # Apply updates against a full snapshot and re-validate once, avoiding
-        # transient assignment failures from intermediate invalid states.
-        payload = self.model_dump(mode="python")
-        payload.update(updates)
-        return SimConfig.model_validate(payload)
-
-    def with_geometry_updates(self, **updates: Any) -> "SimConfig":
-        """Return a new config with geometry updates atomically validated.
-
-        This is a geometry-oriented wrapper around `validated_copy_with_updates`
-        intended for simulation scripts that frequently tune multiple fields
-        together (for example scintillator size + optical-interface standoff).
-        """
-
-        return self.validated_copy_with_updates(**updates)
-
-    def lens_reversed_flags(self) -> list[bool]:
-        """Return one orientation flag per configured lens.
-
-        Normalization behavior:
-        - scalar bool -> duplicated across all lenses
-        - list[bool]  -> returned as-is (validated to same lens count)
-        """
-
-        if isinstance(self.reversed, bool):
-            return [self.reversed] * len(self.lenses)
-        return self.reversed
-
-    def lens_models(self) -> list[LensModel]:
-        """Load `LensModel` objects from current lens references.
-
-        Each call re-resolves and re-parses from source files to keep behavior
-        stateless and fully dependent on current config values.
-        """
-
-        return load_lens_models(self.lenses)
-
-    def primary_lens(self) -> LensModel:
-        """Return primary lens model (`lenses[0]`).
-
-        This method exists to make the default-diameter assumption explicit.
-        """
-
-        return self.lens_models()[0]
-
-    def primary_lens_is_reversed(self) -> bool:
-        """Return orientation state for the primary lens at the interface."""
-
-        return self.lens_reversed_flags()[0]
-
-    def primary_optical_interface_side(self) -> str:
-        """Return which primary-lens side defines the optical interface.
-
-        Returns:
-        - `"lens_side"`   when the primary lens is in nominal orientation.
-        - `"sensor_side"` when the primary lens is reversed.
-        """
-
-        return "sensor_side" if self.primary_lens_is_reversed() else "lens_side"
-
-    def resolved_optical_interface_diameter_source(self) -> str:
-        """Describe where resolved optical-interface diameter is sourced from."""
-
-        if self.optical_interface_diameter_mm is not None:
-            return "manual_override"
-        if self.primary_lens_is_reversed():
-            return "primary_lens_image_circle_diameter_mm"
-        return "primary_lens_clear_diameter_mm"
-
-    def default_optical_interface_diameter_mm(self) -> float:
-        """Return default interface diameter from primary-lens orientation.
-
-        Side-dependent default rule:
-        - lens-side interface (`reversed=False`)  -> clear diameter
-        - sensor-side interface (`reversed=True`) -> image-circle diameter
-        """
-
-        lens = self.primary_lens()
-        if self.primary_lens_is_reversed():
-            return lens_image_circle_diameter_mm(lens)
-        return lens_clear_diameter_mm(lens)
-
-    def resolved_optical_interface_diameter_mm(self) -> float:
-        """Return optical-interface diameter in mm.
-
-        Priority:
-        1. explicit `optical_interface_diameter_mm`
-        2. side-dependent primary-lens default:
-           - lens-side clear diameter when not reversed
-           - sensor-side image-circle diameter when reversed
-        """
-
-        if self.optical_interface_diameter_mm is not None:
-            return self.optical_interface_diameter_mm
-        return self.default_optical_interface_diameter_mm()
-
-    def lens_stack_length_total_mm(self) -> float:
-        """Return total lens-stack depth (mm) across configured lenses.
-
-        This simply sums per-lens extracted `lens_stack_length_mm` and does not
-        include adapters/air gaps between separate lens bodies.
-        """
-
-        return sum(lens_stack_length_mm(lens) for lens in self.lens_models())
-
-    def lens_geometry_summary(self) -> list[dict[str, Any]]:
-        """Return lens geometry summary records for reporting/serialization.
-
-        Included per lens:
-        - clear aperture diameter
-        - extracted lens stack length
-        - total track length
-        - image-plane aperture and inferred image circle
-        - inferred 3:2 sensor width/height from image-circle diagonal
-        """
-
-        summary: list[dict[str, Any]] = []
-        for lens, is_reversed in zip(
-            self.lens_models(), self.lens_reversed_flags(), strict=True
-        ):
-            summary.append(
-                {
-                    "name": lens.name,
-                    "reversed": is_reversed,
-                    "interface_side": "sensor_side" if is_reversed else "lens_side",
-                    "zmx_path": str(lens.zmx_path),
-                    "clear_diameter_mm": lens_clear_diameter_mm(lens),
-                    "lens_stack_length_mm": lens_stack_length_mm(lens),
-                    "total_track_length_mm": lens.total_track_length_mm,
-                    "image_surface_index": lens.image_surface_index,
-                    "image_plane_semidiameter_mm": lens.image_plane_semidiameter_mm,
-                    "image_circle_diameter_mm": lens_image_circle_diameter_mm(lens),
-                    "inferred_sensor_width_mm_3x2": lens.inferred_sensor_width_mm_3x2,
-                    "inferred_sensor_height_mm_3x2": lens.inferred_sensor_height_mm_3x2,
-                }
-            )
-        return summary
-
-    def resolved_aperture_radius_mm(self) -> float | None:
-        """Return aperture radius in mm for scintillator-face circular mask.
-
-        Behavior:
-        - Returns `None` when aperture masking is disabled.
-        - Uses explicit `aperture_radius_mm` when provided.
-        - Otherwise derives radius as half of resolved optical-interface diameter.
-        """
-
-        if not self.use_aperture_mask:
-            return None
-        if self.aperture_radius_mm is not None:
-            return self.aperture_radius_mm
-        return 0.5 * self.resolved_optical_interface_diameter_mm()
-
-    def optical_interface_center_z_mm(self) -> float:
-        """Compute optical-interface center z-position (mm) from configured standoff.
-
-        Definitions:
-        - Scintillator back face z:
-          `scint_pos_z + scint_z/2`
-        - Optical-interface front face z:
-          `scintillator_back_face_z + scint_back_to_optical_interface_mm`
-        - Optical-interface center z:
-          `optical_interface_front_face_z + optical_interface_thickness/2`
-        """
-
-        scint_center_z_mm = self.scint_pos_z_cm * 10.0
-        scint_half_thickness_mm = 0.5 * self.scint_z_cm * 10.0
-        optical_interface_half_thickness_mm = 0.5 * self.optical_interface_thickness_mm
-        return (
-            scint_center_z_mm
-            + scint_half_thickness_mm
-            + self.scint_back_to_optical_interface_mm
-            + optical_interface_half_thickness_mm
-        )
-
-    def geometry_commands(self) -> list[str]:
-        """Build Geant4 geometry commands from this configuration.
-
-        Output order is stable and groups commands by subsystem:
-        1. scintillator material and dimensions
-        2. optional aperture command
-        3. optical-interface dimensions and placement
-        """
-
-        optical_interface_diameter_mm = self.resolved_optical_interface_diameter_mm()
-        aperture_radius_mm = self.resolved_aperture_radius_mm()
-
-        commands = [
-            f"/scintillator/geom/material {self.scint_material}",
-            f"/scintillator/geom/scintX {self.scint_x_cm:g} cm",
-            f"/scintillator/geom/scintY {self.scint_y_cm:g} cm",
-            f"/scintillator/geom/scintZ {self.scint_z_cm:g} cm",
-            f"/scintillator/geom/posX {self.scint_pos_x_cm:g} cm",
-            f"/scintillator/geom/posY {self.scint_pos_y_cm:g} cm",
-            f"/scintillator/geom/posZ {self.scint_pos_z_cm:g} cm",
-        ]
-        if aperture_radius_mm is not None:
-            commands.append(
-                f"/scintillator/geom/apertureRadius {aperture_radius_mm:.3f} mm"
-            )
-
-        commands.extend(
-            [
-                f"/optical_interface/geom/sizeX {optical_interface_diameter_mm:.3f} mm",
-                f"/optical_interface/geom/sizeY {optical_interface_diameter_mm:.3f} mm",
-                f"/optical_interface/geom/thickness {self.optical_interface_thickness_mm:g} mm",
-                f"/optical_interface/geom/posX {self.optical_interface_pos_x_cm:g} cm",
-                f"/optical_interface/geom/posY {self.optical_interface_pos_y_cm:g} cm",
-                f"/optical_interface/geom/posZ {self.optical_interface_center_z_mm():.3f} mm",
-            ]
-        )
-        return commands
-
-    def to_dict(self) -> dict[str, Any]:
-        """Serialize config plus derived lens geometry into a plain dict.
-
-        Returned payload includes:
-        - direct model fields (`model_dump`)
-        - derived lens summary list
-        - total lens-stack length
-        - resolved optical-interface diameter
-        """
-
-        out = self.model_dump(mode="json")
-        out["lens_geometry"] = self.lens_geometry_summary()
-        out["lens_reversed_flags"] = self.lens_reversed_flags()
-        out["primary_optical_interface_side"] = self.primary_optical_interface_side()
-        out[
-            "resolved_optical_interface_diameter_source"
-        ] = self.resolved_optical_interface_diameter_source()
-        out["default_optical_interface_diameter_mm"] = (
-            self.default_optical_interface_diameter_mm()
-        )
-        out["lens_stack_length_total_mm"] = self.lens_stack_length_total_mm()
-        out["resolved_optical_interface_diameter_mm"] = self.resolved_optical_interface_diameter_mm()
-        return out
+    data_directory: str = Field(alias="DataDirectory", min_length=1)
+    log_directory: str = Field(alias="LogDirectory", min_length=1)
+    output_format: str = Field(alias="OutputFormat", min_length=1)
 
 
-def default_single_lens_config() -> SimConfig:
-    """Return default single-lens config (`canon50`)."""
+class MetadataConfig(StrictModel):
+    """Simulation metadata block."""
 
-    return SimConfig(lenses=["canon50"])
+    author: str = Field(min_length=1)
+    date: str = Field(min_length=1)
+    version: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    working_directory: str = Field(alias="WorkingDirectory", min_length=1)
+    output_info: OutputInfo = Field(alias="OutputInfo")
+    simulation_run_id: str = Field(alias="SimulationRunID", min_length=1)
+
+
+class SimConfig(StrictModel):
+    """Top-level simulation configuration matching YAML hierarchy."""
+
+    scintillator: ScintillatorConfig
+    source: SourceConfig
+    optical: OpticalConfig
+    metadata: MetadataConfig = Field(
+        validation_alias=AliasChoices("Metadata", "metadata"),
+        serialization_alias="Metadata",
+    )
+
+    @classmethod
+    def from_yaml_mapping(cls, data: dict[str, Any]) -> "SimConfig":
+        """Validate and construct from a YAML-parsed mapping."""
+
+        return cls.model_validate(data)
+
+    def to_yaml_mapping(self) -> dict[str, Any]:
+        """Serialize to mapping preserving aliased YAML keys."""
+
+        return self.model_dump(by_alias=True, exclude_none=True)
+
+
+def default_sim_config() -> SimConfig:
+    """Return a small valid default config for bootstrapping."""
+
+    return SimConfig.model_validate(
+        {
+            "scintillator": {
+                "position_mm": {"x_mm": 0.0, "y_mm": 0.0, "z_mm": 0.0},
+                "dimension_mm": {"x_mm": 50.0, "y_mm": 50.0, "z_mm": 10.0},
+                "properties": {
+                    "name": "EJ-200",
+                    "photonEnergy": [2.8, 3.0, 3.2],
+                    "rIndex": [1.58, 1.59, 1.60],
+                    "nKEntries": 3,
+                    "timeConstant": 2.1,
+                },
+            },
+            "source": {
+                "position_mm": {"x_mm": 0.0, "y_mm": 0.0, "z_mm": -20.0},
+                "dimension_mm": {"x_mm": 1.0, "y_mm": 1.0, "z_mm": 1.0},
+                "energyInfo": {"type": "monoenergetic", "value": 2.45},
+                "species": "neutron",
+            },
+            "optical": {
+                "lenses": [
+                    {
+                        "name": "PrimaryLensOrMacro",
+                        "primary": True,
+                        "zmxFile": "primary.zmx",
+                    }
+                ],
+                "geometry": {"entranceDiameter": 50.0, "sensorMaxWidth": 36.0},
+                "sensitiveDetectorConfig": {
+                    "position_mm": {"x_mm": 0.0, "y_mm": 0.0, "z_mm": 25.0},
+                    "shape": "circle",
+                    "diameterRule": "min(entranceDiameter,sensorMaxWidth)",
+                },
+            },
+            "Metadata": {
+                "author": "Your Name",
+                "date": "YEAR-MONTH-DAY",
+                "version": "ScintPiX [VERSION]",
+                "description": "Simulation configuration for scintillator and optical system.",
+                "WorkingDirectory": "/path/to/working/directory",
+                "OutputInfo": {
+                    "DataDirectory": "/path/to/data/directory",
+                    "LogDirectory": "/path/to/log/directory",
+                    "OutputFormat": "hdf5",
+                },
+                "SimulationRunID": "sim_001",
+            },
+        }
+    )
