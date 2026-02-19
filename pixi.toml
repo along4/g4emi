@@ -35,3 +35,4 @@ rebuild-sim = { depends-on = ["clean-sim", "build-sim"] }
 run-neutron-gps = "g4emi sim/macros/neutron_gps.mac"
 run-vis = "g4emi"
 test-photon-vis = "g4emi sim/macros/test-photon-vis.mac"
+test-python = "python -m unittest discover -s test/unit -t . -p 'test_*.py'"

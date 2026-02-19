@@ -6,9 +6,18 @@ Python attribute names clean and type-safe.
 
 from __future__ import annotations
 
+from datetime import date as DateType
+from datetime import datetime
 from enum import Enum
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 
 class StrictModel(BaseModel):
@@ -157,6 +166,17 @@ class MetadataConfig(StrictModel):
     working_directory: str = Field(alias="WorkingDirectory", min_length=1)
     output_info: OutputInfo = Field(alias="OutputInfo")
     simulation_run_id: str = Field(alias="SimulationRunID", min_length=1)
+
+    @field_validator("date", mode="before")
+    @classmethod
+    def normalize_yaml_date(cls, value: object) -> object:
+        """Allow YAML date scalars while storing canonical string values."""
+
+        if isinstance(value, datetime):
+            return value.date().isoformat()
+        if isinstance(value, DateType):
+            return value.isoformat()
+        return value
 
 
 class SimConfig(StrictModel):
