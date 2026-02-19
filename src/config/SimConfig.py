@@ -1,7 +1,13 @@
 """Hierarchical Pydantic models for GEANT4 simulation configuration.
 
-The model tree is designed to match YAML structure directly while keeping
-Python attribute names clean and type-safe.
+This module defines the authoritative schema for YAML-driven simulation
+configuration in Python. The model hierarchy mirrors the user-facing YAML
+layout, while Python attribute names stay consistent and type-safe.
+
+Design principles:
+- Keep model responsibilities narrow: validation + structure.
+- Keep YAML aliases close to their fields to reduce mapping ambiguity.
+- Enforce strict input by default so typos surface immediately.
 """
 
 from __future__ import annotations
@@ -21,8 +27,15 @@ from pydantic import (
 
 
 class StrictModel(BaseModel):
-    """Shared strict defaults across all config models."""
+    """Base model with strict validation defaults.
 
+    Shared behavior for every config block:
+    - unknown keys are rejected (`extra="forbid"`)
+    - either field-name or alias input is accepted (`populate_by_name=True`)
+    - assignment after construction is revalidated (`validate_assignment=True`)
+    """
+
+    # Centralized model policy keeps every nested block consistent.
     model_config = ConfigDict(
         extra="forbid",
         populate_by_name=True,
@@ -31,7 +44,10 @@ class StrictModel(BaseModel):
 
 
 class Vec3Mm(StrictModel):
-    """3D vector in millimeters."""
+    """Generic 3D coordinate vector in millimeters.
+
+    Used for positions where negative values may be valid.
+    """
 
     x_mm: float
     y_mm: float
@@ -39,7 +55,10 @@ class Vec3Mm(StrictModel):
 
 
 class Size3Mm(StrictModel):
-    """3D extents in millimeters; each component must be positive."""
+    """3D size/extent vector in millimeters.
+
+    Unlike :class:`Vec3Mm`, every component must be strictly positive.
+    """
 
     x_mm: float = Field(gt=0)
     y_mm: float = Field(gt=0)
@@ -47,7 +66,13 @@ class Size3Mm(StrictModel):
 
 
 class ScintillatorProperties(StrictModel):
-    """Optical material properties for scintillator definition."""
+    """Optical material table for scintillator definition.
+
+    Fields map directly to common GEANT4 material-property table concepts:
+    - `photonEnergy` and `rIndex` are paired lookup arrays
+    - `nKEntries` declares the expected table length
+    - `timeConstant` describes scintillation decay timing
+    """
 
     name: str
     photon_energy: list[float] = Field(alias="photonEnergy", min_length=1)
@@ -57,7 +82,11 @@ class ScintillatorProperties(StrictModel):
 
     @model_validator(mode="after")
     def validate_table_lengths(self) -> "ScintillatorProperties":
-        """Require energy/refractive-index table lengths to match nKEntries."""
+        """Require optical-table cardinality consistency.
+
+        This check ensures both lookup arrays match the declared `nKEntries`
+        value so later table construction cannot silently misalign.
+        """
 
         if len(self.photon_energy) != self.n_k_entries:
             raise ValueError("`photonEnergy` length must match `nKEntries`.")
@@ -67,7 +96,7 @@ class ScintillatorProperties(StrictModel):
 
 
 class ScintillatorConfig(StrictModel):
-    """Scintillator block configuration."""
+    """Scintillator geometry + material properties block."""
 
     position_mm: Vec3Mm
     dimension_mm: Size3Mm
@@ -75,7 +104,10 @@ class ScintillatorConfig(StrictModel):
 
 
 class EnergyType(str, Enum):
-    """Supported source energy specification modes."""
+    """Allowed source energy mode labels.
+
+    Mirrors user-facing YAML tokens used under `source.energyInfo.type`.
+    """
 
     monoenergetic = "monoenergetic"
     spectrum = "spectrum"
@@ -83,14 +115,14 @@ class EnergyType(str, Enum):
 
 
 class EnergyInfo(StrictModel):
-    """Source energy configuration."""
+    """Source energy configuration payload."""
 
     type: EnergyType
     value: float = Field(gt=0)
 
 
 class Species(str, Enum):
-    """Common GPS species values used in the simulation pipeline."""
+    """Common particle species labels used by source configuration."""
 
     neutron = "neutron"
     photon = "photon"
@@ -98,7 +130,13 @@ class Species(str, Enum):
 
 
 class SourceConfig(StrictModel):
-    """Source geometry + particle/energy configuration."""
+    """Primary source block.
+
+    Captures source placement and emission metadata:
+    - geometric extent (`position_mm`, `dimension_mm`)
+    - energy model (`energyInfo`)
+    - particle species label
+    """
 
     position_mm: Vec3Mm
     dimension_mm: Size3Mm
@@ -107,7 +145,12 @@ class SourceConfig(StrictModel):
 
 
 class LensConfig(StrictModel):
-    """Individual optical lens descriptor."""
+    """Individual optical lens descriptor.
+
+    `zmxFile` references the optical model source while `primary` indicates
+    which lens entry should be treated as the principal lens for downstream
+    assumptions.
+    """
 
     name: str
     primary: bool
@@ -115,14 +158,19 @@ class LensConfig(StrictModel):
 
 
 class OpticalGeometry(StrictModel):
-    """Lens-driven optical geometry envelope values (mm)."""
+    """Optical envelope dimensions in millimeters."""
 
     entrance_diameter: float = Field(alias="entranceDiameter", gt=0)
     sensor_max_width: float = Field(alias="sensorMaxWidth", gt=0)
 
 
 class SensitiveDetectorConfig(StrictModel):
-    """Sensitive detector placement + sizing rule."""
+    """Sensitive detector placement and sizing strategy.
+
+    `diameterRule` is intentionally stored as a constrained expression-like
+    string so command-generation code can resolve detector diameter
+    deterministically from optical geometry values.
+    """
 
     position_mm: Vec3Mm
     shape: str = Field(min_length=1)
@@ -130,7 +178,13 @@ class SensitiveDetectorConfig(StrictModel):
 
 
 class OpticalConfig(StrictModel):
-    """Optical subsystem configuration."""
+    """Optical subsystem definition.
+
+    Includes:
+    - lens list metadata
+    - lens-derived envelope geometry
+    - sensitive detector placement/rule configuration
+    """
 
     lenses: list[LensConfig] = Field(min_length=1)
     geometry: OpticalGeometry
@@ -140,7 +194,11 @@ class OpticalConfig(StrictModel):
 
     @model_validator(mode="after")
     def validate_primary_lens_count(self) -> "OpticalConfig":
-        """Require exactly one primary lens entry in the list."""
+        """Require exactly one primary lens designation.
+
+        A single primary lens simplifies downstream assumptions in macro
+        generation and geometry bookkeeping.
+        """
 
         primary_count = sum(1 for lens in self.lenses if lens.primary)
         if primary_count != 1:
@@ -149,7 +207,11 @@ class OpticalConfig(StrictModel):
 
 
 class OutputInfo(StrictModel):
-    """Output settings with key aliases preserved from YAML."""
+    """Output block under metadata with YAML alias preservation.
+
+    Aliases (`DataDirectory`, `LogDirectory`, `OutputFormat`) are kept to match
+    user-facing YAML conventions while Python uses snake_case attributes.
+    """
 
     data_directory: str = Field(alias="DataDirectory", min_length=1)
     log_directory: str = Field(alias="LogDirectory", min_length=1)
@@ -157,7 +219,7 @@ class OutputInfo(StrictModel):
 
 
 class MetadataConfig(StrictModel):
-    """Simulation metadata block."""
+    """Simulation metadata and IO context block."""
 
     author: str = Field(min_length=1)
     date: str = Field(min_length=1)
@@ -170,7 +232,12 @@ class MetadataConfig(StrictModel):
     @field_validator("date", mode="before")
     @classmethod
     def normalize_yaml_date(cls, value: object) -> object:
-        """Allow YAML date scalars while storing canonical string values."""
+        """Normalize YAML date-like scalars to canonical ISO strings.
+
+        YAML parsers may decode unquoted dates into `date`/`datetime` objects.
+        This validator converts those to ISO strings so the field stays a
+        predictable textual representation.
+        """
 
         if isinstance(value, datetime):
             return value.date().isoformat()
@@ -180,7 +247,12 @@ class MetadataConfig(StrictModel):
 
 
 class SimConfig(StrictModel):
-    """Top-level simulation configuration matching YAML hierarchy."""
+    """Top-level simulation configuration root.
+
+    The `metadata` field accepts either `metadata` or aliased `Metadata` in
+    input YAML and serializes back out as `Metadata` for consistency with
+    project examples.
+    """
 
     scintillator: ScintillatorConfig
     source: SourceConfig
@@ -192,7 +264,11 @@ class SimConfig(StrictModel):
 
 
 def default_sim_config() -> SimConfig:
-    """Return a small valid default config for bootstrapping."""
+    """Return a minimal valid configuration for bootstrapping/tests.
+
+    This function is intentionally explicit (rather than incremental mutation)
+    so defaults are easy to inspect and copy into example YAML files.
+    """
 
     return SimConfig.model_validate(
         {
