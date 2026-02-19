@@ -1,38 +1,69 @@
 # Canon EF 50 mm f/1.0L YAML-driven example configuration.
 #
 # This file intentionally contains:
-# 1. All SimConfig fields (top-level keys consumed by ConfigIO.from_yaml).
+# 1. SimConfig fields (hierarchical structure consumed by ConfigIO.from_yaml).
 # 2. Script-level keys used by examples/CanonEF50mmf1p0L_example.py:
 #    - macro_output_path (optional; when omitted, ConfigIO default is used)
 #    - append_macro_commands
 
-# ---- SimConfig fields ----
-lenses:
-  - CanonEF50mmf1.0L.zmx
-reversed: false
+scintillator:
+  position_mm:
+    x_mm: 0.0
+    y_mm: 0.0
+    z_mm: 0.0
+  dimension_mm:
+    x_mm: 100.0
+    y_mm: 100.0
+    z_mm: 20.0
+  properties:
+    name: EJ200
+    photonEnergy: [2.8, 3.0, 3.2]
+    rIndex: [1.58, 1.59, 1.60]
+    nKEntries: 3
+    timeConstant: 2.1
 
-scint_material: EJ200
-scint_x_cm: 10.0
-scint_y_cm: 10.0
-scint_z_cm: 2.0
-scint_pos_x_cm: 0.0
-scint_pos_y_cm: 0.0
-scint_pos_z_cm: 0.0
+source:
+  position_mm:
+    x_mm: 0.0
+    y_mm: 0.0
+    z_mm: -100.0
+  dimension_mm:
+    x_mm: 10.0
+    y_mm: 10.0
+    z_mm: 10.0
+  energyInfo:
+    type: monoenergetic
+    value: 6.0
+  species: neutron
 
-optical_interface_thickness_mm: 0.1
-optical_interface_pos_x_cm: 0.0
-optical_interface_pos_y_cm: 0.0
-scint_back_to_optical_interface_mm: 200.0
-optical_interface_diameter_mm: null
+optical:
+  lenses:
+    - name: CanonEF50mmf1.0L
+      primary: true
+      zmxFile: CanonEF50mmf1.0L.zmx
+  geometry:
+    entranceDiameter: 60.55
+    sensorMaxWidth: 36.0
+  sensitiveDetectorConfig:
+    position_mm:
+      x_mm: 0.0
+      y_mm: 0.0
+      z_mm: 210.05
+    shape: circle
+    diameterRule: min(entranceDiameter,sensorMaxWidth)
 
-use_aperture_mask: true
-aperture_radius_mm: 50.0
+Metadata:
+  author: Alex Long
+  date: 2026-02-19
+  version: ScintPiX v0.1
+  description: Canon EF 50 mm f/1.0L simulation configuration.
+  WorkingDirectory: .
+  OutputInfo:
+    DataDirectory: data
+    LogDirectory: data/logs
+    OutputFormat: hdf5
+  SimulationRunID: CanonEF50mmf1p0L_run
 
-output_format: hdf5
-output_filename: photon_optical_interface_hits
-output_runname: CanonEF50mmf1p0L_run
-
-# ---- Example script fields ----
 append_macro_commands:
   - /gps/particle neutron
   - /gps/pos/type Plane

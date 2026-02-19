@@ -42,14 +42,6 @@ def resolve_path(path: str | Path, *, base_directory: str | Path | None = None) 
     return (base / resolved).resolve()
 
 
-def ensure_directory(path: str | Path) -> Path:
-    """Create a directory path (including parents) and return resolved path."""
-
-    directory = resolve_path(path)
-    directory.mkdir(parents=True, exist_ok=True)
-    return directory
-
-
 def resolve_optional_path(
     value: Any,
     *,
@@ -71,12 +63,3 @@ def resolve_optional_path(
     if not value.strip():
         return None
     return resolve_path(value, base_directory=base_directory)
-
-
-def strip_known_output_extension(filename: str) -> str:
-    """Strip known output extensions so callers can pass base-or-full names."""
-
-    suffix = Path(filename).suffix.lower()
-    if suffix in {".csv", ".h5", ".hdf5"}:
-        return str(Path(filename).with_suffix(""))
-    return filename
