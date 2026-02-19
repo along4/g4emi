@@ -7,7 +7,6 @@ Python attribute names clean and type-safe.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 
@@ -170,17 +169,6 @@ class SimConfig(StrictModel):
         validation_alias=AliasChoices("Metadata", "metadata"),
         serialization_alias="Metadata",
     )
-
-    @classmethod
-    def from_yaml_mapping(cls, data: dict[str, Any]) -> "SimConfig":
-        """Validate and construct from a YAML-parsed mapping."""
-
-        return cls.model_validate(data)
-
-    def to_yaml_mapping(self) -> dict[str, Any]:
-        """Serialize to mapping preserving aliased YAML keys."""
-
-        return self.model_dump(by_alias=True, exclude_none=True)
 
 
 def default_sim_config() -> SimConfig:

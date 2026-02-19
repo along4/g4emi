@@ -356,8 +356,8 @@ def write_yaml(
     yaml_path:
         Destination YAML file path.
     include_derived:
-        When `False`, write only direct model fields.
-        When `True`, include derived lens/geometry summary via `to_dict()`.
+        Deprecated for hierarchical `SimConfig`; derived summaries are no longer
+        emitted by this module.
     overwrite:
         If `False`, raise `FileExistsError` when destination already exists.
     """
@@ -367,11 +367,13 @@ def write_yaml(
     if path.exists() and not overwrite:
         raise FileExistsError(f"Refusing to overwrite existing file: {path}")
 
-    payload: dict[str, Any]
     if include_derived:
-        payload = config.to_dict()
-    else:
-        payload = config.model_dump(mode="python")
+        raise NotImplementedError(
+            "`include_derived=True` is not supported with hierarchical SimConfig. "
+            "Use explicit reporting helpers if derived payloads are needed."
+        )
+
+    payload: dict[str, Any] = config.model_dump(mode="python", by_alias=True)
 
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
