@@ -21,6 +21,7 @@ pyyaml = ">=6.0,<7"
 
 [pypi-dependencies]
 rayoptics = ">=0.9,<1"
+pytest = ">=9.0.2, <10"
 
 [tasks]
 check-ray-optics = "python -c \"import rayoptics; print('rayoptics import OK')\""
