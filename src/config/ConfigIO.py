@@ -5,7 +5,7 @@ Design goals
 - Keep :class:`src.config.SimConfig.SimConfig` focused on schema/validation.
 - Keep serialization and filesystem concerns in one place.
 - Provide deterministic Geant4 macro command generation from nested config data.
-- Provide flexible cofig creation from a user provided macro.
+- Provide flexible config creation from a user-provided macro.
 
 What this module does
 =====================
@@ -26,17 +26,20 @@ Conventions
 
 from __future__ import annotations
 
+from datetime import date as DateType
+import math
 from pathlib import Path
+import shlex
 import sys
 from typing import Any
 
 try:
-    from src.config.SimConfig import SimConfig
+    from src.config.SimConfig import SimConfig, default_sim_config
     from src.config.utilsConfig import resolve_path
 except ModuleNotFoundError:
     # Support imports when repository root is not already on sys.path.
     sys.path.append(str(Path(__file__).resolve().parents[2]))
-    from src.config.SimConfig import SimConfig
+    from src.config.SimConfig import SimConfig, default_sim_config
     from src.config.utilsConfig import resolve_path
 
 try:
@@ -51,6 +54,24 @@ MACROS_STAGE_DIR = "macros"
 DEFAULT_GENERATED_MACRO_FILENAME = "generated_from_config.mac"
 DEFAULT_OUTPUT_FILENAME_BASE = "photon_optical_interface_hits"
 DEFAULT_OPTICAL_INTERFACE_THICKNESS_MM = 0.1
+
+_LENGTH_UNIT_TO_MM: dict[str, float] = {
+    "nm": 1.0e-6,
+    "nanometer": 1.0e-6,
+    "nanometers": 1.0e-6,
+    "um": 1.0e-3,
+    "micrometer": 1.0e-3,
+    "micrometers": 1.0e-3,
+    "mm": 1.0,
+    "millimeter": 1.0,
+    "millimeters": 1.0,
+    "cm": 10.0,
+    "centimeter": 10.0,
+    "centimeters": 10.0,
+    "m": 1000.0,
+    "meter": 1000.0,
+    "meters": 1000.0,
+}
 
 
 def _require_yaml_dependency() -> Any:
@@ -67,6 +88,59 @@ def _require_yaml_dependency() -> Any:
             "Install it in your environment (for example: pixi add pyyaml)."
         )
     return yaml
+
+
+def _length_to_mm(value: float, unit: str) -> float:
+    """Convert Geant4-style length value/unit tokens to millimeters."""
+
+    factor = _LENGTH_UNIT_TO_MM.get(unit.strip().lower())
+    if factor is None:
+        raise ValueError(f"Unsupported length unit '{unit}'.")
+    return value * factor
+
+
+def _parse_length_tokens(tokens: list[str], command: str) -> float:
+    """Parse macro tokenized length command payload and return millimeters."""
+
+    if len(tokens) < 3:
+        raise ValueError(
+            f"Command '{command}' requires '<value> <unit>' tokens, got: {tokens!r}"
+        )
+
+    try:
+        value = float(tokens[1])
+    except ValueError as exc:
+        raise ValueError(
+            f"Command '{command}' has non-numeric value token: {tokens[1]!r}"
+        ) from exc
+
+    return _length_to_mm(value, tokens[2])
+
+
+def _default_import_template(macro_path: Path) -> SimConfig:
+    """Return sensible baseline config used for macro-import gaps.
+
+    Macro files do not encode every field required by hierarchical ``SimConfig``
+    (for example source energy block, rich metadata, and lens descriptors). This
+    baseline provides valid defaults that are then selectively overwritten by
+    parsed macro commands.
+    """
+
+    payload = default_sim_config().model_dump(mode="python")
+    metadata = payload["metadata"]
+    output_info = metadata["output_info"]
+
+    metadata["author"] = "Macro Import"
+    metadata["date"] = DateType.today().isoformat()
+    metadata["version"] = "imported"
+    metadata["description"] = f"Imported from macro: {macro_path.name}"
+    metadata["working_directory"] = str(macro_path.resolve().parent)
+    metadata["simulation_run_id"] = macro_path.stem
+    output_info["data_directory"] = "data"
+    output_info["log_directory"] = "data/logs"
+    output_info["output_format"] = "hdf5"
+
+    return SimConfig.model_validate(payload)
 
 
 def load_yaml_mapping(yaml_path: str | Path) -> dict[str, Any]:
@@ -103,6 +177,172 @@ def load_yaml_mapping(yaml_path: str | Path) -> dict[str, Any]:
     if not isinstance(parsed, dict):
         raise ValueError(f"YAML config at {path} must be a mapping/object at top level.")
     return parsed
+
+
+def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> SimConfig:
+    """Load a macro file and map recognized commands into ``SimConfig``.
+
+    Parameters
+    ----------
+    macro_path:
+        Path to a Geant4 macro file.
+    template:
+        Optional base config used for fields not encoded in macros. When
+        omitted, a sensible imported default is used.
+
+    Returns
+    -------
+    SimConfig
+        Validated hierarchical configuration reconstructed from macro values.
+
+    Notes
+    -----
+    - Macros are lossy relative to ``SimConfig``. They do not encode full source
+      metadata/lens setup, so those values come from ``template`` defaults.
+    - ``/output/filename`` is currently ignored because filename base is fixed by
+      this pipeline.
+    - If parsed optical-interface thickness differs from
+      ``DEFAULT_OPTICAL_INTERFACE_THICKNESS_MM``, this function raises because
+      thickness is not currently represented in ``SimConfig``.
+    """
+
+    path = Path(macro_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Macro file not found: {path}")
+
+    base = template if template is not None else _default_import_template(path)
+    payload = base.model_dump(mode="python")
+
+    metadata = payload["metadata"]
+    output_info = metadata["output_info"]
+    scintillator = payload["scintillator"]
+    optical = payload["optical"]
+    geometry = optical["geometry"]
+    detector = optical["sensitive_detector_config"]
+
+    entrance_diameter_mm: float | None = None
+    size_x_mm: float | None = None
+    size_y_mm: float | None = None
+    aperture_radius_mm: float | None = None
+    parsed_thickness_mm: float | None = None
+
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+
+        # Use shell-style tokenization so quoted output-path values are handled.
+        tokens = shlex.split(line, comments=False, posix=True)
+        if not tokens:
+            continue
+
+        command = tokens[0]
+
+        if command == "/output/format" and len(tokens) >= 2:
+            output_info["output_format"] = tokens[1].strip().lower()
+            continue
+        if command == "/output/path" and len(tokens) >= 2:
+            output_info["data_directory"] = tokens[1]
+            continue
+        if command == "/output/runname" and len(tokens) >= 2:
+            metadata["simulation_run_id"] = tokens[1]
+            continue
+
+        if command == "/scintillator/geom/material" and len(tokens) >= 2:
+            scintillator["properties"]["name"] = tokens[1]
+            continue
+        if command == "/scintillator/geom/scintX":
+            scintillator["dimension_mm"]["x_mm"] = _parse_length_tokens(tokens, command)
+            continue
+        if command == "/scintillator/geom/scintY":
+            scintillator["dimension_mm"]["y_mm"] = _parse_length_tokens(tokens, command)
+            continue
+        if command == "/scintillator/geom/scintZ":
+            scintillator["dimension_mm"]["z_mm"] = _parse_length_tokens(tokens, command)
+            continue
+        if command == "/scintillator/geom/posX":
+            scintillator["position_mm"]["x_mm"] = _parse_length_tokens(tokens, command)
+            continue
+        if command == "/scintillator/geom/posY":
+            scintillator["position_mm"]["y_mm"] = _parse_length_tokens(tokens, command)
+            continue
+        if command == "/scintillator/geom/posZ":
+            scintillator["position_mm"]["z_mm"] = _parse_length_tokens(tokens, command)
+            continue
+        if command == "/scintillator/geom/apertureRadius":
+            aperture_radius_mm = _parse_length_tokens(tokens, command)
+            continue
+
+        if command == "/optical_interface/geom/sizeX":
+            size_x_mm = _parse_length_tokens(tokens, command)
+            continue
+        if command == "/optical_interface/geom/sizeY":
+            size_y_mm = _parse_length_tokens(tokens, command)
+            continue
+        if command == "/optical_interface/geom/thickness":
+            parsed_thickness_mm = _parse_length_tokens(tokens, command)
+            continue
+        if command == "/optical_interface/geom/posX":
+            detector["position_mm"]["x_mm"] = _parse_length_tokens(tokens, command)
+            continue
+        if command == "/optical_interface/geom/posY":
+            detector["position_mm"]["y_mm"] = _parse_length_tokens(tokens, command)
+            continue
+        if command == "/optical_interface/geom/posZ":
+            detector["position_mm"]["z_mm"] = _parse_length_tokens(tokens, command)
+            continue
+
+    if parsed_thickness_mm is not None and not math.isclose(
+        parsed_thickness_mm,
+        DEFAULT_OPTICAL_INTERFACE_THICKNESS_MM,
+        rel_tol=0.0,
+        abs_tol=1.0e-9,
+    ):
+        raise ValueError(
+            "Loaded macro uses optical-interface thickness "
+            f"{parsed_thickness_mm:g} mm, but hierarchical SimConfig currently "
+            "does not model thickness explicitly."
+        )
+
+    if size_x_mm is not None and size_y_mm is not None:
+        if not math.isclose(size_x_mm, size_y_mm, rel_tol=0.0, abs_tol=1.0e-9):
+            raise ValueError(
+                "Loaded macro has non-circular optical-interface size: "
+                f"sizeX={size_x_mm:.6f} mm, sizeY={size_y_mm:.6f} mm."
+            )
+        entrance_diameter_mm = size_x_mm
+    elif size_x_mm is not None:
+        entrance_diameter_mm = size_x_mm
+    elif size_y_mm is not None:
+        entrance_diameter_mm = size_y_mm
+
+    if entrance_diameter_mm is not None:
+        geometry["entrance_diameter"] = entrance_diameter_mm
+
+    # Aperture command is represented indirectly in SimConfig through
+    # detector shape + diameter rule. Choose a rule that reproduces parsed
+    # aperture radius exactly.
+    if aperture_radius_mm is not None:
+        desired_diameter_mm = 2.0 * aperture_radius_mm
+        geometry.setdefault("sensor_max_width", desired_diameter_mm)
+        detector["shape"] = "circle"
+        if entrance_diameter_mm is None:
+            geometry["entrance_diameter"] = desired_diameter_mm
+            geometry["sensor_max_width"] = desired_diameter_mm
+            detector["diameter_rule"] = "min(entranceDiameter,sensorMaxWidth)"
+        elif entrance_diameter_mm + 1.0e-9 >= desired_diameter_mm:
+            geometry["sensor_max_width"] = desired_diameter_mm
+            detector["diameter_rule"] = "min(entranceDiameter,sensorMaxWidth)"
+        else:
+            geometry["sensor_max_width"] = desired_diameter_mm
+            detector["diameter_rule"] = "sensorMaxWidth"
+    else:
+        detector["shape"] = "none"
+        detector["diameter_rule"] = "entranceDiameter"
+        if entrance_diameter_mm is not None:
+            geometry["sensor_max_width"] = entrance_diameter_mm
+
+    return SimConfig.model_validate(payload)
 
 
 def _extract_sim_config_payload(parsed: dict[str, Any]) -> dict[str, Any]:

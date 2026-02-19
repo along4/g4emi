@@ -32,6 +32,7 @@ class MacroCommandGenerationTests(unittest.TestCase):
 
         try:
             from src.config.ConfigIO import (
+                from_macro,
                 from_yaml,
                 macro_commands,
                 resolve_data_directory,
@@ -52,6 +53,7 @@ class MacroCommandGenerationTests(unittest.TestCase):
                 ) from exc
             raise
 
+        cls._from_macro = staticmethod(from_macro)
         cls._from_yaml = staticmethod(from_yaml)
         cls._macro_commands = staticmethod(macro_commands)
         cls._resolve_data_directory = staticmethod(resolve_data_directory)
@@ -186,6 +188,76 @@ class MacroCommandGenerationTests(unittest.TestCase):
 
             written_lines = macro_path.read_text(encoding="utf-8").splitlines()
             self.assertEqual(written_lines, expected)
+
+    def test_from_macro_round_trip_with_template(self) -> None:
+        """from_macro should reconstruct geometry/output commands with a template."""
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            yaml_path = self._write_yaml_config(tmp_path)
+            macro_path = tmp_path / "generated.mac"
+
+            config = self._from_yaml(yaml_path)
+            expected = self._macro_commands(config)
+
+            self._write_macro(
+                config,
+                macro_path=macro_path,
+                include_output=True,
+                include_run_initialize=True,
+                create_output_directories=False,
+                overwrite=True,
+            )
+
+            imported = self._from_macro(macro_path, template=config)
+            reconstructed = self._macro_commands(imported)
+            self.assertEqual(reconstructed, expected)
+
+    def test_from_macro_without_aperture_disables_aperture_command(self) -> None:
+        """Missing aperture command should map to non-circular detector shape."""
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            macro_path = tmp_path / "no_aperture.mac"
+            macro_path.write_text(
+                "\n".join(
+                    [
+                        "/output/format hdf5",
+                        "/output/path data",
+                        "/output/runname no_aperture_case",
+                        "/scintillator/geom/material EJ200",
+                        "/scintillator/geom/scintX 100 mm",
+                        "/scintillator/geom/scintY 100 mm",
+                        "/scintillator/geom/scintZ 20 mm",
+                        "/scintillator/geom/posX 0 mm",
+                        "/scintillator/geom/posY 0 mm",
+                        "/scintillator/geom/posZ 0 mm",
+                        "/optical_interface/geom/sizeX 60.55 mm",
+                        "/optical_interface/geom/sizeY 60.55 mm",
+                        "/optical_interface/geom/thickness 0.1 mm",
+                        "/optical_interface/geom/posX 0 mm",
+                        "/optical_interface/geom/posY 0 mm",
+                        "/optical_interface/geom/posZ 210.05 mm",
+                        "/run/initialize",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            imported = self._from_macro(macro_path)
+            commands = self._macro_commands(imported)
+
+            self.assertNotIn(
+                "/scintillator/geom/apertureRadius 18 mm",
+                commands,
+            )
+            self.assertFalse(
+                any(
+                    line.startswith("/scintillator/geom/apertureRadius")
+                    for line in commands
+                )
+            )
 
 
 if __name__ == "__main__":
