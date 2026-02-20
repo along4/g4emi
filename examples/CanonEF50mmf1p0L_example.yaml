@@ -4,7 +4,6 @@
 # 1. SimConfig fields (hierarchical structure consumed by ConfigIO.from_yaml).
 # 2. Script-level keys used by examples/CanonEF50mmf1p0L_example.py:
 #    - macro_output_path (optional; when omitted, ConfigIO default is used)
-#    - append_macro_commands
 
 scintillator:
   position_mm:
@@ -23,18 +22,24 @@ scintillator:
     timeConstant: 2.1
 
 source:
-  position_mm:
-    x_mm: 0.0
-    y_mm: 0.0
-    z_mm: -100.0
-  dimension_mm:
-    x_mm: 10.0
-    y_mm: 10.0
-    z_mm: 10.0
-  energyInfo:
-    type: monoenergetic
-    value: 6.0
-  species: neutron
+  gps:
+    particle: neutron
+    position:
+      type: Plane
+      shape: Circle
+      centerMm:
+        x_mm: 0.0
+        y_mm: 0.0
+        z_mm: -100.0
+      radiusMm: 10.0
+    angular:
+      type: beam2d
+      rot1: {x: 1.0, y: 0.0, z: 0.0}
+      rot2: {x: 0.0, y: 1.0, z: 0.0}
+      direction: {x: 0.0, y: 0.0, z: 1.0}
+    energy:
+      type: Mono
+      monoMeV: 6.0
 
 optical:
   lenses:
@@ -52,6 +57,15 @@ optical:
     shape: circle
     diameterRule: min(entranceDiameter,sensorMaxWidth)
 
+simulation:
+  numberOfParticles: 10000
+  runtimeControls:
+    controlVerbose: 0
+    runVerbose: 0
+    eventVerbose: 0
+    trackingVerbose: 0
+    printProgress: 1000
+
 Metadata:
   author: Alex Long
   date: 2026-02-19
@@ -63,17 +77,3 @@ Metadata:
     LogDirectory: data/logs
     OutputFormat: hdf5
   SimulationRunID: CanonEF50mmf1p0L_run
-
-append_macro_commands:
-  - /gps/particle neutron
-  - /gps/pos/type Plane
-  - /gps/pos/shape Circle
-  - /gps/pos/centre 0.0 0.0 -10.0 cm
-  - /gps/pos/radius 1.0 cm
-  - /gps/ang/type beam2d
-  - /gps/ang/rot1 1 0 0
-  - /gps/ang/rot2 0 1 0
-  - /gps/direction 0 0 1
-  - /gps/ene/type Mono
-  - /gps/ene/mono 6 MeV
-  - /run/beamOn 10000

@@ -13,7 +13,7 @@ What this module does
 2. Write a validated ``SimConfig`` back to YAML (preserving YAML aliases).
 3. Resolve data/log/macro directories from ``Metadata`` settings.
 4. Build Geant4 command lists for output and geometry.
-5. Write full macro files and append extra command blocks.
+5. Write full macro files.
 
 Conventions
 ===========
@@ -73,6 +73,13 @@ _LENGTH_UNIT_TO_MM: dict[str, float] = {
     "meters": 1000.0,
 }
 
+_ENERGY_UNIT_TO_MEV: dict[str, float] = {
+    "ev": 1.0e-6,
+    "kev": 1.0e-3,
+    "mev": 1.0,
+    "gev": 1.0e3,
+}
+
 
 def _require_yaml_dependency() -> Any:
     """Return PyYAML module object or raise a dependency error.
@@ -117,13 +124,84 @@ def _parse_length_tokens(tokens: list[str], command: str) -> float:
     return _length_to_mm(value, tokens[2])
 
 
+def _parse_vector3(tokens: list[str], command: str) -> tuple[float, float, float]:
+    """Parse three scalar tokens from a macro command."""
+
+    if len(tokens) < 4:
+        raise ValueError(
+            f"Command '{command}' requires three scalar tokens, got: {tokens!r}"
+        )
+    try:
+        return float(tokens[1]), float(tokens[2]), float(tokens[3])
+    except ValueError as exc:
+        raise ValueError(
+            f"Command '{command}' requires numeric vector tokens, got: {tokens[1:4]!r}"
+        ) from exc
+
+
+def _parse_energy_to_mev(tokens: list[str], command: str) -> float:
+    """Parse `<value> <unit>` energy tokens and convert to MeV."""
+
+    if len(tokens) < 3:
+        raise ValueError(
+            f"Command '{command}' requires '<value> <unit>' tokens, got: {tokens!r}"
+        )
+    try:
+        value = float(tokens[1])
+    except ValueError as exc:
+        raise ValueError(
+            f"Command '{command}' has non-numeric value token: {tokens[1]!r}"
+        ) from exc
+    factor = _ENERGY_UNIT_TO_MEV.get(tokens[2].strip().lower())
+    if factor is None:
+        raise ValueError(
+            f"Command '{command}' has unsupported energy unit: {tokens[2]!r}."
+        )
+    return value * factor
+
+
+def source_commands(config: SimConfig) -> list[str]:
+    """Build GEANT4 GPS command lines from strict `source.gps` configuration."""
+
+    gps = config.source.gps
+    position = gps.position
+    angular = gps.angular
+    energy = gps.energy
+
+    commands = [
+        f"/gps/particle {gps.particle}",
+        f"/gps/pos/type {position.type}",
+        f"/gps/pos/shape {position.shape}",
+        (
+            f"/gps/pos/centre {position.center_mm.x_mm:g} "
+            f"{position.center_mm.y_mm:g} {position.center_mm.z_mm:g} mm"
+        ),
+        f"/gps/pos/radius {position.radius_mm:g} mm",
+        f"/gps/ang/type {angular.type}",
+        f"/gps/ang/rot1 {angular.rot1.x:g} {angular.rot1.y:g} {angular.rot1.z:g}",
+        f"/gps/ang/rot2 {angular.rot2.x:g} {angular.rot2.y:g} {angular.rot2.z:g}",
+        f"/gps/direction {angular.direction.x:g} {angular.direction.y:g} {angular.direction.z:g}",
+        f"/gps/ene/type {energy.type}",
+    ]
+
+    if energy.type.strip().lower() == "mono":
+        mono_mev = energy.mono_mev
+        if mono_mev is None:
+            raise ValueError(
+                "`source.gps.energy.monoMeV` is required when `/gps/ene/type Mono`."
+            )
+        commands.append(f"/gps/ene/mono {mono_mev:g} MeV")
+
+    return commands
+
+
 def _default_import_template(macro_path: Path) -> SimConfig:
     """Return sensible baseline config used for macro-import gaps.
 
     Macro files do not encode every field required by hierarchical ``SimConfig``
-    (for example source energy block, rich metadata, and lens descriptors). This
-    baseline provides valid defaults that are then selectively overwritten by
-    parsed macro commands.
+    (for example rich metadata and full lens descriptors). This baseline
+    provides valid defaults that are then selectively overwritten by parsed
+    macro commands.
     """
 
     payload = default_sim_config().model_dump(mode="python")
@@ -139,6 +217,10 @@ def _default_import_template(macro_path: Path) -> SimConfig:
     output_info["data_directory"] = "data"
     output_info["log_directory"] = "data/logs"
     output_info["output_format"] = "hdf5"
+
+    # Macro files may omit `/run/beamOn` and runtime-control preamble commands.
+    # Keep simulation block unset by default so import does not invent them.
+    payload["simulation"] = None
 
     return SimConfig.model_validate(payload)
 
@@ -197,10 +279,10 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
 
     Notes
     -----
-    - Macros are lossy relative to ``SimConfig``. They do not encode full source
-      metadata/lens setup, so those values come from ``template`` defaults.
-    - ``/output/filename`` is currently ignored because filename base is fixed by
-      this pipeline.
+    - Macros are lossy relative to ``SimConfig``. They do not encode full lens
+      setup and metadata context, so those values come from ``template`` defaults.
+    - ``/output/filename`` is currently ignored because filename base is fixed
+      by this pipeline.
     - If parsed optical-interface thickness differs from
       ``DEFAULT_OPTICAL_INTERFACE_THICKNESS_MM``, this function raises because
       thickness is not currently represented in ``SimConfig``.
@@ -219,6 +301,16 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
     optical = payload["optical"]
     geometry = optical["geometry"]
     detector = optical["sensitive_detector_config"]
+    simulation = payload.get("simulation")
+    source_gps = payload["source"]["gps"]
+    position = source_gps["position"]
+    angular = source_gps["angular"]
+    energy = source_gps["energy"]
+    runtime_controls = (
+        simulation.get("runtime_controls")
+        if isinstance(simulation, dict)
+        else None
+    )
 
     entrance_diameter_mm: float | None = None
     size_x_mm: float | None = None
@@ -246,6 +338,135 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
             continue
         if command == "/output/runname" and len(tokens) >= 2:
             metadata["simulation_run_id"] = tokens[1]
+            continue
+        if command == "/control/verbose" and len(tokens) >= 2:
+            if simulation is None:
+                simulation = {}
+                payload["simulation"] = simulation
+            if runtime_controls is None:
+                runtime_controls = {}
+                simulation["runtime_controls"] = runtime_controls
+            runtime_controls["control_verbose"] = int(tokens[1])
+            continue
+        if command == "/run/verbose" and len(tokens) >= 2:
+            if simulation is None:
+                simulation = {}
+                payload["simulation"] = simulation
+            if runtime_controls is None:
+                runtime_controls = {}
+                simulation["runtime_controls"] = runtime_controls
+            runtime_controls["run_verbose"] = int(tokens[1])
+            continue
+        if command == "/event/verbose" and len(tokens) >= 2:
+            if simulation is None:
+                simulation = {}
+                payload["simulation"] = simulation
+            if runtime_controls is None:
+                runtime_controls = {}
+                simulation["runtime_controls"] = runtime_controls
+            runtime_controls["event_verbose"] = int(tokens[1])
+            continue
+        if command == "/tracking/verbose" and len(tokens) >= 2:
+            if simulation is None:
+                simulation = {}
+                payload["simulation"] = simulation
+            if runtime_controls is None:
+                runtime_controls = {}
+                simulation["runtime_controls"] = runtime_controls
+            runtime_controls["tracking_verbose"] = int(tokens[1])
+            continue
+        if command == "/run/printProgress" and len(tokens) >= 2:
+            if simulation is None:
+                simulation = {}
+                payload["simulation"] = simulation
+            if runtime_controls is None:
+                runtime_controls = {}
+                simulation["runtime_controls"] = runtime_controls
+            runtime_controls["print_progress"] = int(tokens[1])
+            continue
+        if command == "/tracking/storeTrajectory" and len(tokens) >= 2:
+            raw = tokens[1].strip().lower()
+            if raw in {"1", "true", "yes", "on"}:
+                parsed_store = True
+            elif raw in {"0", "false", "no", "off"}:
+                parsed_store = False
+            else:
+                raise ValueError(
+                    "Command '/tracking/storeTrajectory' requires boolean-like token "
+                    f"(0/1/true/false), got: {tokens[1]!r}"
+                )
+            if simulation is None:
+                simulation = {}
+                payload["simulation"] = simulation
+            if runtime_controls is None:
+                runtime_controls = {}
+                simulation["runtime_controls"] = runtime_controls
+            runtime_controls["store_trajectory"] = parsed_store
+            continue
+        if command == "/run/beamOn" and len(tokens) >= 2:
+            try:
+                particle_count = int(tokens[1])
+            except ValueError as exc:
+                raise ValueError(
+                    f"Command '{command}' requires integer particle count, got: {tokens[1]!r}"
+                ) from exc
+            if particle_count <= 0:
+                raise ValueError(
+                    f"Command '{command}' requires positive particle count, got: {particle_count}"
+                )
+            if simulation is None:
+                simulation = {}
+                payload["simulation"] = simulation
+            simulation["number_of_particles"] = particle_count
+            continue
+
+        if command == "/gps/particle" and len(tokens) >= 2:
+            source_gps["particle"] = tokens[1]
+            continue
+        if command == "/gps/pos/type" and len(tokens) >= 2:
+            position["type"] = tokens[1]
+            continue
+        if command == "/gps/pos/shape" and len(tokens) >= 2:
+            position["shape"] = tokens[1]
+            continue
+        if command == "/gps/pos/centre":
+            if len(tokens) < 5:
+                raise ValueError(
+                    f"Command '{command}' requires '<x> <y> <z> <unit>', got: {tokens!r}"
+                )
+            x_mm = _length_to_mm(float(tokens[1]), tokens[4])
+            y_mm = _length_to_mm(float(tokens[2]), tokens[4])
+            z_mm = _length_to_mm(float(tokens[3]), tokens[4])
+            position["center_mm"] = {"x_mm": x_mm, "y_mm": y_mm, "z_mm": z_mm}
+            continue
+        if command == "/gps/pos/radius":
+            radius_mm = _parse_length_tokens(tokens, command)
+            position["radius_mm"] = radius_mm
+            continue
+        if command == "/gps/ang/type" and len(tokens) >= 2:
+            angular["type"] = tokens[1]
+            continue
+        if command == "/gps/ang/rot1":
+            x, y, z = _parse_vector3(tokens, command)
+            angular["rot1"] = {"x": x, "y": y, "z": z}
+            continue
+        if command == "/gps/ang/rot2":
+            x, y, z = _parse_vector3(tokens, command)
+            angular["rot2"] = {"x": x, "y": y, "z": z}
+            continue
+        if command == "/gps/direction":
+            x, y, z = _parse_vector3(tokens, command)
+            angular["direction"] = {"x": x, "y": y, "z": z}
+            continue
+        if command == "/gps/ene/type" and len(tokens) >= 2:
+            energy["type"] = tokens[1]
+            if tokens[1].strip().lower() != "mono":
+                energy.pop("mono_mev", None)
+            continue
+        if command == "/gps/ene/mono":
+            mono_mev = _parse_energy_to_mev(tokens, command)
+            energy["mono_mev"] = mono_mev
+            energy["type"] = "Mono"
             continue
 
         if command == "/scintillator/geom/material" and len(tokens) >= 2:
@@ -342,6 +563,13 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
         if entrance_diameter_mm is not None:
             geometry["sensor_max_width"] = entrance_diameter_mm
 
+    # Ensure required GPS fields remain valid if a macro omits specific commands.
+    position.setdefault("type", "Plane")
+    position.setdefault("shape", "Circle")
+    energy.setdefault("type", "Mono")
+    if energy.get("type", "").strip().lower() == "mono":
+        energy.setdefault("mono_mev", 1.0)
+
     return SimConfig.model_validate(payload)
 
 
@@ -365,7 +593,7 @@ def from_yaml(yaml_path: str | Path) -> SimConfig:
 
     This behavior is intentional for example workflows where a single YAML file
     carries both strict simulation config and script orchestration values (such
-    as appended macro command blocks).
+    as optional script output-path overrides).
     """
 
     parsed = load_yaml_mapping(yaml_path)
@@ -650,17 +878,42 @@ def macro_commands(
     """Build full macro command block in stable order.
 
     Ordering:
-    1. Optional ``/output/*`` commands
-    2. Geometry commands
-    3. Optional ``/run/initialize``
+    1. Optional ``simulation.runtimeControls`` preamble commands
+    2. Optional ``/output/*`` commands
+    3. Geometry commands
+    4. Optional ``/run/initialize``
+    5. Source (GPS) commands
+    6. Optional ``/run/beamOn <N>`` from ``simulation.numberOfParticles``
     """
 
     commands: list[str] = []
+    if config.simulation is not None and config.simulation.runtime_controls is not None:
+        runtime = config.simulation.runtime_controls
+        if runtime.control_verbose is not None:
+            commands.append(f"/control/verbose {runtime.control_verbose}")
+        if runtime.run_verbose is not None:
+            commands.append(f"/run/verbose {runtime.run_verbose}")
+        if runtime.event_verbose is not None:
+            commands.append(f"/event/verbose {runtime.event_verbose}")
+        if runtime.tracking_verbose is not None:
+            commands.append(f"/tracking/verbose {runtime.tracking_verbose}")
+        if runtime.print_progress is not None:
+            commands.append(f"/run/printProgress {runtime.print_progress}")
+        if runtime.store_trajectory is not None:
+            commands.append(
+                f"/tracking/storeTrajectory {1 if runtime.store_trajectory else 0}"
+            )
     if include_output:
         commands.extend(output_commands(config))
     commands.extend(geometry_commands(config))
     if include_run_initialize:
         commands.append("/run/initialize")
+    commands.extend(source_commands(config))
+    if (
+        config.simulation is not None
+        and config.simulation.number_of_particles is not None
+    ):
+        commands.append(f"/run/beamOn {config.simulation.number_of_particles}")
     return commands
 
 
@@ -709,31 +962,3 @@ def write_macro(
         )
     )
     path.write_text(payload + "\n", encoding="utf-8")
-
-
-def append_macro_commands(
-    macro_path: str | Path,
-    commands: Any,
-    *,
-    key_name: str = "commands",
-) -> None:
-    """Append command lines to an existing macro file.
-
-    This is primarily intended for script-level command tails (GPS setup,
-    beamOn commands, visualization commands) that should follow the generated
-    base block.
-    """
-
-    path = Path(macro_path)
-    if not path.exists():
-        raise FileNotFoundError(f"Macro file not found: {path}")
-    if not isinstance(commands, list) or not all(
-        isinstance(item, str) for item in commands
-    ):
-        raise ValueError(f"YAML key `{key_name}` must be a list of strings.")
-    if not commands:
-        return
-
-    body = path.read_text(encoding="utf-8")
-    sep = "" if body.endswith("\n") else "\n"
-    path.write_text(body + sep + "\n".join(commands) + "\n", encoding="utf-8")

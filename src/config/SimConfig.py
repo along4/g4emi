@@ -14,8 +14,6 @@ from __future__ import annotations
 
 from datetime import date as DateType
 from datetime import datetime
-from enum import Enum
-
 from pydantic import (
     AliasChoices,
     BaseModel,
@@ -103,45 +101,60 @@ class ScintillatorConfig(StrictModel):
     properties: ScintillatorProperties
 
 
-class EnergyType(str, Enum):
-    """Allowed source energy mode labels.
+class Vec3(StrictModel):
+    """Unitless 3D vector used by GPS angular command blocks."""
 
-    Mirrors user-facing YAML tokens used under `source.energyInfo.type`.
-    """
-
-    monoenergetic = "monoenergetic"
-    spectrum = "spectrum"
-    distribution = "distribution"
+    x: float
+    y: float
+    z: float
 
 
-class EnergyInfo(StrictModel):
-    """Source energy configuration payload."""
+class GpsPositionConfig(StrictModel):
+    """GPS position distribution configuration."""
 
-    type: EnergyType
-    value: float = Field(gt=0)
+    type: str = Field(default="Plane", min_length=1)
+    shape: str = Field(default="Circle", min_length=1)
+    center_mm: Vec3Mm = Field(alias="centerMm")
+    radius_mm: float = Field(alias="radiusMm", gt=0)
 
 
-class Species(str, Enum):
-    """Common particle species labels used by source configuration."""
+class GpsAngularConfig(StrictModel):
+    """GPS angular distribution configuration."""
 
-    neutron = "neutron"
-    photon = "photon"
-    alpha = "alpha"
+    type: str = Field(default="beam2d", min_length=1)
+    rot1: Vec3 = Field(default_factory=lambda: Vec3(x=1.0, y=0.0, z=0.0))
+    rot2: Vec3 = Field(default_factory=lambda: Vec3(x=0.0, y=1.0, z=0.0))
+    direction: Vec3 = Field(default_factory=lambda: Vec3(x=0.0, y=0.0, z=1.0))
+
+
+class GpsEnergyConfig(StrictModel):
+    """GPS energy distribution configuration."""
+
+    type: str = Field(default="Mono", min_length=1)
+    mono_mev: float | None = Field(default=None, alias="monoMeV", gt=0)
+
+    @model_validator(mode="after")
+    def validate_energy_payload(self) -> "GpsEnergyConfig":
+        """Require mono energy value when GPS type is Mono."""
+
+        if self.type.strip().lower() == "mono" and self.mono_mev is None:
+            raise ValueError("`source.gps.energy.monoMeV` is required when type is 'Mono'.")
+        return self
+
+
+class SourceGpsConfig(StrictModel):
+    """Explicit GPS command payload nested under source."""
+
+    particle: str = Field(min_length=1)
+    position: GpsPositionConfig
+    angular: GpsAngularConfig = Field(default_factory=GpsAngularConfig)
+    energy: GpsEnergyConfig
 
 
 class SourceConfig(StrictModel):
-    """Primary source block.
+    """Primary source block represented directly as GPS configuration."""
 
-    Captures source placement and emission metadata:
-    - geometric extent (`position_mm`, `dimension_mm`)
-    - energy model (`energyInfo`)
-    - particle species label
-    """
-
-    position_mm: Vec3Mm
-    dimension_mm: Size3Mm
-    energy_info: EnergyInfo = Field(alias="energyInfo")
-    species: Species | str = Field(min_length=1)
+    gps: SourceGpsConfig
 
 
 class LensConfig(StrictModel):
@@ -246,6 +259,62 @@ class MetadataConfig(StrictModel):
         return value
 
 
+class RuntimeControlsConfig(StrictModel):
+    """Optional GEANT4 runtime control command settings.
+
+    These values map to macro preamble commands commonly used for run logging
+    and progress control.
+    """
+
+    control_verbose: int | None = Field(default=None, alias="controlVerbose", ge=0)
+    run_verbose: int | None = Field(default=None, alias="runVerbose", ge=0)
+    event_verbose: int | None = Field(default=None, alias="eventVerbose", ge=0)
+    tracking_verbose: int | None = Field(default=None, alias="trackingVerbose", ge=0)
+    print_progress: int | None = Field(default=None, alias="printProgress", gt=0)
+    store_trajectory: bool | None = Field(default=None, alias="storeTrajectory")
+
+    @model_validator(mode="after")
+    def require_at_least_one_control(self) -> "RuntimeControlsConfig":
+        """Require at least one runtime control field when block is present."""
+
+        if (
+            self.control_verbose is None
+            and self.run_verbose is None
+            and self.event_verbose is None
+            and self.tracking_verbose is None
+            and self.print_progress is None
+            and self.store_trajectory is None
+        ):
+            raise ValueError(
+                "`simulation.runtimeControls` must set at least one control value."
+            )
+        return self
+
+
+class SimulationConfig(StrictModel):
+    """Run-control block for simulation execution commands.
+
+    This block captures execution-time knobs that map to `/run/*` macro
+    commands. It is intentionally separate from geometry and metadata so run
+    volume can be tuned without changing detector/source definitions.
+    """
+
+    number_of_particles: int | None = Field(default=None, alias="numberOfParticles", gt=0)
+    runtime_controls: RuntimeControlsConfig | None = Field(
+        default=None, alias="runtimeControls"
+    )
+
+    @model_validator(mode="after")
+    def require_at_least_one_setting(self) -> "SimulationConfig":
+        """Require at least one run-control setting when block is present."""
+
+        if self.number_of_particles is None and self.runtime_controls is None:
+            raise ValueError(
+                "`simulation` must include `numberOfParticles` and/or `runtimeControls`."
+            )
+        return self
+
+
 class SimConfig(StrictModel):
     """Top-level simulation configuration root.
 
@@ -257,6 +326,7 @@ class SimConfig(StrictModel):
     scintillator: ScintillatorConfig
     source: SourceConfig
     optical: OpticalConfig
+    simulation: SimulationConfig | None = None
     metadata: MetadataConfig = Field(
         validation_alias=AliasChoices("Metadata", "metadata"),
         serialization_alias="Metadata",
@@ -284,10 +354,22 @@ def default_sim_config() -> SimConfig:
                 },
             },
             "source": {
-                "position_mm": {"x_mm": 0.0, "y_mm": 0.0, "z_mm": -20.0},
-                "dimension_mm": {"x_mm": 1.0, "y_mm": 1.0, "z_mm": 1.0},
-                "energyInfo": {"type": "monoenergetic", "value": 2.45},
-                "species": "neutron",
+                "gps": {
+                    "particle": "neutron",
+                    "position": {
+                        "type": "Plane",
+                        "shape": "Circle",
+                        "centerMm": {"x_mm": 0.0, "y_mm": 0.0, "z_mm": -20.0},
+                        "radiusMm": 1.0,
+                    },
+                    "angular": {
+                        "type": "beam2d",
+                        "rot1": {"x": 1.0, "y": 0.0, "z": 0.0},
+                        "rot2": {"x": 0.0, "y": 1.0, "z": 0.0},
+                        "direction": {"x": 0.0, "y": 0.0, "z": 1.0},
+                    },
+                    "energy": {"type": "Mono", "monoMeV": 2.45},
+                }
             },
             "optical": {
                 "lenses": [
@@ -304,15 +386,18 @@ def default_sim_config() -> SimConfig:
                     "diameterRule": "min(entranceDiameter,sensorMaxWidth)",
                 },
             },
+            "simulation": {
+                "numberOfParticles": 10000,
+            },
             "Metadata": {
                 "author": "Your Name",
                 "date": "YEAR-MONTH-DAY",
                 "version": "ScintPiX [VERSION]",
                 "description": "Simulation configuration for scintillator and optical system.",
-                "WorkingDirectory": "/path/to/working/directory",
+                "WorkingDirectory": "./",
                 "OutputInfo": {
-                    "DataDirectory": "/path/to/data/directory",
-                    "LogDirectory": "/path/to/log/directory",
+                    "DataDirectory": "output/",
+                    "LogDirectory": "logs/",
                     "OutputFormat": "hdf5",
                 },
                 "SimulationRunID": "sim_001",

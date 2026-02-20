@@ -6,7 +6,6 @@ This script reads all example settings from:
 YAML responsibilities:
 - SimConfig fields (lens + geometry + output settings).
 - Optional output macro destination path.
-- Extra macro commands to append (GPS + beamOn block).
 """
 
 from __future__ import annotations
@@ -18,7 +17,6 @@ import sys
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from src.config.ConfigIO import (  # noqa: E402
-    append_macro_commands,
     ensure_output_directories,
     from_yaml,
     load_yaml_mapping,
@@ -58,13 +56,6 @@ def main() -> None:
     effective_macro_path = (
         macro_path if macro_path is not None else resolve_default_macro_path(config)
     )
-    append_commands = payload.get("append_macro_commands")
-    if append_commands is not None:
-        append_macro_commands(
-            effective_macro_path,
-            append_commands,
-            key_name="append_macro_commands",
-        )
 
     print(f"Loaded YAML: {EXAMPLE_YAML_PATH.resolve()}")
     print(f"Wrote macro: {effective_macro_path}")
