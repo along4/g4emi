@@ -399,6 +399,91 @@ class MacroCommandGenerationTests(unittest.TestCase):
             self.assertEqual(runtime.print_progress, 50)
             self.assertTrue(runtime.store_trajectory)
 
+    def test_from_yaml_hydrates_scintillator_properties_from_catalog_id(self) -> None:
+        """`scintillator.catalogId` should backfill missing properties from catalog."""
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            yaml_path = tmp_path / "catalog_only_scintillator.yaml"
+            yaml_path.write_text(
+                textwrap.dedent(
+                    """
+                    scintillator:
+                      catalogId: EJ200
+                      position_mm:
+                        x_mm: 0.0
+                        y_mm: 0.0
+                        z_mm: 0.0
+                      dimension_mm:
+                        x_mm: 100.0
+                        y_mm: 100.0
+                        z_mm: 20.0
+
+                    source:
+                      gps:
+                        particle: neutron
+                        position:
+                          type: Plane
+                          shape: Circle
+                          centerMm:
+                            x_mm: 0.0
+                            y_mm: 0.0
+                            z_mm: -100.0
+                          radiusMm: 10.0
+                        angular:
+                          type: beam2d
+                          rot1: {x: 1.0, y: 0.0, z: 0.0}
+                          rot2: {x: 0.0, y: 1.0, z: 0.0}
+                          direction: {x: 0.0, y: 0.0, z: 1.0}
+                        energy:
+                          type: Mono
+                          monoMeV: 6.0
+
+                    optical:
+                      lenses:
+                        - name: CanonEF50mmf1.0L
+                          primary: true
+                          zmxFile: CanonEF50mmf1.0L.zmx
+                      geometry:
+                        entranceDiameter: 60.55
+                        sensorMaxWidth: 36.0
+                      sensitiveDetectorConfig:
+                        position_mm:
+                          x_mm: 0.0
+                          y_mm: 0.0
+                          z_mm: 210.05
+                        shape: circle
+                        diameterRule: min(entranceDiameter,sensorMaxWidth)
+
+                    Metadata:
+                      author: Unit Test
+                      date: 2026-02-19
+                      version: test
+                      description: Validate catalogId hydration.
+                      WorkingDirectory: .
+                      OutputInfo:
+                        DataDirectory: data
+                        LogDirectory: data/logs
+                        OutputFormat: hdf5
+                      SimulationRunID: unit_catalog_hydration
+                    """
+                ).strip()
+                + "\n",
+                encoding="utf-8",
+            )
+
+            config = self._from_yaml(yaml_path)
+            self.assertEqual(config.scintillator.catalog_id, "EJ200")
+            self.assertIsNotNone(config.scintillator.properties)
+            assert config.scintillator.properties is not None
+            self.assertEqual(config.scintillator.properties.name, "EJ200")
+            self.assertEqual(config.scintillator.properties.n_k_entries, 5)
+            self.assertEqual(len(config.scintillator.properties.photon_energy), 5)
+            self.assertAlmostEqual(config.scintillator.properties.time_constant, 2.1)
+
+            commands = self._macro_commands(config)
+            self.assertIn("/scintillator/geom/material EJ200", commands)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -96,9 +96,20 @@ class ScintillatorProperties(StrictModel):
 class ScintillatorConfig(StrictModel):
     """Scintillator geometry + material properties block."""
 
+    catalog_id: str | None = Field(default=None, alias="catalogId", min_length=1)
     position_mm: Vec3Mm
     dimension_mm: Size3Mm
-    properties: ScintillatorProperties
+    properties: ScintillatorProperties | None = None
+
+    @model_validator(mode="after")
+    def require_properties_or_catalog(self) -> "ScintillatorConfig":
+        """Require either explicit properties or a catalog reference."""
+
+        if self.catalog_id is None and self.properties is None:
+            raise ValueError(
+                "`scintillator` must provide `properties` and/or `catalogId`."
+            )
+        return self
 
 
 class Vec3(StrictModel):
@@ -343,10 +354,11 @@ def default_sim_config() -> SimConfig:
     return SimConfig.model_validate(
         {
             "scintillator": {
+                "catalogId": "EJ200",
                 "position_mm": {"x_mm": 0.0, "y_mm": 0.0, "z_mm": 0.0},
                 "dimension_mm": {"x_mm": 50.0, "y_mm": 50.0, "z_mm": 10.0},
                 "properties": {
-                    "name": "EJ-200",
+                    "name": "EJ200",
                     "photonEnergy": [2.8, 3.0, 3.2],
                     "rIndex": [1.58, 1.59, 1.60],
                     "nKEntries": 3,

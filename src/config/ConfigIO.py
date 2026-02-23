@@ -35,11 +35,13 @@ from typing import Any
 
 try:
     from src.config.SimConfig import SimConfig, default_sim_config
+    from src.config.ScintillatorCatalogIO import load_scintillator
     from src.config.utilsConfig import resolve_path
 except ModuleNotFoundError:
     # Support imports when repository root is not already on sys.path.
     sys.path.append(str(Path(__file__).resolve().parents[2]))
     from src.config.SimConfig import SimConfig, default_sim_config
+    from src.config.ScintillatorCatalogIO import load_scintillator
     from src.config.utilsConfig import resolve_path
 
 try:
@@ -585,6 +587,51 @@ def _extract_sim_config_payload(parsed: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in parsed.items() if key in accepted_keys}
 
 
+def _catalog_properties_payload(catalog_id: str) -> dict[str, Any]:
+    """Resolve baseline `scintillator.properties` payload from catalog id."""
+
+    loaded = load_scintillator(catalog_id)
+    photon_energy = list(loaded.r_index.energy)
+    return {
+        "name": loaded.material.id,
+        "photonEnergy": photon_energy,
+        "rIndex": list(loaded.r_index.value),
+        "nKEntries": len(photon_energy),
+        "timeConstant": loaded.material.optical.constants.time_constant.value,
+    }
+
+
+def _apply_scintillator_catalog_defaults(payload: dict[str, Any]) -> dict[str, Any]:
+    """Hydrate `scintillator.properties` from catalog defaults when requested."""
+
+    scintillator = payload.get("scintillator")
+    if not isinstance(scintillator, dict):
+        return payload
+
+    catalog_id = scintillator.get("catalogId", scintillator.get("catalog_id"))
+    if catalog_id is None:
+        return payload
+    if not isinstance(catalog_id, str) or not catalog_id.strip():
+        raise ValueError("`scintillator.catalogId` must be a non-empty string.")
+
+    catalog_props = _catalog_properties_payload(catalog_id.strip())
+
+    raw_properties = scintillator.get("properties")
+    if raw_properties is None:
+        merged_properties: dict[str, Any] = {}
+    elif isinstance(raw_properties, dict):
+        merged_properties = dict(raw_properties)
+    else:
+        raise ValueError("`scintillator.properties` must be a mapping/object.")
+
+    # Explicit YAML values win; catalog fills missing keys.
+    for key, value in catalog_props.items():
+        merged_properties.setdefault(key, value)
+
+    scintillator["properties"] = merged_properties
+    return payload
+
+
 def from_yaml(yaml_path: str | Path) -> SimConfig:
     """Load and validate a :class:`SimConfig` from YAML file.
 
@@ -597,7 +644,9 @@ def from_yaml(yaml_path: str | Path) -> SimConfig:
     """
 
     parsed = load_yaml_mapping(yaml_path)
-    return SimConfig.model_validate(_extract_sim_config_payload(parsed))
+    payload = _extract_sim_config_payload(parsed)
+    payload = _apply_scintillator_catalog_defaults(payload)
+    return SimConfig.model_validate(payload)
 
 
 def write_yaml(
@@ -807,6 +856,11 @@ def geometry_commands(config: SimConfig) -> list[str]:
     scint = config.scintillator
     optical = config.optical
     detector = optical.sensitive_detector_config
+    if scint.properties is None:
+        raise ValueError(
+            "`scintillator.properties` is missing. "
+            "Load config via `from_yaml(...)` with `catalogId` or provide explicit properties."
+        )
 
     # Base scintillator commands are always emitted.
     commands = [
