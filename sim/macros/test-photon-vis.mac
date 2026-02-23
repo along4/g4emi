@@ -1,0 +1,52 @@
+/control/verbose 1
+/run/verbose 1
+/event/verbose 0
+/tracking/verbose 0
+/run/printProgress 1
+/tracking/storeTrajectory 1
+
+/scintillator/geom/material EJ200
+/scintillator/geom/scintX 5 cm
+/scintillator/geom/scintY 5 cm
+/scintillator/geom/scintZ 1 cm
+/scintillator/geom/posX 0 cm
+/scintillator/geom/posY 0 cm
+/scintillator/geom/posZ 0 cm
+
+/optical_interface/geom/sizeX 5 cm
+/optical_interface/geom/sizeY 5 cm
+/optical_interface/geom/thickness 0.1 mm
+/optical_interface/geom/posX 0 cm
+/optical_interface/geom/posY 0 cm
+# /optical_interface/geom/posZ 5 mm
+
+/run/initialize
+
+/vis/open OGL
+/vis/drawVolume
+/vis/viewer/set/style surface
+/vis/viewer/set/viewpointThetaPhi 70 20
+/vis/scene/add/axes 0 0 0 20 mm
+/vis/scene/add/trajectories
+/vis/modeling/trajectories/create/drawByParticleID
+/vis/modeling/trajectories/drawByParticleID-0/set opticalphoton cyan
+/vis/modeling/trajectories/drawByParticleID-0/set neutron yellow
+/vis/modeling/trajectories/drawByParticleID-0/default/setDrawStepPts false
+/vis/viewer/set/autoRefresh true
+/vis/scene/endOfEventAction accumulate
+/vis/viewer/rebuild
+/vis/viewer/refresh
+
+/gps/particle neutron
+/gps/pos/type Plane
+/gps/pos/shape Circle
+/gps/pos/centre 0.0 0.0 -10.0 cm
+/gps/pos/radius 1.0 cm
+/gps/ang/type beam2d
+/gps/ang/rot1 1 0 0
+/gps/ang/rot2 0 1 0
+/gps/direction 0 0 1
+/gps/ene/type Mono
+/gps/ene/mono 6 MeV
+
+/run/beamOn 10
