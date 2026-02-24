@@ -66,10 +66,10 @@ class Size3Mm(StrictModel):
 class ScintillatorProperties(StrictModel):
     """Optical material table for scintillator definition.
 
-    Fields map directly to common GEANT4 material-property table concepts:
-    - `photonEnergy` and `rIndex` are paired lookup arrays
-    - `nKEntries` declares the expected table length
-    - `timeConstant` describes scintillation decay timing
+    Fields map directly to common GEANT4 material-property table concepts.
+    Core fields (`photonEnergy`, `rIndex`, `nKEntries`, `timeConstant`) remain
+    backward compatible with existing YAML, while extended fields enable full
+    material and optical-table configuration through macros.
     """
 
     name: str
@@ -77,6 +77,14 @@ class ScintillatorProperties(StrictModel):
     r_index: list[float] = Field(alias="rIndex", min_length=1)
     n_k_entries: int = Field(alias="nKEntries", gt=0)
     time_constant: float = Field(alias="timeConstant", gt=0)
+    abs_length: list[float] | None = Field(default=None, alias="absLength")
+    scint_spectrum: list[float] | None = Field(default=None, alias="scintSpectrum")
+    density: float | None = Field(default=None, gt=0)
+    carbon_atoms: int | None = Field(default=None, alias="carbonAtoms", gt=0)
+    hydrogen_atoms: int | None = Field(default=None, alias="hydrogenAtoms", gt=0)
+    scint_yield: float | None = Field(default=None, alias="scintYield", gt=0)
+    resolution_scale: float | None = Field(default=None, alias="resolutionScale", gt=0)
+    yield1: float | None = Field(default=None, ge=0)
 
     @model_validator(mode="after")
     def validate_table_lengths(self) -> "ScintillatorProperties":
@@ -90,6 +98,13 @@ class ScintillatorProperties(StrictModel):
             raise ValueError("`photonEnergy` length must match `nKEntries`.")
         if len(self.r_index) != self.n_k_entries:
             raise ValueError("`rIndex` length must match `nKEntries`.")
+        if self.abs_length is not None and len(self.abs_length) != self.n_k_entries:
+            raise ValueError("`absLength` length must match `nKEntries`.")
+        if (
+            self.scint_spectrum is not None
+            and len(self.scint_spectrum) != self.n_k_entries
+        ):
+            raise ValueError("`scintSpectrum` length must match `nKEntries`.")
         return self
 
 
@@ -359,10 +374,18 @@ def default_sim_config() -> SimConfig:
                 "dimension_mm": {"x_mm": 50.0, "y_mm": 50.0, "z_mm": 10.0},
                 "properties": {
                     "name": "EJ200",
-                    "photonEnergy": [2.8, 3.0, 3.2],
-                    "rIndex": [1.58, 1.59, 1.60],
-                    "nKEntries": 3,
+                    "photonEnergy": [2.00, 2.40, 2.76, 3.10, 3.50],
+                    "rIndex": [1.58, 1.58, 1.58, 1.58, 1.58],
+                    "absLength": [380.0, 380.0, 380.0, 300.0, 220.0],
+                    "scintSpectrum": [0.05, 0.35, 1.00, 0.45, 0.08],
+                    "nKEntries": 5,
                     "timeConstant": 2.1,
+                    "density": 1.023,
+                    "carbonAtoms": 9,
+                    "hydrogenAtoms": 10,
+                    "scintYield": 10000.0,
+                    "resolutionScale": 1.0,
+                    "yield1": 1.0,
                 },
             },
             "source": {

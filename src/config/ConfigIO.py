@@ -82,6 +82,34 @@ _ENERGY_UNIT_TO_MEV: dict[str, float] = {
     "gev": 1.0e3,
 }
 
+_ENERGY_UNIT_TO_EV: dict[str, float] = {
+    "ev": 1.0,
+    "kev": 1.0e3,
+    "mev": 1.0e6,
+    "gev": 1.0e9,
+}
+
+_TIME_UNIT_TO_NS: dict[str, float] = {
+    "s": 1.0e9,
+    "ms": 1.0e6,
+    "us": 1.0e3,
+    "ns": 1.0,
+    "ps": 1.0e-3,
+}
+
+_DENSITY_UNIT_TO_G_CM3: dict[str, float] = {
+    "g/cm3": 1.0,
+    "g/cm^3": 1.0,
+    "kg/m3": 1.0e-3,
+    "kg/m^3": 1.0e-3,
+}
+
+_SCINT_YIELD_UNIT_TO_PER_MEV: dict[str, float] = {
+    "1/mev": 1.0,
+    "1/kev": 1.0e3,
+    "1/gev": 1.0e-3,
+}
+
 
 def _require_yaml_dependency() -> Any:
     """Return PyYAML module object or raise a dependency error.
@@ -158,6 +186,112 @@ def _parse_energy_to_mev(tokens: list[str], command: str) -> float:
     if factor is None:
         raise ValueError(
             f"Command '{command}' has unsupported energy unit: {tokens[2]!r}."
+        )
+    return value * factor
+
+
+def _parse_numeric_list_with_optional_unit(
+    tokens: list[str],
+    command: str,
+) -> tuple[list[float], str | None]:
+    """Parse list command payload into numeric values plus optional unit token."""
+
+    if len(tokens) < 2:
+        raise ValueError(
+            f"Command '{command}' requires a numeric list payload, got: {tokens!r}"
+        )
+
+    unit: str | None = None
+    payload_tokens = tokens[1:]
+    if len(payload_tokens) >= 2:
+        try:
+            float(payload_tokens[-1])
+        except ValueError:
+            unit = payload_tokens[-1]
+            payload_tokens = payload_tokens[:-1]
+
+    if not payload_tokens:
+        raise ValueError(f"Command '{command}' is missing numeric list values.")
+
+    raw_payload = " ".join(payload_tokens).replace(",", " ")
+    values: list[float] = []
+    for piece in raw_payload.split():
+        try:
+            values.append(float(piece))
+        except ValueError as exc:
+            raise ValueError(
+                f"Command '{command}' has non-numeric list token: {piece!r}"
+            ) from exc
+
+    if not values:
+        raise ValueError(f"Command '{command}' is missing numeric list values.")
+
+    return values, unit
+
+
+def _parse_time_to_ns(tokens: list[str], command: str) -> float:
+    """Parse `<value> <unit>` time tokens and convert to nanoseconds."""
+
+    if len(tokens) < 3:
+        raise ValueError(
+            f"Command '{command}' requires '<value> <unit>' tokens, got: {tokens!r}"
+        )
+    try:
+        value = float(tokens[1])
+    except ValueError as exc:
+        raise ValueError(
+            f"Command '{command}' has non-numeric value token: {tokens[1]!r}"
+        ) from exc
+    factor = _TIME_UNIT_TO_NS.get(tokens[2].strip().lower())
+    if factor is None:
+        raise ValueError(
+            f"Command '{command}' has unsupported time unit: {tokens[2]!r}."
+        )
+    return value * factor
+
+
+def _parse_density_to_g_cm3(tokens: list[str], command: str) -> float:
+    """Parse `<value> <unit>` density tokens and convert to g/cm3."""
+
+    if len(tokens) < 3:
+        raise ValueError(
+            f"Command '{command}' requires '<value> <unit>' tokens, got: {tokens!r}"
+        )
+    try:
+        value = float(tokens[1])
+    except ValueError as exc:
+        raise ValueError(
+            f"Command '{command}' has non-numeric value token: {tokens[1]!r}"
+        ) from exc
+    factor = _DENSITY_UNIT_TO_G_CM3.get(tokens[2].strip().lower())
+    if factor is None:
+        raise ValueError(
+            f"Command '{command}' has unsupported density unit: {tokens[2]!r}."
+        )
+    return value * factor
+
+
+def _parse_scint_yield_to_per_mev(tokens: list[str], command: str) -> float:
+    """Parse scintillation-yield command payload into photons/MeV."""
+
+    if len(tokens) < 2:
+        raise ValueError(
+            f"Command '{command}' requires at least a value token, got: {tokens!r}"
+        )
+    try:
+        value = float(tokens[1])
+    except ValueError as exc:
+        raise ValueError(
+            f"Command '{command}' has non-numeric value token: {tokens[1]!r}"
+        ) from exc
+
+    if len(tokens) == 2:
+        return value
+
+    factor = _SCINT_YIELD_UNIT_TO_PER_MEV.get(tokens[2].strip().lower())
+    if factor is None:
+        raise ValueError(
+            f"Command '{command}' has unsupported scintillation-yield unit: {tokens[2]!r}."
         )
     return value * factor
 
@@ -300,6 +434,10 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
     metadata = payload["metadata"]
     output_info = metadata["output_info"]
     scintillator = payload["scintillator"]
+    scint_properties = scintillator.get("properties")
+    if not isinstance(scint_properties, dict):
+        scint_properties = {}
+        scintillator["properties"] = scint_properties
     optical = payload["optical"]
     geometry = optical["geometry"]
     detector = optical["sensitive_detector_config"]
@@ -472,7 +610,7 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
             continue
 
         if command == "/scintillator/geom/material" and len(tokens) >= 2:
-            scintillator["properties"]["name"] = tokens[1]
+            scint_properties["name"] = tokens[1]
             continue
         if command == "/scintillator/geom/scintX":
             scintillator["dimension_mm"]["x_mm"] = _parse_length_tokens(tokens, command)
@@ -494,6 +632,66 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
             continue
         if command == "/scintillator/geom/apertureRadius":
             aperture_radius_mm = _parse_length_tokens(tokens, command)
+            continue
+        if command == "/scintillator/properties/density":
+            scint_properties["density"] = _parse_density_to_g_cm3(tokens, command)
+            continue
+        if command == "/scintillator/properties/carbonAtoms" and len(tokens) >= 2:
+            scint_properties["carbon_atoms"] = int(tokens[1])
+            continue
+        if command == "/scintillator/properties/hydrogenAtoms" and len(tokens) >= 2:
+            scint_properties["hydrogen_atoms"] = int(tokens[1])
+            continue
+        if command == "/scintillator/properties/photonEnergy":
+            values, unit = _parse_numeric_list_with_optional_unit(tokens, command)
+            factor = _ENERGY_UNIT_TO_EV.get((unit or "eV").strip().lower())
+            if factor is None:
+                raise ValueError(
+                    f"Command '{command}' has unsupported energy unit: {unit!r}."
+                )
+            scint_properties["photon_energy"] = [value * factor for value in values]
+            scint_properties["n_k_entries"] = len(values)
+            continue
+        if command == "/scintillator/properties/rIndex":
+            values, unit = _parse_numeric_list_with_optional_unit(tokens, command)
+            if unit is not None and unit.strip().lower() not in {"unitless", "none"}:
+                raise ValueError(
+                    f"Command '{command}' does not support unit token {unit!r}."
+                )
+            scint_properties["r_index"] = values
+            if "n_k_entries" not in scint_properties:
+                scint_properties["n_k_entries"] = len(values)
+            continue
+        if command == "/scintillator/properties/absLength":
+            values, unit = _parse_numeric_list_with_optional_unit(tokens, command)
+            factor = _LENGTH_UNIT_TO_MM.get((unit or "cm").strip().lower())
+            if factor is None:
+                raise ValueError(
+                    f"Command '{command}' has unsupported length unit: {unit!r}."
+                )
+            scint_properties["abs_length"] = [(value * factor) / 10.0 for value in values]
+            continue
+        if command == "/scintillator/properties/scintSpectrum":
+            values, unit = _parse_numeric_list_with_optional_unit(tokens, command)
+            if unit is not None and unit.strip().lower() not in {"unitless", "none"}:
+                raise ValueError(
+                    f"Command '{command}' does not support unit token {unit!r}."
+                )
+            scint_properties["scint_spectrum"] = values
+            continue
+        if command == "/scintillator/properties/scintYield":
+            scint_properties["scint_yield"] = _parse_scint_yield_to_per_mev(
+                tokens, command
+            )
+            continue
+        if command == "/scintillator/properties/resolutionScale" and len(tokens) >= 2:
+            scint_properties["resolution_scale"] = float(tokens[1])
+            continue
+        if command == "/scintillator/properties/timeConstant":
+            scint_properties["time_constant"] = _parse_time_to_ns(tokens, command)
+            continue
+        if command == "/scintillator/properties/yield1" and len(tokens) >= 2:
+            scint_properties["yield1"] = float(tokens[1])
             continue
 
         if command == "/optical_interface/geom/sizeX":
@@ -591,14 +789,71 @@ def _catalog_properties_payload(catalog_id: str) -> dict[str, Any]:
     """Resolve baseline `scintillator.properties` payload from catalog id."""
 
     loaded = load_scintillator(catalog_id)
-    photon_energy = list(loaded.r_index.energy)
-    return {
+    energy_unit = loaded.r_index.x_unit.strip().lower()
+    energy_factor = _ENERGY_UNIT_TO_EV.get(energy_unit)
+    if energy_factor is None:
+        raise ValueError(
+            f"Catalog scintillator '{catalog_id}' uses unsupported energy unit "
+            f"{loaded.r_index.x_unit!r}; supported: eV, keV, MeV, GeV."
+        )
+    photon_energy = [value * energy_factor for value in loaded.r_index.energy]
+
+    abs_unit = loaded.abs_length.y_unit.strip().lower()
+    abs_factor = _LENGTH_UNIT_TO_MM.get(abs_unit)
+    if abs_factor is None:
+        raise ValueError(
+            f"Catalog scintillator '{catalog_id}' uses unsupported absLength unit "
+            f"{loaded.abs_length.y_unit!r}."
+        )
+    abs_length_cm = [(value * abs_factor) / 10.0 for value in loaded.abs_length.value]
+
+    time_unit = loaded.material.optical.constants.time_constant.unit.strip().lower()
+    time_factor = _TIME_UNIT_TO_NS.get(time_unit)
+    if time_factor is None:
+        raise ValueError(
+            f"Catalog scintillator '{catalog_id}' uses unsupported time unit "
+            f"{loaded.material.optical.constants.time_constant.unit!r}."
+        )
+    time_constant_ns = loaded.material.optical.constants.time_constant.value * time_factor
+
+    density_unit = loaded.material.composition.density.unit.strip().lower()
+    density_factor = _DENSITY_UNIT_TO_G_CM3.get(density_unit)
+    if density_factor is None:
+        raise ValueError(
+            f"Catalog scintillator '{catalog_id}' uses unsupported density unit "
+            f"{loaded.material.composition.density.unit!r}."
+        )
+    density_g_cm3 = loaded.material.composition.density.value * density_factor
+
+    yield_unit = loaded.material.optical.constants.scint_yield.unit.strip().lower()
+    yield_factor = _SCINT_YIELD_UNIT_TO_PER_MEV.get(yield_unit)
+    if yield_factor is None:
+        raise ValueError(
+            f"Catalog scintillator '{catalog_id}' uses unsupported scintYield unit "
+            f"{loaded.material.optical.constants.scint_yield.unit!r}."
+        )
+    scint_yield_per_mev = loaded.material.optical.constants.scint_yield.value * yield_factor
+
+    payload: dict[str, Any] = {
         "name": loaded.material.id,
         "photonEnergy": photon_energy,
         "rIndex": list(loaded.r_index.value),
+        "absLength": abs_length_cm,
+        "scintSpectrum": list(loaded.scint_spectrum.value),
         "nKEntries": len(photon_energy),
-        "timeConstant": loaded.material.optical.constants.time_constant.value,
+        "timeConstant": time_constant_ns,
+        "density": density_g_cm3,
+        "scintYield": scint_yield_per_mev,
+        "resolutionScale": loaded.material.optical.constants.resolution_scale,
+        "yield1": loaded.material.optical.constants.yield1,
     }
+    carbon_atoms = loaded.material.composition.atoms.get("C")
+    hydrogen_atoms = loaded.material.composition.atoms.get("H")
+    if carbon_atoms is not None:
+        payload["carbonAtoms"] = carbon_atoms
+    if hydrogen_atoms is not None:
+        payload["hydrogenAtoms"] = hydrogen_atoms
+    return payload
 
 
 def _apply_scintillator_catalog_defaults(payload: dict[str, Any]) -> dict[str, Any]:
@@ -837,6 +1092,12 @@ def _resolve_sensitive_detector_diameter_mm(config: SimConfig) -> float:
     )
 
 
+def _format_float_list(values: list[float]) -> str:
+    """Format list values for compact macro list payloads."""
+
+    return ",".join(f"{value:g}" for value in values)
+
+
 def geometry_commands(config: SimConfig) -> list[str]:
     """Build Geant4 geometry command list from hierarchical config.
 
@@ -872,6 +1133,52 @@ def geometry_commands(config: SimConfig) -> list[str]:
         f"/scintillator/geom/posY {scint.position_mm.y_mm:g} mm",
         f"/scintillator/geom/posZ {scint.position_mm.z_mm:g} mm",
     ]
+
+    # Extended scintillator material/optical properties are emitted when present.
+    if scint.properties.density is not None:
+        commands.append(
+            f"/scintillator/properties/density {scint.properties.density:g} g/cm3"
+        )
+    if scint.properties.carbon_atoms is not None:
+        commands.append(
+            f"/scintillator/properties/carbonAtoms {scint.properties.carbon_atoms}"
+        )
+    if scint.properties.hydrogen_atoms is not None:
+        commands.append(
+            f"/scintillator/properties/hydrogenAtoms {scint.properties.hydrogen_atoms}"
+        )
+    commands.append(
+        "/scintillator/properties/photonEnergy "
+        f"{_format_float_list(scint.properties.photon_energy)} eV"
+    )
+    commands.append(
+        "/scintillator/properties/rIndex "
+        f"{_format_float_list(scint.properties.r_index)}"
+    )
+    if scint.properties.abs_length is not None:
+        commands.append(
+            "/scintillator/properties/absLength "
+            f"{_format_float_list(scint.properties.abs_length)} cm"
+        )
+    if scint.properties.scint_spectrum is not None:
+        commands.append(
+            "/scintillator/properties/scintSpectrum "
+            f"{_format_float_list(scint.properties.scint_spectrum)}"
+        )
+    if scint.properties.scint_yield is not None:
+        commands.append(
+            f"/scintillator/properties/scintYield {scint.properties.scint_yield:g}"
+        )
+    if scint.properties.resolution_scale is not None:
+        commands.append(
+            "/scintillator/properties/resolutionScale "
+            f"{scint.properties.resolution_scale:g}"
+        )
+    commands.append(
+        f"/scintillator/properties/timeConstant {scint.properties.time_constant:g} ns"
+    )
+    if scint.properties.yield1 is not None:
+        commands.append(f"/scintillator/properties/yield1 {scint.properties.yield1:g}")
 
     # Circular detector shape implies an aperture mask command in this
     # simulation pipeline.

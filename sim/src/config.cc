@@ -38,6 +38,18 @@ Config::Config()
       fOpticalInterfacePosY(std::numeric_limits<G4double>::quiet_NaN()),
       fOpticalInterfacePosZ(std::numeric_limits<G4double>::quiet_NaN()),
       fScintMaterial("EJ200"),
+      fScintDensity(1.023 * g / cm3),
+      fScintCarbonAtoms(9),
+      fScintHydrogenAtoms(10),
+      fScintPhotonEnergy({2.00 * eV, 2.40 * eV, 2.76 * eV, 3.10 * eV, 3.50 * eV}),
+      fScintRIndex({1.58, 1.58, 1.58, 1.58, 1.58}),
+      fScintAbsLength({380.0 * cm, 380.0 * cm, 380.0 * cm, 300.0 * cm, 220.0 * cm}),
+      fScintSpectrum({0.05, 0.35, 1.00, 0.45, 0.08}),
+      fScintYield(10000.0),
+      fScintResolutionScale(1.0),
+      fScintTimeConstant(2.1 * ns),
+      fScintYield1(1.0),
+      fScintMaterialVersion(0),
       fOutputFilename("data/photon_optical_interface_hits"),
       fOutputPath(""),
       fOutputRunName("") {}
@@ -298,6 +310,189 @@ void Config::SetScintMaterial(const std::string& value) {
   }
   std::lock_guard<std::mutex> lock(fMutex);
   fScintMaterial = value;
+  ++fScintMaterialVersion;
+}
+
+/// Thread-safe scintillator density getter.
+G4double Config::GetScintDensity() const {
+  std::lock_guard<std::mutex> lock(fMutex);
+  return fScintDensity;
+}
+
+/// Thread-safe scintillator density setter.
+void Config::SetScintDensity(G4double value) {
+  if (value <= 0.0) {
+    return;
+  }
+  std::lock_guard<std::mutex> lock(fMutex);
+  fScintDensity = value;
+  ++fScintMaterialVersion;
+}
+
+/// Thread-safe carbon atom-count getter.
+G4int Config::GetScintCarbonAtoms() const {
+  std::lock_guard<std::mutex> lock(fMutex);
+  return fScintCarbonAtoms;
+}
+
+/// Thread-safe carbon atom-count setter.
+void Config::SetScintCarbonAtoms(G4int value) {
+  if (value <= 0) {
+    return;
+  }
+  std::lock_guard<std::mutex> lock(fMutex);
+  fScintCarbonAtoms = value;
+  ++fScintMaterialVersion;
+}
+
+/// Thread-safe hydrogen atom-count getter.
+G4int Config::GetScintHydrogenAtoms() const {
+  std::lock_guard<std::mutex> lock(fMutex);
+  return fScintHydrogenAtoms;
+}
+
+/// Thread-safe hydrogen atom-count setter.
+void Config::SetScintHydrogenAtoms(G4int value) {
+  if (value <= 0) {
+    return;
+  }
+  std::lock_guard<std::mutex> lock(fMutex);
+  fScintHydrogenAtoms = value;
+  ++fScintMaterialVersion;
+}
+
+/// Thread-safe photon-energy grid getter.
+std::vector<G4double> Config::GetScintPhotonEnergy() const {
+  std::lock_guard<std::mutex> lock(fMutex);
+  return fScintPhotonEnergy;
+}
+
+/// Thread-safe photon-energy grid setter.
+void Config::SetScintPhotonEnergy(const std::vector<G4double>& values) {
+  if (values.empty()) {
+    return;
+  }
+  std::lock_guard<std::mutex> lock(fMutex);
+  fScintPhotonEnergy = values;
+  ++fScintMaterialVersion;
+}
+
+/// Thread-safe refractive-index table getter.
+std::vector<G4double> Config::GetScintRIndex() const {
+  std::lock_guard<std::mutex> lock(fMutex);
+  return fScintRIndex;
+}
+
+/// Thread-safe refractive-index table setter.
+void Config::SetScintRIndex(const std::vector<G4double>& values) {
+  if (values.empty()) {
+    return;
+  }
+  std::lock_guard<std::mutex> lock(fMutex);
+  fScintRIndex = values;
+  ++fScintMaterialVersion;
+}
+
+/// Thread-safe absorption-length table getter.
+std::vector<G4double> Config::GetScintAbsLength() const {
+  std::lock_guard<std::mutex> lock(fMutex);
+  return fScintAbsLength;
+}
+
+/// Thread-safe absorption-length table setter.
+void Config::SetScintAbsLength(const std::vector<G4double>& values) {
+  if (values.empty()) {
+    return;
+  }
+  std::lock_guard<std::mutex> lock(fMutex);
+  fScintAbsLength = values;
+  ++fScintMaterialVersion;
+}
+
+/// Thread-safe scintillation-spectrum getter.
+std::vector<G4double> Config::GetScintSpectrum() const {
+  std::lock_guard<std::mutex> lock(fMutex);
+  return fScintSpectrum;
+}
+
+/// Thread-safe scintillation-spectrum setter.
+void Config::SetScintSpectrum(const std::vector<G4double>& values) {
+  if (values.empty()) {
+    return;
+  }
+  std::lock_guard<std::mutex> lock(fMutex);
+  fScintSpectrum = values;
+  ++fScintMaterialVersion;
+}
+
+/// Thread-safe scintillation-yield getter.
+G4double Config::GetScintYield() const {
+  std::lock_guard<std::mutex> lock(fMutex);
+  return fScintYield;
+}
+
+/// Thread-safe scintillation-yield setter.
+void Config::SetScintYield(G4double value) {
+  if (value <= 0.0) {
+    return;
+  }
+  std::lock_guard<std::mutex> lock(fMutex);
+  fScintYield = value;
+  ++fScintMaterialVersion;
+}
+
+/// Thread-safe resolution-scale getter.
+G4double Config::GetScintResolutionScale() const {
+  std::lock_guard<std::mutex> lock(fMutex);
+  return fScintResolutionScale;
+}
+
+/// Thread-safe resolution-scale setter.
+void Config::SetScintResolutionScale(G4double value) {
+  if (value <= 0.0) {
+    return;
+  }
+  std::lock_guard<std::mutex> lock(fMutex);
+  fScintResolutionScale = value;
+  ++fScintMaterialVersion;
+}
+
+/// Thread-safe time-constant getter.
+G4double Config::GetScintTimeConstant() const {
+  std::lock_guard<std::mutex> lock(fMutex);
+  return fScintTimeConstant;
+}
+
+/// Thread-safe time-constant setter.
+void Config::SetScintTimeConstant(G4double value) {
+  if (value <= 0.0) {
+    return;
+  }
+  std::lock_guard<std::mutex> lock(fMutex);
+  fScintTimeConstant = value;
+  ++fScintMaterialVersion;
+}
+
+/// Thread-safe yield1 getter.
+G4double Config::GetScintYield1() const {
+  std::lock_guard<std::mutex> lock(fMutex);
+  return fScintYield1;
+}
+
+/// Thread-safe yield1 setter.
+void Config::SetScintYield1(G4double value) {
+  if (value < 0.0) {
+    return;
+  }
+  std::lock_guard<std::mutex> lock(fMutex);
+  fScintYield1 = value;
+  ++fScintMaterialVersion;
+}
+
+/// Thread-safe scintillator material-version getter.
+G4int Config::GetScintMaterialVersion() const {
+  std::lock_guard<std::mutex> lock(fMutex);
+  return fScintMaterialVersion;
 }
 
 /// Thread-safe getter for output base filename/path.

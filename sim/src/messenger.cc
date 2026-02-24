@@ -5,10 +5,79 @@
 #include "G4ApplicationState.hh"
 #include "G4RunManager.hh"
 #include "G4SystemOfUnits.hh"
+#include "G4UIcmdWithADouble.hh"
 #include "G4UIcmdWithADoubleAndUnit.hh"
+#include "G4UIcmdWithAnInteger.hh"
 #include "G4UIcmdWithAString.hh"
+#include "G4UIcommand.hh"
 #include "G4UIdirectory.hh"
+#include "G4UnitsTable.hh"
 #include "G4ios.hh"
+
+#include <algorithm>
+#include <sstream>
+#include <string>
+#include <vector>
+
+namespace {
+bool TryParseDouble(const std::string& text, G4double* out) {
+  if (!out) {
+    return false;
+  }
+  std::istringstream stream(text);
+  G4double value = 0.0;
+  stream >> value;
+  if (!stream.fail() && stream.eof()) {
+    *out = value;
+    return true;
+  }
+  return false;
+}
+
+bool ParseListWithOptionalUnit(const G4String& rawValue,
+                               std::vector<G4double>* values,
+                               std::string* unitToken) {
+  if (!values) {
+    return false;
+  }
+  values->clear();
+  if (unitToken) {
+    unitToken->clear();
+  }
+
+  std::string normalized = rawValue;
+  std::replace(normalized.begin(), normalized.end(), ',', ' ');
+  std::istringstream stream(normalized);
+  std::vector<std::string> tokens;
+  for (std::string token; stream >> token;) {
+    tokens.push_back(token);
+  }
+  if (tokens.empty()) {
+    return false;
+  }
+
+  std::size_t end = tokens.size();
+  G4double parsed = 0.0;
+  if (!TryParseDouble(tokens.back(), &parsed)) {
+    if (unitToken) {
+      *unitToken = tokens.back();
+    }
+    end = tokens.size() - 1;
+  }
+  if (end == 0) {
+    return false;
+  }
+
+  values->reserve(end);
+  for (std::size_t i = 0; i < end; ++i) {
+    if (!TryParseDouble(tokens[i], &parsed)) {
+      return false;
+    }
+    values->push_back(parsed);
+  }
+  return true;
+}
+}  // namespace
 
 /**
  * Geant4 UI messenger responsible for runtime configuration commands.
@@ -28,6 +97,10 @@ Messenger::Messenger(Config* config) : fConfig(config) {
   // Scintillator geometry/material subtree.
   fScintillatorGeomDir = new G4UIdirectory("/scintillator/geom/");
   fScintillatorGeomDir->SetGuidance("Scintillator geometry and material controls");
+
+  // Scintillator material-properties subtree.
+  fScintillatorPropertiesDir = new G4UIdirectory("/scintillator/properties/");
+  fScintillatorPropertiesDir->SetGuidance("Scintillator optical/material properties");
 
   // Top-level namespace for optical-interface geometry commands.
   fOpticalInterfaceDir = new G4UIdirectory("/optical_interface/");
@@ -99,6 +172,84 @@ Messenger::Messenger(Config* config) : fConfig(config) {
   fGeomApertureRadiusCmd->SetUnitCategory("Length");
   fGeomApertureRadiusCmd->SetRange("apertureRadius >= 0.");
   fGeomApertureRadiusCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
+
+  // Scintillator material-property commands.
+  fScintDensityCmd =
+      new G4UIcmdWithADoubleAndUnit("/scintillator/properties/density", this);
+  fScintDensityCmd->SetGuidance("Set scintillator density");
+  fScintDensityCmd->SetParameterName("density", false);
+  fScintDensityCmd->SetUnitCategory("Volumic Mass");
+  fScintDensityCmd->SetRange("density > 0.");
+  fScintDensityCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
+
+  fScintCarbonAtomsCmd =
+      new G4UIcmdWithAnInteger("/scintillator/properties/carbonAtoms", this);
+  fScintCarbonAtomsCmd->SetGuidance("Set scintillator carbon atom count");
+  fScintCarbonAtomsCmd->SetParameterName("carbonAtoms", false);
+  fScintCarbonAtomsCmd->SetRange("carbonAtoms > 0");
+  fScintCarbonAtomsCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
+
+  fScintHydrogenAtomsCmd =
+      new G4UIcmdWithAnInteger("/scintillator/properties/hydrogenAtoms", this);
+  fScintHydrogenAtomsCmd->SetGuidance("Set scintillator hydrogen atom count");
+  fScintHydrogenAtomsCmd->SetParameterName("hydrogenAtoms", false);
+  fScintHydrogenAtomsCmd->SetRange("hydrogenAtoms > 0");
+  fScintHydrogenAtomsCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
+
+  fScintPhotonEnergyCmd =
+      new G4UIcmdWithAString("/scintillator/properties/photonEnergy", this);
+  fScintPhotonEnergyCmd->SetGuidance(
+      "Set photon-energy nodes list (comma/space separated; optional trailing unit, default eV)");
+  fScintPhotonEnergyCmd->SetParameterName("values", false);
+  fScintPhotonEnergyCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
+
+  fScintRIndexCmd = new G4UIcmdWithAString("/scintillator/properties/rIndex", this);
+  fScintRIndexCmd->SetGuidance(
+      "Set refractive-index list (comma/space separated, unitless)");
+  fScintRIndexCmd->SetParameterName("values", false);
+  fScintRIndexCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
+
+  fScintAbsLengthCmd =
+      new G4UIcmdWithAString("/scintillator/properties/absLength", this);
+  fScintAbsLengthCmd->SetGuidance(
+      "Set absorption-length list (comma/space separated; optional trailing unit, default cm)");
+  fScintAbsLengthCmd->SetParameterName("values", false);
+  fScintAbsLengthCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
+
+  fScintSpectrumCmd =
+      new G4UIcmdWithAString("/scintillator/properties/scintSpectrum", this);
+  fScintSpectrumCmd->SetGuidance(
+      "Set scintillation-spectrum list (comma/space separated, unitless)");
+  fScintSpectrumCmd->SetParameterName("values", false);
+  fScintSpectrumCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
+
+  fScintYieldCmd =
+      new G4UIcmdWithADouble("/scintillator/properties/scintYield", this);
+  fScintYieldCmd->SetGuidance("Set scintillation yield in photons/MeV");
+  fScintYieldCmd->SetParameterName("scintYield", false);
+  fScintYieldCmd->SetRange("scintYield > 0.");
+  fScintYieldCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
+
+  fScintResolutionScaleCmd =
+      new G4UIcmdWithADouble("/scintillator/properties/resolutionScale", this);
+  fScintResolutionScaleCmd->SetGuidance("Set scintillation resolution scale");
+  fScintResolutionScaleCmd->SetParameterName("resolutionScale", false);
+  fScintResolutionScaleCmd->SetRange("resolutionScale > 0.");
+  fScintResolutionScaleCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
+
+  fScintTimeConstantCmd =
+      new G4UIcmdWithADoubleAndUnit("/scintillator/properties/timeConstant", this);
+  fScintTimeConstantCmd->SetGuidance("Set scintillation time constant");
+  fScintTimeConstantCmd->SetParameterName("timeConstant", false);
+  fScintTimeConstantCmd->SetUnitCategory("Time");
+  fScintTimeConstantCmd->SetRange("timeConstant > 0.");
+  fScintTimeConstantCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
+
+  fScintYield1Cmd = new G4UIcmdWithADouble("/scintillator/properties/yield1", this);
+  fScintYield1Cmd->SetGuidance("Set SCINTILLATIONYIELD1 component fraction");
+  fScintYield1Cmd->SetParameterName("yield1", false);
+  fScintYield1Cmd->SetRange("yield1 >= 0.");
+  fScintYield1Cmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 
   // Optical-interface dimensions (X, Y) and thickness (Z).
   fOpticalInterfaceXCmd =
@@ -201,6 +352,17 @@ Messenger::~Messenger() {
   delete fGeomScintPosZCmd;
   delete fGeomScintPosYCmd;
   delete fGeomScintPosXCmd;
+  delete fScintYield1Cmd;
+  delete fScintTimeConstantCmd;
+  delete fScintResolutionScaleCmd;
+  delete fScintYieldCmd;
+  delete fScintSpectrumCmd;
+  delete fScintAbsLengthCmd;
+  delete fScintRIndexCmd;
+  delete fScintPhotonEnergyCmd;
+  delete fScintHydrogenAtomsCmd;
+  delete fScintCarbonAtomsCmd;
+  delete fScintDensityCmd;
   delete fGeomApertureRadiusCmd;
   delete fGeomScintZCmd;
   delete fGeomScintYCmd;
@@ -210,6 +372,7 @@ Messenger::~Messenger() {
   delete fOutputDir;
   delete fOpticalInterfaceGeomDir;
   delete fOpticalInterfaceDir;
+  delete fScintillatorPropertiesDir;
   delete fScintillatorGeomDir;
   delete fScintillatorDir;
 }
@@ -277,6 +440,123 @@ void Messenger::SetNewValue(G4UIcommand* command, G4String newValue) {
   if (command == fGeomApertureRadiusCmd) {
     fConfig->SetApertureRadius(
         fGeomApertureRadiusCmd->GetNewDoubleValue(newValue));
+    NotifyGeometryChanged();
+    return;
+  }
+
+  if (command == fScintDensityCmd) {
+    fConfig->SetScintDensity(fScintDensityCmd->GetNewDoubleValue(newValue));
+    NotifyGeometryChanged();
+    return;
+  }
+
+  if (command == fScintCarbonAtomsCmd) {
+    fConfig->SetScintCarbonAtoms(fScintCarbonAtomsCmd->GetNewIntValue(newValue));
+    NotifyGeometryChanged();
+    return;
+  }
+
+  if (command == fScintHydrogenAtomsCmd) {
+    fConfig->SetScintHydrogenAtoms(fScintHydrogenAtomsCmd->GetNewIntValue(newValue));
+    NotifyGeometryChanged();
+    return;
+  }
+
+  if (command == fScintPhotonEnergyCmd) {
+    std::vector<G4double> values;
+    std::string unit = "eV";
+    if (!ParseListWithOptionalUnit(newValue, &values, &unit)) {
+      G4cout << "Failed to parse photonEnergy list: '" << newValue << "'." << G4endl;
+      return;
+    }
+    if (!G4UnitDefinition::IsUnitDefined(unit)) {
+      G4cout << "Unknown photonEnergy unit '" << unit << "'." << G4endl;
+      return;
+    }
+    const G4double factor = G4UIcommand::ValueOf(unit.c_str());
+    for (auto& value : values) {
+      value *= factor;
+    }
+    fConfig->SetScintPhotonEnergy(values);
+    NotifyGeometryChanged();
+    return;
+  }
+
+  if (command == fScintRIndexCmd) {
+    std::vector<G4double> values;
+    std::string unit;
+    if (!ParseListWithOptionalUnit(newValue, &values, &unit)) {
+      G4cout << "Failed to parse rIndex list: '" << newValue << "'." << G4endl;
+      return;
+    }
+    if (!unit.empty() && unit != "unitless") {
+      G4cout << "rIndex list does not accept unit token '" << unit << "'." << G4endl;
+      return;
+    }
+    fConfig->SetScintRIndex(values);
+    NotifyGeometryChanged();
+    return;
+  }
+
+  if (command == fScintAbsLengthCmd) {
+    std::vector<G4double> values;
+    std::string unit = "cm";
+    if (!ParseListWithOptionalUnit(newValue, &values, &unit)) {
+      G4cout << "Failed to parse absLength list: '" << newValue << "'." << G4endl;
+      return;
+    }
+    if (!G4UnitDefinition::IsUnitDefined(unit)) {
+      G4cout << "Unknown absLength unit '" << unit << "'." << G4endl;
+      return;
+    }
+    const G4double factor = G4UIcommand::ValueOf(unit.c_str());
+    for (auto& value : values) {
+      value *= factor;
+    }
+    fConfig->SetScintAbsLength(values);
+    NotifyGeometryChanged();
+    return;
+  }
+
+  if (command == fScintSpectrumCmd) {
+    std::vector<G4double> values;
+    std::string unit;
+    if (!ParseListWithOptionalUnit(newValue, &values, &unit)) {
+      G4cout << "Failed to parse scintSpectrum list: '" << newValue << "'." << G4endl;
+      return;
+    }
+    if (!unit.empty() && unit != "unitless") {
+      G4cout << "scintSpectrum list does not accept unit token '" << unit << "'."
+             << G4endl;
+      return;
+    }
+    fConfig->SetScintSpectrum(values);
+    NotifyGeometryChanged();
+    return;
+  }
+
+  if (command == fScintYieldCmd) {
+    fConfig->SetScintYield(fScintYieldCmd->GetNewDoubleValue(newValue));
+    NotifyGeometryChanged();
+    return;
+  }
+
+  if (command == fScintResolutionScaleCmd) {
+    fConfig->SetScintResolutionScale(
+        fScintResolutionScaleCmd->GetNewDoubleValue(newValue));
+    NotifyGeometryChanged();
+    return;
+  }
+
+  if (command == fScintTimeConstantCmd) {
+    fConfig->SetScintTimeConstant(
+        fScintTimeConstantCmd->GetNewDoubleValue(newValue));
+    NotifyGeometryChanged();
+    return;
+  }
+
+  if (command == fScintYield1Cmd) {
+    fConfig->SetScintYield1(fScintYield1Cmd->GetNewDoubleValue(newValue));
     NotifyGeometryChanged();
     return;
   }

@@ -186,6 +186,9 @@ class MacroCommandGenerationTests(unittest.TestCase):
                 "/scintillator/geom/posX 0 mm",
                 "/scintillator/geom/posY 0 mm",
                 "/scintillator/geom/posZ 0 mm",
+                "/scintillator/properties/photonEnergy 2.8,3,3.2 eV",
+                "/scintillator/properties/rIndex 1.58,1.59,1.6",
+                "/scintillator/properties/timeConstant 2.1 ns",
                 "/scintillator/geom/apertureRadius 18 mm",
                 "/optical_interface/geom/sizeX 60.55 mm",
                 "/optical_interface/geom/sizeY 60.55 mm",
@@ -479,10 +482,76 @@ class MacroCommandGenerationTests(unittest.TestCase):
             self.assertEqual(config.scintillator.properties.name, "EJ200")
             self.assertEqual(config.scintillator.properties.n_k_entries, 5)
             self.assertEqual(len(config.scintillator.properties.photon_energy), 5)
+            self.assertIsNotNone(config.scintillator.properties.abs_length)
+            self.assertIsNotNone(config.scintillator.properties.scint_spectrum)
             self.assertAlmostEqual(config.scintillator.properties.time_constant, 2.1)
 
             commands = self._macro_commands(config)
             self.assertIn("/scintillator/geom/material EJ200", commands)
+            self.assertIn("/scintillator/properties/density 1.023 g/cm3", commands)
+            self.assertIn("/scintillator/properties/carbonAtoms 9", commands)
+            self.assertIn("/scintillator/properties/hydrogenAtoms 10", commands)
+            self.assertIn(
+                "/scintillator/properties/photonEnergy 2,2.4,2.76,3.1,3.5 eV",
+                commands,
+            )
+            self.assertIn("/scintillator/properties/scintYield 10000", commands)
+
+    def test_from_macro_parses_scintillator_property_commands(self) -> None:
+        """Scintillator property commands should populate extended properties."""
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            macro_path = tmp_path / "scintillator_properties.mac"
+            macro_path.write_text(
+                "\n".join(
+                    [
+                        "/output/format hdf5",
+                        "/output/path data",
+                        "/output/runname prop_import",
+                        "/scintillator/geom/material EJ200",
+                        "/scintillator/geom/scintX 100 mm",
+                        "/scintillator/geom/scintY 100 mm",
+                        "/scintillator/geom/scintZ 20 mm",
+                        "/scintillator/geom/posX 0 mm",
+                        "/scintillator/geom/posY 0 mm",
+                        "/scintillator/geom/posZ 0 mm",
+                        "/scintillator/properties/density 1.023 g/cm3",
+                        "/scintillator/properties/carbonAtoms 9",
+                        "/scintillator/properties/hydrogenAtoms 10",
+                        "/scintillator/properties/photonEnergy 2.0,2.4,2.76,3.1,3.5 eV",
+                        "/scintillator/properties/rIndex 1.58,1.58,1.58,1.58,1.58",
+                        "/scintillator/properties/absLength 380,380,380,300,220 cm",
+                        "/scintillator/properties/scintSpectrum 0.05,0.35,1.0,0.45,0.08",
+                        "/scintillator/properties/scintYield 10000",
+                        "/scintillator/properties/resolutionScale 1.0",
+                        "/scintillator/properties/timeConstant 2.1 ns",
+                        "/scintillator/properties/yield1 1.0",
+                        "/optical_interface/geom/sizeX 60.55 mm",
+                        "/optical_interface/geom/sizeY 60.55 mm",
+                        "/optical_interface/geom/thickness 0.1 mm",
+                        "/optical_interface/geom/posX 0 mm",
+                        "/optical_interface/geom/posY 0 mm",
+                        "/optical_interface/geom/posZ 210.05 mm",
+                        "/run/initialize",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            imported = self._from_macro(macro_path)
+            props = imported.scintillator.properties
+            assert props is not None
+            self.assertAlmostEqual(props.density or 0.0, 1.023)
+            self.assertEqual(props.carbon_atoms, 9)
+            self.assertEqual(props.hydrogen_atoms, 10)
+            self.assertEqual(props.n_k_entries, 5)
+            self.assertIsNotNone(props.abs_length)
+            self.assertIsNotNone(props.scint_spectrum)
+            self.assertAlmostEqual(props.scint_yield or 0.0, 10000.0)
+            self.assertAlmostEqual(props.resolution_scale or 0.0, 1.0)
+            self.assertAlmostEqual(props.yield1 or 0.0, 1.0)
 
 
 if __name__ == "__main__":

@@ -5,11 +5,13 @@
 
 class Config;
 class G4UIdirectory;
+class G4UIcmdWithADouble;
 class G4UIcmdWithADoubleAndUnit;
+class G4UIcmdWithAnInteger;
 class G4UIcmdWithAString;
 class G4UIcommand;
 
-/// Geant4 UI messenger that maps `/scintillator/geom/*`, `/optical_interface/geom/*`, and `/output/*` commands into `Config` updates.
+/// Geant4 UI messenger that maps `/scintillator/*`, `/optical_interface/geom/*`, and `/output/*` commands into `Config` updates.
 class Messenger : public G4UImessenger {
  public:
   /// `config` is a shared mutable settings object updated by UI commands.
@@ -29,6 +31,7 @@ class Messenger : public G4UImessenger {
   /// Command directories for scintillator, optical-interface, and output controls.
   G4UIdirectory* fScintillatorDir = nullptr;
   G4UIdirectory* fScintillatorGeomDir = nullptr;
+  G4UIdirectory* fScintillatorPropertiesDir = nullptr;
   G4UIdirectory* fOpticalInterfaceDir = nullptr;
   G4UIdirectory* fOpticalInterfaceGeomDir = nullptr;
   G4UIdirectory* fOutputDir = nullptr;
@@ -42,6 +45,17 @@ class Messenger : public G4UImessenger {
   G4UIcmdWithADoubleAndUnit* fGeomScintPosYCmd = nullptr;
   G4UIcmdWithADoubleAndUnit* fGeomScintPosZCmd = nullptr;
   G4UIcmdWithADoubleAndUnit* fGeomApertureRadiusCmd = nullptr;
+  G4UIcmdWithADoubleAndUnit* fScintDensityCmd = nullptr;
+  G4UIcmdWithAnInteger* fScintCarbonAtomsCmd = nullptr;
+  G4UIcmdWithAnInteger* fScintHydrogenAtomsCmd = nullptr;
+  G4UIcmdWithAString* fScintPhotonEnergyCmd = nullptr;
+  G4UIcmdWithAString* fScintRIndexCmd = nullptr;
+  G4UIcmdWithAString* fScintAbsLengthCmd = nullptr;
+  G4UIcmdWithAString* fScintSpectrumCmd = nullptr;
+  G4UIcmdWithADouble* fScintYieldCmd = nullptr;
+  G4UIcmdWithADouble* fScintResolutionScaleCmd = nullptr;
+  G4UIcmdWithADoubleAndUnit* fScintTimeConstantCmd = nullptr;
+  G4UIcmdWithADouble* fScintYield1Cmd = nullptr;
 
   /// Optical-interface geometry commands (size + thickness).
   G4UIcmdWithADoubleAndUnit* fOpticalInterfaceXCmd = nullptr;

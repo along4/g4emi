@@ -5,6 +5,7 @@
 
 #include <mutex>
 #include <string>
+#include <vector>
 
 /// Thread-safe runtime configuration shared across geometry/actions/messenger.
 class Config {
@@ -96,6 +97,56 @@ class Config {
   /// Set scintillator material name.
   void SetScintMaterial(const std::string& value);
 
+  /// Get scintillator density in Geant4 internal units.
+  G4double GetScintDensity() const;
+  /// Set scintillator density in Geant4 internal units.
+  void SetScintDensity(G4double value);
+  /// Get scintillator stoichiometric carbon atom count.
+  G4int GetScintCarbonAtoms() const;
+  /// Set scintillator stoichiometric carbon atom count.
+  void SetScintCarbonAtoms(G4int value);
+  /// Get scintillator stoichiometric hydrogen atom count.
+  G4int GetScintHydrogenAtoms() const;
+  /// Set scintillator stoichiometric hydrogen atom count.
+  void SetScintHydrogenAtoms(G4int value);
+
+  /// Get scintillator photon-energy nodes in Geant4 internal units.
+  std::vector<G4double> GetScintPhotonEnergy() const;
+  /// Set scintillator photon-energy nodes in Geant4 internal units.
+  void SetScintPhotonEnergy(const std::vector<G4double>& values);
+  /// Get scintillator refractive-index table values.
+  std::vector<G4double> GetScintRIndex() const;
+  /// Set scintillator refractive-index table values.
+  void SetScintRIndex(const std::vector<G4double>& values);
+  /// Get scintillator absorption-length values in Geant4 internal units.
+  std::vector<G4double> GetScintAbsLength() const;
+  /// Set scintillator absorption-length values in Geant4 internal units.
+  void SetScintAbsLength(const std::vector<G4double>& values);
+  /// Get scintillator emission-spectrum table values.
+  std::vector<G4double> GetScintSpectrum() const;
+  /// Set scintillator emission-spectrum table values.
+  void SetScintSpectrum(const std::vector<G4double>& values);
+
+  /// Get scintillation yield in photons/MeV.
+  G4double GetScintYield() const;
+  /// Set scintillation yield in photons/MeV.
+  void SetScintYield(G4double value);
+  /// Get scintillation resolution scale.
+  G4double GetScintResolutionScale() const;
+  /// Set scintillation resolution scale.
+  void SetScintResolutionScale(G4double value);
+  /// Get scintillation decay time in Geant4 internal units.
+  G4double GetScintTimeConstant() const;
+  /// Set scintillation decay time in Geant4 internal units.
+  void SetScintTimeConstant(G4double value);
+  /// Get SCINTILLATIONYIELD1 component fraction.
+  G4double GetScintYield1() const;
+  /// Set SCINTILLATIONYIELD1 component fraction.
+  void SetScintYield1(G4double value);
+
+  /// Get monotonic material revision; increments when scintillator properties change.
+  G4int GetScintMaterialVersion() const;
+
   /// Get output base filename/path (without output-format extension).
   std::string GetOutputFilename() const;
   /// Set output base filename/path (extension, if provided, is normalized away).
@@ -153,6 +204,18 @@ class Config {
 
   /// Material and output settings.
   std::string fScintMaterial;
+  G4double fScintDensity = 0.0;
+  G4int fScintCarbonAtoms = 0;
+  G4int fScintHydrogenAtoms = 0;
+  std::vector<G4double> fScintPhotonEnergy;
+  std::vector<G4double> fScintRIndex;
+  std::vector<G4double> fScintAbsLength;
+  std::vector<G4double> fScintSpectrum;
+  G4double fScintYield = 0.0;
+  G4double fScintResolutionScale = 1.0;
+  G4double fScintTimeConstant = 0.0;
+  G4double fScintYield1 = 1.0;
+  G4int fScintMaterialVersion = 0;
   std::string fOutputFilename;
   std::string fOutputPath;
   std::string fOutputRunName;
