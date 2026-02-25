@@ -88,29 +88,23 @@ pixi run g4emi data/CanonEF50mmf1p0L_run/macros/CanonEF50mmf1p0L_run.mac
 
 ### 2.4 Catalog-based scintillator override example
 
-`examples/scintillator_catalog_override_example.yaml` demonstrates:
+`examples/scintillatorCataloging/EJ200.yaml` demonstrates:
 - `scintillator.catalogId: EJ200` baseline hydration from the local catalog.
 - targeted manual overrides in `scintillator.properties` (e.g. `absLength`, `timeComponents`, `scintYield`).
 - `examples/scintillatorCataloging/EJ276D.yaml`
   demonstrates explicit 3-entry `timeComponents` schema usage.
 
-A generated command snapshot is committed at:
-
-```text
-examples/scintillator_catalog_override_example.mac
-```
-
 For an actual run, use the Python generator first so output subdirectories
 (`data/<SimulationRunID>/simulatedPhotons`) are created before Geant4 writes:
 
 ```bash
-pixi run python examples/scintillator_catalog_override_example.py
+pixi run python examples/scintillatorCataloging/scintillator_catalog.py
 ```
 
 Then run the macro path printed by the script (default location):
 
 ```bash
-pixi run g4emi data/ScintCatalogOverride_example/macros/ScintCatalogOverride_example.mac
+pixi run g4emi data/ScintCatalog_example/macros/ScintCatalog_example.mac
 ```
 
 ## 3. Simulation Output Structures
