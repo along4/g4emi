@@ -111,9 +111,9 @@ class MacroCommandGenerationTests(unittest.TestCase):
                       radiusMm: 10.0
                     angular:
                       type: beam2d
-                      rot1: {x: 1.0, y: 0.0, z: 0.0}
-                      rot2: {x: 0.0, y: 1.0, z: 0.0}
-                      direction: {x: 0.0, y: 0.0, z: 1.0}
+                      rot1: {{x: 1.0, y: 0.0, z: 0.0}}
+                      rot2: {{x: 0.0, y: 1.0, z: 0.0}}
+                      direction: {{x: 0.0, y: 0.0, z: 1.0}}
                     energy:
                       type: Mono
                       monoMeV: 6.0
