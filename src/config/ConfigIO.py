@@ -49,7 +49,6 @@ try:
         _parse_length_tokens,
         _parse_numeric_list_with_optional_unit,
         _parse_scint_yield_to_per_mev,
-        _parse_time_to_ns,
         _parse_vector3,
         assert_directory_writable,
         assert_distinct_paths,
@@ -73,7 +72,6 @@ except ModuleNotFoundError:
         _parse_length_tokens,
         _parse_numeric_list_with_optional_unit,
         _parse_scint_yield_to_per_mev,
-        _parse_time_to_ns,
         _parse_vector3,
         assert_directory_writable,
         assert_distinct_paths,
@@ -299,18 +297,6 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
     if not isinstance(scint_properties, dict):
         scint_properties = {}
         scintillator["properties"] = scint_properties
-    time_components = scint_properties.get("time_components")
-    if (
-        not isinstance(time_components, list)
-        or len(time_components) != 3
-        or not all(isinstance(component, dict) for component in time_components)
-    ):
-        time_components = [
-            {"time_constant": 0.0, "yield_fraction": 1.0},
-            {"time_constant": 0.0, "yield_fraction": 0.0},
-            {"time_constant": 0.0, "yield_fraction": 0.0},
-        ]
-        scint_properties["time_components"] = time_components
     optical = payload["optical"]
     geometry = optical["geometry"]
     detector = optical["sensitive_detector_config"]
@@ -562,12 +548,14 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
         if command == "/scintillator/properties/resolutionScale" and len(tokens) >= 2:
             scint_properties["resolution_scale"] = float(tokens[1])
             continue
-        if command == "/scintillator/properties/timeConstant":
-            time_components[0]["time_constant"] = _parse_time_to_ns(tokens, command)
-            continue
-        if command == "/scintillator/properties/yield1" and len(tokens) >= 2:
-            time_components[0]["yield_fraction"] = float(tokens[1])
-            continue
+        if command in {
+            "/scintillator/properties/timeConstant",
+            "/scintillator/properties/yield1",
+        }:
+            raise ValueError(
+                f"Legacy command '{command}' is no longer supported. "
+                "Use `scintillator.properties.timeComponents` in YAML."
+            )
 
         if command == "/optical_interface/geom/sizeX":
             size_x_mm = _parse_length_tokens(tokens, command)
@@ -1120,23 +1108,8 @@ def geometry_commands(config: SimConfig) -> list[str]:
             "/scintillator/properties/resolutionScale "
             f"{scint.properties.resolution_scale:g}"
         )
-    if any(
-        component.yield_fraction > 0.0
-        for component in scint.properties.time_components[1:]
-    ):
-        raise ValueError(
-            "Macro emission currently supports only the primary scintillation "
-            "time component. Secondary/tertiary non-zero yield fractions are "
-            "not yet supported by simulation commands."
-        )
-    primary_time_component = scint.properties.time_components[0]
-    commands.append(
-        "/scintillator/properties/timeConstant "
-        f"{primary_time_component.time_constant:g} ns"
-    )
-    commands.append(
-        f"/scintillator/properties/yield1 {primary_time_component.yield_fraction:g}"
-    )
+    # Multi-component time constants are represented in YAML (`timeComponents`)
+    # and catalog data. Macro command emission does not encode these values.
 
     # Circular detector shape implies an aperture mask command in this
     # simulation pipeline.
