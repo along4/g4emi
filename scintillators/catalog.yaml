@@ -5,3 +5,6 @@ materials:
   EJ-426: materials/EJ-426.yaml
   EJ-276D: materials/EJ-276D.yaml
   EJ-276G: materials/EJ-276G.yaml
+  CsI-Na: materials/CsI-Na.yaml
+  CsI-Tl: materials/CsI-Tl.yaml
+  NaI-Tl: materials/NaI-Tl.yaml

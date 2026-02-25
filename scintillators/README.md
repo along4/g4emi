@@ -7,6 +7,9 @@ Current materials:
 - `EJ-426` (SSLG4-derived ZnS:Ag/LiF-6 style entry; Li-6 enrichment noted)
 - `EJ-276D` (SSLG4-derived optical curves/constants)
 - `EJ-276G` (SSLG4-derived optical curves/constants)
+- `CsI-Na` (SSLG4 isc-2001)
+- `CsI-Tl` (SSLG4 isc-2002)
+- `NaI-Tl` (SSLG4 isc-2004)
 
 ## Layout
 

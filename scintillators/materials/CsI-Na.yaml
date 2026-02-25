@@ -1,0 +1,40 @@
+id: CsI-Na
+name: CsI(Na)
+description: >
+  SSLG4-derived iodide scintillator entry from isc-2001 (CsINa).
+  Optical constants come from sslg4/macros/iscnt/isc-2001.mac.
+  SSLG4 does not define ABSLENGTH for this material; a large flat
+  placeholder (1e6 cm) is used to emulate no explicit absorption limit.
+
+composition:
+  density:
+    value: 4.51
+    unit: g/cm3
+  atoms:
+    Cs: 5110
+    I: 4880
+    Na: 1
+
+optical:
+  curves:
+    rIndex:
+      path: curves/CsI-Na/rindex.csv
+      xUnit: eV
+      yUnit: unitless
+    absLength:
+      path: curves/CsI-Na/abs_length_cm.csv
+      xUnit: eV
+      yUnit: cm
+    scintSpectrum:
+      path: curves/CsI-Na/scint_spectrum.csv
+      xUnit: eV
+      yUnit: unitless
+  constants:
+    scintYield:
+      value: 41000.0
+      unit: 1/MeV
+    resolutionScale: 1.0
+    timeConstant:
+      value: 630.0
+      unit: ns
+    yield1: 1.0
