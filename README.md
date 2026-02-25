@@ -86,6 +86,31 @@ Run it with:
 pixi run g4emi data/CanonEF50mmf1p0L_run/macros/CanonEF50mmf1p0L_run.mac
 ```
 
+### 2.4 Catalog-based scintillator override example
+
+`examples/scintillator_catalog_override_example.yaml` demonstrates:
+- `scintillator.catalogId: EJ200` baseline hydration from the local catalog.
+- targeted manual overrides in `scintillator.properties` (e.g. `absLength`, `timeConstant`, `scintYield`).
+
+A generated command snapshot is committed at:
+
+```text
+examples/scintillator_catalog_override_example.mac
+```
+
+For an actual run, use the Python generator first so output subdirectories
+(`data/<SimulationRunID>/simulatedPhotons`) are created before Geant4 writes:
+
+```bash
+pixi run python examples/scintillator_catalog_override_example.py
+```
+
+Then run the macro path printed by the script (default location):
+
+```bash
+pixi run g4emi data/ScintCatalogOverride_example/macros/ScintCatalogOverride_example.mac
+```
+
 ## 3. Simulation Output Structures
 
 ### 3.1 Output directory structure
@@ -102,7 +127,7 @@ Runtime output files are staged under an effective output root (`output_path`, o
 Python-side helpers also use these sibling stage folders:
 
 - `<output_root>/<runname>/simulatedPhotons/`
-- `<output_root>/<runname>/transportPhotons/`
+- `<output_root>/<runname>/transportedPhotons/`
 - `<output_root>/<runname>/macros/`
 
 ### 3.2 CSV structure
@@ -172,7 +197,8 @@ Dataset columns:
 
 - Directory creation behavior:
   - C++ runtime does not create parent output directories.
-  - Directory creation and fallback behavior are handled in Python (`src/config/ConfigIO.py`).
+  - Directory creation is handled in Python (`src/config/ConfigIO.py`).
+  - If output parent directories are missing at run start, simulation aborts with a fatal error.
 
 - Optical physics check:
   - In Geant4 prompt, run `/run/initialize` then `/process/list`.
