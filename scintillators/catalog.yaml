@@ -2,5 +2,6 @@ version: 1
 default: EJ200
 materials:
   EJ200: materials/EJ200.yaml
+  EJ-426: materials/EJ-426.yaml
   EJ-276D: materials/EJ-276D.yaml
   EJ-276G: materials/EJ-276G.yaml

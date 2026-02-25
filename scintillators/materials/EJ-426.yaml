@@ -1,0 +1,45 @@
+id: EJ-426
+name: EJ-426
+description: >
+  Eljen EJ-426 entry sourced from SSLG4 (opsc-133 / EJ426Builder).
+  SSLG4 defines enriched lithium as Li-6 95 atom % and Li-7 5 atom %.
+  Composition below follows EJ426Builder mass-fraction inputs; Ag binder
+  is intentionally omitted as requested.
+
+composition:
+  density:
+    value: 2.42
+    unit: g/cm3
+  atoms:
+    Li: 393
+    F: 1231
+    Zn: 4358
+    S: 2137
+    Si: 769
+    C: 657
+    H: 17
+    O: 438
+
+optical:
+  curves:
+    rIndex:
+      path: curves/EJ-426/rindex.csv
+      xUnit: eV
+      yUnit: unitless
+    absLength:
+      path: curves/EJ-426/abs_length_cm.csv
+      xUnit: eV
+      yUnit: cm
+    scintSpectrum:
+      path: curves/EJ-426/scint_spectrum.csv
+      xUnit: eV
+      yUnit: unitless
+  constants:
+    scintYield:
+      value: 40000.0
+      unit: 1/MeV
+    resolutionScale: 1.0
+    timeConstant:
+      value: 200.0
+      unit: ns
+    yield1: 1.0
