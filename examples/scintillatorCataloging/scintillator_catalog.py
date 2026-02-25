@@ -24,8 +24,8 @@ from src.config.ConfigIO import (  # noqa: E402
     write_macro,
 )
 
-# Keep YAML colocated with this script for easy discovery and portability.
-EXAMPLE_YAML_PATH = Path(__file__).with_suffix(".yaml")
+# Default YAML example in this directory.
+EXAMPLE_YAML_PATH = Path(__file__).with_name("EJ200.yaml")
 
 
 def main() -> None:
