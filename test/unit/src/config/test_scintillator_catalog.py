@@ -51,6 +51,8 @@ class ScintillatorCatalogTests(unittest.TestCase):
 
         materials = self._available_scintillators()
         self.assertIn("EJ200", materials)
+        self.assertIn("EJ-276D", materials)
+        self.assertIn("EJ-276G", materials)
 
     def test_load_default_scintillator(self) -> None:
         """Loading without explicit id should return catalog default."""
@@ -70,6 +72,21 @@ class ScintillatorCatalogTests(unittest.TestCase):
         self.assertEqual(material.name, "Eljen EJ-200")
         self.assertEqual(material.optical.constants.scint_yield.value, 10000.0)
         self.assertEqual(material.optical.constants.time_constant.unit, "ns")
+
+    def test_load_ej276_variants(self) -> None:
+        """EJ-276D/G entries should resolve with expected SSLG4 constants."""
+
+        ej276d = self._load_scintillator("EJ-276D")
+        self.assertEqual(ej276d.material.name, "EJ-276D")
+        self.assertEqual(ej276d.material.optical.constants.scint_yield.value, 8600.0)
+        self.assertEqual(ej276d.material.optical.constants.time_constant.value, 13.0)
+        self.assertEqual(len(ej276d.r_index.energy), 5)
+
+        ej276g = self._load_scintillator("EJ-276G")
+        self.assertEqual(ej276g.material.name, "EJ-276G")
+        self.assertEqual(ej276g.material.optical.constants.scint_yield.value, 8000.0)
+        self.assertEqual(ej276g.material.optical.constants.time_constant.value, 13.0)
+        self.assertEqual(len(ej276g.r_index.energy), 5)
 
     def test_mismatched_curve_energy_grid_raises(self) -> None:
         """Curve files with different energy grids should be rejected."""
