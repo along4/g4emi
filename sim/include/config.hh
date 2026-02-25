@@ -3,6 +3,7 @@
 
 #include "globals.hh"
 
+#include <array>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -135,13 +136,33 @@ class Config {
   G4double GetScintResolutionScale() const;
   /// Set scintillation resolution scale.
   void SetScintResolutionScale(G4double value);
+  /// Get all scintillation decay time constants in Geant4 internal units.
+  std::array<G4double, 3> GetScintTimeConstants() const;
+  /// Set all scintillation decay time constants in Geant4 internal units.
+  void SetScintTimeConstants(const std::array<G4double, 3>& values);
+  /// Get one scintillation decay time constant by 1-based component index.
+  G4double GetScintTimeConstant(G4int componentIndex) const;
+  /// Set one scintillation decay time constant by 1-based component index.
+  void SetScintTimeConstant(G4int componentIndex, G4double value);
+  /// Get all scintillation yield fractions (components 1..3).
+  std::array<G4double, 3> GetScintYieldFractions() const;
+  /// Set all scintillation yield fractions (components 1..3).
+  void SetScintYieldFractions(const std::array<G4double, 3>& values);
+  /// Get one scintillation yield fraction by 1-based component index.
+  G4double GetScintYieldFraction(G4int componentIndex) const;
+  /// Set one scintillation yield fraction by 1-based component index.
+  void SetScintYieldFraction(G4int componentIndex, G4double value);
   /// Get scintillation decay time in Geant4 internal units.
+  /// Compatibility wrapper for component 1.
   G4double GetScintTimeConstant() const;
   /// Set scintillation decay time in Geant4 internal units.
+  /// Compatibility wrapper for component 1.
   void SetScintTimeConstant(G4double value);
   /// Get SCINTILLATIONYIELD1 component fraction.
+  /// Compatibility wrapper for component 1.
   G4double GetScintYield1() const;
   /// Set SCINTILLATIONYIELD1 component fraction.
+  /// Compatibility wrapper for component 1.
   void SetScintYield1(G4double value);
 
   /// Get monotonic material revision; increments when scintillator properties change.
@@ -213,8 +234,8 @@ class Config {
   std::vector<G4double> fScintSpectrum;
   G4double fScintYield = 0.0;
   G4double fScintResolutionScale = 1.0;
-  G4double fScintTimeConstant = 0.0;
-  G4double fScintYield1 = 1.0;
+  std::array<G4double, 3> fScintTimeConstants = {0.0, 0.0, 0.0};
+  std::array<G4double, 3> fScintYieldFractions = {1.0, 0.0, 0.0};
   G4int fScintMaterialVersion = 0;
   std::string fOutputFilename;
   std::string fOutputPath;

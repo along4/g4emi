@@ -7,6 +7,18 @@
 #include <filesystem>
 #include <limits>
 
+namespace {
+constexpr G4int kScintillationComponentCount = 3;
+
+bool IsValidScintillationComponentIndex(G4int componentIndex) {
+  return componentIndex >= 1 && componentIndex <= kScintillationComponentCount;
+}
+
+std::size_t ToZeroBasedComponentIndex(G4int componentIndex) {
+  return static_cast<std::size_t>(componentIndex - 1);
+}
+}  // namespace
+
 /**
  * Construct simulation defaults used when no UI command overrides are provided.
  *
@@ -47,8 +59,8 @@ Config::Config()
       fScintSpectrum({0.05, 0.35, 1.00, 0.45, 0.08}),
       fScintYield(10000.0),
       fScintResolutionScale(1.0),
-      fScintTimeConstant(2.1 * ns),
-      fScintYield1(1.0),
+      fScintTimeConstants({2.1 * ns, 0.0, 0.0}),
+      fScintYieldFractions({1.0, 0.0, 0.0}),
       fScintMaterialVersion(0),
       fOutputFilename("data/photon_optical_interface_hits"),
       fOutputPath(""),
@@ -457,36 +469,100 @@ void Config::SetScintResolutionScale(G4double value) {
   ++fScintMaterialVersion;
 }
 
-/// Thread-safe time-constant getter.
-G4double Config::GetScintTimeConstant() const {
+/// Thread-safe time-constants getter.
+std::array<G4double, 3> Config::GetScintTimeConstants() const {
   std::lock_guard<std::mutex> lock(fMutex);
-  return fScintTimeConstant;
+  return fScintTimeConstants;
 }
 
-/// Thread-safe time-constant setter.
+/// Thread-safe time-constants setter.
+void Config::SetScintTimeConstants(const std::array<G4double, 3>& values) {
+  for (G4double value : values) {
+    if (value < 0.0) {
+      return;
+    }
+  }
+  std::lock_guard<std::mutex> lock(fMutex);
+  fScintTimeConstants = values;
+  ++fScintMaterialVersion;
+}
+
+/// Thread-safe per-component time-constant getter (1-based index).
+G4double Config::GetScintTimeConstant(G4int componentIndex) const {
+  if (!IsValidScintillationComponentIndex(componentIndex)) {
+    return 0.0;
+  }
+  std::lock_guard<std::mutex> lock(fMutex);
+  return fScintTimeConstants[ToZeroBasedComponentIndex(componentIndex)];
+}
+
+/// Thread-safe per-component time-constant setter (1-based index).
+void Config::SetScintTimeConstant(G4int componentIndex, G4double value) {
+  if (!IsValidScintillationComponentIndex(componentIndex) || value < 0.0) {
+    return;
+  }
+  std::lock_guard<std::mutex> lock(fMutex);
+  fScintTimeConstants[ToZeroBasedComponentIndex(componentIndex)] = value;
+  ++fScintMaterialVersion;
+}
+
+/// Thread-safe yield-fractions getter.
+std::array<G4double, 3> Config::GetScintYieldFractions() const {
+  std::lock_guard<std::mutex> lock(fMutex);
+  return fScintYieldFractions;
+}
+
+/// Thread-safe yield-fractions setter.
+void Config::SetScintYieldFractions(const std::array<G4double, 3>& values) {
+  for (G4double value : values) {
+    if (value < 0.0) {
+      return;
+    }
+  }
+  std::lock_guard<std::mutex> lock(fMutex);
+  fScintYieldFractions = values;
+  ++fScintMaterialVersion;
+}
+
+/// Thread-safe per-component yield-fraction getter (1-based index).
+G4double Config::GetScintYieldFraction(G4int componentIndex) const {
+  if (!IsValidScintillationComponentIndex(componentIndex)) {
+    return 0.0;
+  }
+  std::lock_guard<std::mutex> lock(fMutex);
+  return fScintYieldFractions[ToZeroBasedComponentIndex(componentIndex)];
+}
+
+/// Thread-safe per-component yield-fraction setter (1-based index).
+void Config::SetScintYieldFraction(G4int componentIndex, G4double value) {
+  if (!IsValidScintillationComponentIndex(componentIndex) || value < 0.0) {
+    return;
+  }
+  std::lock_guard<std::mutex> lock(fMutex);
+  fScintYieldFractions[ToZeroBasedComponentIndex(componentIndex)] = value;
+  ++fScintMaterialVersion;
+}
+
+/// Compatibility getter for component-1 time constant.
+G4double Config::GetScintTimeConstant() const { return GetScintTimeConstant(1); }
+
+/// Compatibility setter for component-1 time constant.
 void Config::SetScintTimeConstant(G4double value) {
   if (value <= 0.0) {
     return;
   }
-  std::lock_guard<std::mutex> lock(fMutex);
-  fScintTimeConstant = value;
-  ++fScintMaterialVersion;
+  SetScintTimeConstant(1, value);
 }
 
-/// Thread-safe yield1 getter.
-G4double Config::GetScintYield1() const {
-  std::lock_guard<std::mutex> lock(fMutex);
-  return fScintYield1;
-}
+/// Compatibility getter for component-1 yield fraction.
+G4double Config::GetScintYield1() const { return GetScintYieldFraction(1); }
 
-/// Thread-safe yield1 setter.
+/// Compatibility setter for component-1 yield fraction.
 void Config::SetScintYield1(G4double value) {
   if (value < 0.0) {
     return;
   }
-  std::lock_guard<std::mutex> lock(fMutex);
-  fScintYield1 = value;
-  ++fScintMaterialVersion;
+  SetScintYieldFraction(1, value);
 }
 
 /// Thread-safe scintillator material-version getter.
