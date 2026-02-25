@@ -51,6 +51,7 @@ class ScintillatorCatalogTests(unittest.TestCase):
 
         materials = self._available_scintillators()
         self.assertIn("EJ200", materials)
+        self.assertIn("EJ-426", materials)
         self.assertIn("EJ-276D", materials)
         self.assertIn("EJ-276G", materials)
 
@@ -87,6 +88,16 @@ class ScintillatorCatalogTests(unittest.TestCase):
         self.assertEqual(ej276g.material.optical.constants.scint_yield.value, 8000.0)
         self.assertEqual(ej276g.material.optical.constants.time_constant.value, 13.0)
         self.assertEqual(len(ej276g.r_index.energy), 5)
+
+    def test_load_ej426(self) -> None:
+        """EJ-426 entry should load SSLG4-derived constants and curve grid."""
+
+        ej426 = self._load_scintillator("EJ-426")
+        self.assertEqual(ej426.material.name, "EJ-426")
+        self.assertEqual(ej426.material.composition.density.value, 2.42)
+        self.assertEqual(ej426.material.optical.constants.scint_yield.value, 40000.0)
+        self.assertEqual(ej426.material.optical.constants.time_constant.value, 200.0)
+        self.assertEqual(len(ej426.r_index.energy), 79)
 
     def test_mismatched_curve_energy_grid_raises(self) -> None:
         """Curve files with different energy grids should be rejected."""
