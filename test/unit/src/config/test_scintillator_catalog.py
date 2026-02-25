@@ -54,6 +54,9 @@ class ScintillatorCatalogTests(unittest.TestCase):
         self.assertIn("EJ-426", materials)
         self.assertIn("EJ-276D", materials)
         self.assertIn("EJ-276G", materials)
+        self.assertIn("CsI-Na", materials)
+        self.assertIn("CsI-Tl", materials)
+        self.assertIn("NaI-Tl", materials)
 
     def test_load_default_scintillator(self) -> None:
         """Loading without explicit id should return catalog default."""
@@ -98,6 +101,27 @@ class ScintillatorCatalogTests(unittest.TestCase):
         self.assertEqual(ej426.material.optical.constants.scint_yield.value, 40000.0)
         self.assertEqual(ej426.material.optical.constants.time_constant.value, 200.0)
         self.assertEqual(len(ej426.r_index.energy), 79)
+
+    def test_load_csi_and_nai_variants(self) -> None:
+        """CsI/NaI entries should load SSLG4-derived iodide constants."""
+
+        csi_na = self._load_scintillator("CsI-Na")
+        self.assertEqual(csi_na.material.name, "CsI(Na)")
+        self.assertEqual(csi_na.material.optical.constants.scint_yield.value, 41000.0)
+        self.assertEqual(csi_na.material.optical.constants.time_constant.value, 630.0)
+        self.assertEqual(len(csi_na.r_index.energy), 77)
+
+        csi_tl = self._load_scintillator("CsI-Tl")
+        self.assertEqual(csi_tl.material.name, "CsI(Tl)")
+        self.assertEqual(csi_tl.material.optical.constants.scint_yield.value, 54000.0)
+        self.assertEqual(csi_tl.material.optical.constants.time_constant.value, 1000.0)
+        self.assertEqual(len(csi_tl.r_index.energy), 77)
+
+        nai_tl = self._load_scintillator("NaI-Tl")
+        self.assertEqual(nai_tl.material.name, "NaI(Tl)")
+        self.assertEqual(nai_tl.material.optical.constants.scint_yield.value, 41000.0)
+        self.assertEqual(nai_tl.material.optical.constants.time_constant.value, 630.0)
+        self.assertEqual(len(nai_tl.r_index.energy), 77)
 
     def test_mismatched_curve_energy_grid_raises(self) -> None:
         """Curve files with different energy grids should be rejected."""
