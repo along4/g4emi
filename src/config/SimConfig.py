@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from datetime import date as DateType
 from datetime import datetime
+import math
 from pathlib import Path
 from pydantic import (
     AliasChoices,
@@ -117,10 +118,8 @@ class ScintillatorProperties(StrictModel):
         ):
             raise ValueError("`scintSpectrum` length must match `nKEntries`.")
         total = sum(component.yield_fraction for component in self.time_components)
-        if total <= 0.0:
-            raise ValueError("`timeComponents` must contain at least one active component.")
-        if total > 1.0 + 1.0e-9:
-            raise ValueError("`timeComponents` yield fractions must sum to <= 1.0.")
+        if not math.isclose(total, 1.0, rel_tol=0.0, abs_tol=1.0e-9):
+            raise ValueError("`timeComponents` yield fractions must sum to ~1.0.")
         for index, component in enumerate(self.time_components, start=1):
             if component.yield_fraction > 0.0 and component.time_constant <= 0.0:
                 raise ValueError(

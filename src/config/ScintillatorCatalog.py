@@ -7,6 +7,7 @@ material definitions and file-backed optical curves.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -83,13 +84,9 @@ class OpticalConstantsDefinition(StrictModel):
     @model_validator(mode="after")
     def validate_time_components(self) -> "OpticalConstantsDefinition":
         total = sum(component.yield_fraction for component in self.time_components)
-        if total <= 0.0:
+        if not math.isclose(total, 1.0, rel_tol=0.0, abs_tol=1.0e-9):
             raise ValueError(
-                "`optical.constants.timeComponents` must contain at least one active component."
-            )
-        if total > 1.0 + 1.0e-9:
-            raise ValueError(
-                "`optical.constants.timeComponents` yield fractions must sum to <= 1.0."
+                "`optical.constants.timeComponents` yield fractions must sum to ~1.0."
             )
         for index, component in enumerate(self.time_components, start=1):
             if component.yield_fraction > 0.0 and component.time_constant.value <= 0.0:
