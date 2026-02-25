@@ -4,6 +4,7 @@ This directory stores a Python-native scintillator catalog for `g4emi`.
 
 Current materials:
 - `EJ200` (default baseline)
+- `EJ-426` (SSLG4-derived ZnS:Ag/LiF-6 style entry; Li-6 enrichment noted)
 - `EJ-276D` (SSLG4-derived optical curves/constants)
 - `EJ-276G` (SSLG4-derived optical curves/constants)
 
