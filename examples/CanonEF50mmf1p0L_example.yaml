@@ -71,9 +71,12 @@ Metadata:
   date: 2026-02-19
   version: ScintPiX v0.1
   description: Canon EF 50 mm f/1.0L simulation configuration.
-  WorkingDirectory: .
-  OutputInfo:
-    DataDirectory: data
-    LogDirectory: data/logs
-    OutputFormat: hdf5
-  SimulationRunID: CanonEF50mmf1p0L_run
+  RunEnvironment:
+    SimulationRunID: CanonEF50mmf1p0L_run
+    WorkingDirectory: data
+    MacroDirectory: macros
+    LogDirectory: logs
+    OutputInfo:
+      SimulatedPhotonsDirectory: simulatedPhotons
+      TransportedPhotonsDirectory: transportedPhotons
+      OutputFormat: hdf5

@@ -20,8 +20,8 @@ from src.config.ConfigIO import (  # noqa: E402
     ensure_output_directories,
     from_yaml,
     load_yaml_mapping,
+    resolve_run_environment_directory,
     resolve_default_macro_path,
-    resolve_output_stage_directory,
     write_macro,
 )
 from src.config.utilsConfig import resolve_optional_path  # noqa: E402
@@ -62,7 +62,7 @@ def main() -> None:
     print(f"Output stage directory: {output_stage_dir}")
     print(
         "Expected HDF5 target: "
-        f"{resolve_output_stage_directory(config) / 'photon_optical_interface_hits.h5'}"
+        f"{resolve_run_environment_directory(config, 'simulated_photons') / 'photon_optical_interface_hits.h5'}"
     )
     print(f"Run with: pixi run g4emi {effective_macro_path}")
 
