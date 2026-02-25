@@ -31,7 +31,7 @@ import math
 from pathlib import Path
 import shlex
 import sys
-from typing import Any
+from typing import Any, Literal
 
 try:
     from src.config.SimConfig import SimConfig, default_sim_config
@@ -51,7 +51,7 @@ except ModuleNotFoundError:  # pragma: no cover - dependency availability varies
 
 
 SIMULATED_PHOTONS_STAGE_DIR = "simulatedPhotons"
-TRANSPORT_PHOTONS_STAGE_DIR = "transportPhotons"
+TRANSPORT_PHOTONS_STAGE_DIR = "transportedPhotons"
 MACROS_STAGE_DIR = "macros"
 DEFAULT_GENERATED_MACRO_FILENAME = "generated_from_config.mac"
 DEFAULT_OUTPUT_FILENAME_BASE = "photon_optical_interface_hits"
@@ -342,16 +342,19 @@ def _default_import_template(macro_path: Path) -> SimConfig:
 
     payload = default_sim_config().model_dump(mode="python")
     metadata = payload["metadata"]
-    output_info = metadata["output_info"]
+    run_environment = metadata["run_environment"]
+    output_info = run_environment["output_info"]
 
     metadata["author"] = "Macro Import"
     metadata["date"] = DateType.today().isoformat()
     metadata["version"] = "imported"
     metadata["description"] = f"Imported from macro: {macro_path.name}"
-    metadata["working_directory"] = str(macro_path.resolve().parent)
-    metadata["simulation_run_id"] = macro_path.stem
-    output_info["data_directory"] = "data"
-    output_info["log_directory"] = "data/logs"
+    run_environment["simulation_run_id"] = macro_path.stem
+    run_environment["working_directory"] = "data"
+    run_environment["macro_directory"] = "macros"
+    run_environment["log_directory"] = "logs"
+    output_info["simulated_photons_dir"] = SIMULATED_PHOTONS_STAGE_DIR
+    output_info["transported_photons_dir"] = TRANSPORT_PHOTONS_STAGE_DIR
     output_info["output_format"] = "hdf5"
 
     # Macro files may omit `/run/beamOn` and runtime-control preamble commands.
@@ -432,7 +435,8 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
     payload = base.model_dump(mode="python")
 
     metadata = payload["metadata"]
-    output_info = metadata["output_info"]
+    run_environment = metadata["run_environment"]
+    output_info = run_environment["output_info"]
     scintillator = payload["scintillator"]
     scint_properties = scintillator.get("properties")
     if not isinstance(scint_properties, dict):
@@ -457,6 +461,8 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
     size_y_mm: float | None = None
     aperture_radius_mm: float | None = None
     parsed_thickness_mm: float | None = None
+    parsed_output_path: str | None = None
+    parsed_output_runname: str | None = None
 
     for raw_line in path.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
@@ -474,10 +480,10 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
             output_info["output_format"] = tokens[1].strip().lower()
             continue
         if command == "/output/path" and len(tokens) >= 2:
-            output_info["data_directory"] = tokens[1]
+            parsed_output_path = tokens[1]
             continue
         if command == "/output/runname" and len(tokens) >= 2:
-            metadata["simulation_run_id"] = tokens[1]
+            parsed_output_runname = tokens[1].strip()
             continue
         if command == "/control/verbose" and len(tokens) >= 2:
             if simulation is None:
@@ -770,6 +776,14 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
     if energy.get("type", "").strip().lower() == "mono":
         energy.setdefault("mono_mev", 1.0)
 
+    # Consolidate Geant4 output commands into run-environment layout.
+    # /output/path <base>     -> WorkingDirectory=<base>
+    # /output/runname <id>    -> SimulationRunID=<id>
+    if parsed_output_runname is not None and parsed_output_runname.strip():
+        run_environment["simulation_run_id"] = parsed_output_runname.strip()
+    if parsed_output_path is not None:
+        run_environment["working_directory"] = str(Path(parsed_output_path))
+
     return SimConfig.model_validate(payload)
 
 
@@ -924,7 +938,7 @@ def write_yaml(
     Notes
     -----
     - Uses ``by_alias=True`` to preserve user-facing key aliases such as
-      ``Metadata``, ``OutputInfo``, and camelCase optical/scintillator keys.
+      ``Metadata``, ``RunEnvironment``, and camelCase optical/scintillator keys.
     - Uses ``sort_keys=False`` to retain a readable, model-order output layout.
     """
 
@@ -943,76 +957,62 @@ def write_yaml(
 
 
 def _working_directory(config: SimConfig) -> Path:
-    """Resolve ``Metadata.WorkingDirectory`` into absolute path form."""
+    """Resolve ``Metadata.RunEnvironment.WorkingDirectory`` into absolute form."""
 
-    return resolve_path(config.metadata.working_directory)
-
-
-def resolve_data_directory(config: SimConfig) -> Path:
-    """Resolve ``Metadata.OutputInfo.DataDirectory`` under working directory.
-
-    Relative ``DataDirectory`` values are interpreted relative to
-    ``Metadata.WorkingDirectory``.
-    """
-
-    return resolve_path(
-        config.metadata.output_info.data_directory,
-        base_directory=_working_directory(config),
-    )
-
-
-def resolve_log_directory(config: SimConfig) -> Path:
-    """Resolve ``Metadata.OutputInfo.LogDirectory`` under working directory.
-
-    Relative ``LogDirectory`` values are interpreted relative to
-    ``Metadata.WorkingDirectory``.
-    """
-
-    return resolve_path(
-        config.metadata.output_info.log_directory,
-        base_directory=_working_directory(config),
-    )
+    return resolve_path(config.metadata.run_environment.working_directory)
 
 
 def _run_root(config: SimConfig) -> Path:
-    """Resolve run root directory.
+    """Resolve run root directory as `<WorkingDirectory>/<SimulationRunID>`."""
 
-    Result is:
-    - ``<data-directory>/<SimulationRunID>/`` when run id is non-empty
-    - ``<data-directory>/`` when run id is blank
-    """
-
-    run_id = config.metadata.simulation_run_id.strip()
+    run_id = config.metadata.run_environment.simulation_run_id.strip()
     if not run_id:
-        return resolve_data_directory(config)
-    return (resolve_data_directory(config) / run_id).resolve()
+        return _working_directory(config)
+    return (_working_directory(config) / run_id).resolve()
 
 
-def resolve_output_stage_directory(config: SimConfig) -> Path:
-    """Resolve output stage directory used by simulation data writers.
+def resolve_run_environment_directory(
+    config: SimConfig,
+    target: Literal[
+        "data",
+        "run_root",
+        "macro",
+        "log",
+        "simulated_photons",
+        "transported_photons",
+    ],
+) -> Path:
+    """Resolve a run-environment directory by semantic target token.
 
-    Returns ``<run-root>/simulatedPhotons/``.
+    Supported targets:
+    - ``data``: ``RunEnvironment.WorkingDirectory``
+    - ``run_root``: ``<WorkingDirectory>/<SimulationRunID>``
+    - ``macro``: ``<run_root>/<MacroDirectory>``
+    - ``log``: ``<run_root>/<LogDirectory>``
+    - ``simulated_photons``: ``<run_root>/<SimulatedPhotonsDirectory>``
+    - ``transported_photons``: ``<run_root>/<TransportedPhotonsDirectory>``
     """
 
-    return (_run_root(config) / SIMULATED_PHOTONS_STAGE_DIR).resolve()
+    if target == "data":
+        return _working_directory(config)
+    if target == "run_root":
+        return _run_root(config)
 
-
-def resolve_transport_photons_stage_directory(config: SimConfig) -> Path:
-    """Resolve transport stage directory.
-
-    Returns ``<run-root>/transportPhotons/``.
-    """
-
-    return (_run_root(config) / TRANSPORT_PHOTONS_STAGE_DIR).resolve()
-
-
-def resolve_macro_stage_directory(config: SimConfig) -> Path:
-    """Resolve macro stage directory.
-
-    Returns ``<run-root>/macros/``.
-    """
-
-    return (_run_root(config) / MACROS_STAGE_DIR).resolve()
+    env = config.metadata.run_environment
+    target_directory: dict[str, str] = {
+        "macro": env.macro_directory,
+        "log": env.log_directory,
+        "simulated_photons": env.output_info.simulated_photons_dir,
+        "transported_photons": env.output_info.transported_photons_dir,
+    }
+    resolved = target_directory.get(target)
+    if resolved is None:
+        raise ValueError(
+            "Unsupported run-environment target. "
+            "Expected one of: data, run_root, macro, log, "
+            "simulated_photons, transported_photons."
+        )
+    return resolve_path(resolved, base_directory=_run_root(config))
 
 
 def resolve_default_macro_path(config: SimConfig) -> Path:
@@ -1023,11 +1023,13 @@ def resolve_default_macro_path(config: SimConfig) -> Path:
     - ``generated_from_config.mac`` otherwise
     """
 
-    run_name = config.metadata.simulation_run_id.strip()
+    run_name = config.metadata.run_environment.simulation_run_id.strip()
     macro_filename = (
         f"{run_name}.mac" if run_name else DEFAULT_GENERATED_MACRO_FILENAME
     )
-    return (resolve_macro_stage_directory(config) / macro_filename).resolve()
+    return (
+        resolve_run_environment_directory(config, "macro") / macro_filename
+    ).resolve()
 
 
 def _normalize_output_format_token(value: str) -> str:
@@ -1048,20 +1050,20 @@ def output_commands(config: SimConfig) -> list[str]:
     """Build Geant4 ``/output/*`` command lines from metadata settings.
 
     Command mapping:
-    - ``OutputInfo.OutputFormat`` -> ``/output/format``
-    - resolved ``DataDirectory``  -> ``/output/path``
-    - fixed base filename         -> ``/output/filename``
-    - ``SimulationRunID``         -> ``/output/runname``
+    - ``RunEnvironment.OutputInfo.OutputFormat`` -> ``/output/format``
+    - ``RunEnvironment.WorkingDirectory``            -> ``/output/path``
+    - fixed base filename                          -> ``/output/filename``
+    - ``RunEnvironment.SimulationRunID``          -> ``/output/runname``
 
     The filename base is fixed so simulation artifacts remain consistently named
     while directory/run identifiers control grouping.
     """
 
     return [
-        f"/output/format {_normalize_output_format_token(config.metadata.output_info.output_format)}",
-        f"/output/path {resolve_data_directory(config)}",
+        f"/output/format {_normalize_output_format_token(config.metadata.run_environment.output_info.output_format)}",
+        f"/output/path {resolve_run_environment_directory(config, 'data')}",
         f"/output/filename {DEFAULT_OUTPUT_FILENAME_BASE}",
-        f"/output/runname {config.metadata.simulation_run_id}",
+        f"/output/runname {config.metadata.run_environment.simulation_run_id}",
     ]
 
 
@@ -1203,20 +1205,22 @@ def ensure_output_directories(config: SimConfig) -> Path:
     """Create and return the simulation output stage directory.
 
     Creates:
-    - output stage: `<data>/<run-id>/simulatedPhotons/`
-    - transport stage: `<data>/<run-id>/transportPhotons/`
-    - log directory from `Metadata.OutputInfo.LogDirectory`
+    - output stage from `RunEnvironment.OutputInfo.SimulatedPhotonsDirectory`
+    - transport stage from `RunEnvironment.OutputInfo.TransportedPhotonsDirectory`
+    - log directory from `RunEnvironment.LogDirectory`
     """
 
     # Stage directories are created explicitly from Python so runtime C++ IO can
     # assume parents already exist.
-    output_stage_dir = resolve_output_stage_directory(config)
+    output_stage_dir = resolve_run_environment_directory(config, "simulated_photons")
     output_stage_dir.mkdir(parents=True, exist_ok=True)
 
-    transport_stage_dir = resolve_transport_photons_stage_directory(config)
+    transport_stage_dir = resolve_run_environment_directory(
+        config, "transported_photons"
+    )
     transport_stage_dir.mkdir(parents=True, exist_ok=True)
 
-    log_dir = resolve_log_directory(config)
+    log_dir = resolve_run_environment_directory(config, "log")
     log_dir.mkdir(parents=True, exist_ok=True)
 
     return output_stage_dir
@@ -1225,7 +1229,7 @@ def ensure_output_directories(config: SimConfig) -> Path:
 def ensure_macro_directories(config: SimConfig) -> Path:
     """Create and return the macros stage directory for this config."""
 
-    macro_stage_dir = resolve_macro_stage_directory(config)
+    macro_stage_dir = resolve_run_environment_directory(config, "macro")
     macro_stage_dir.mkdir(parents=True, exist_ok=True)
     return macro_stage_dir
 

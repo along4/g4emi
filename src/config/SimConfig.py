@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from datetime import date as DateType
 from datetime import datetime
+from pathlib import Path
 from pydantic import (
     AliasChoices,
     BaseModel,
@@ -245,16 +246,72 @@ class OpticalConfig(StrictModel):
         return self
 
 
-class OutputInfo(StrictModel):
-    """Output block under metadata with YAML alias preservation.
+class RunEnvironmentOutputInfo(StrictModel):
+    """Output staging + format settings nested under `RunEnvironment`.
 
-    Aliases (`DataDirectory`, `LogDirectory`, `OutputFormat`) are kept to match
-    user-facing YAML conventions while Python uses snake_case attributes.
+    Directory values are interpreted relative to
+    `Metadata.RunEnvironment.WorkingDirectory` when given as relative paths.
     """
 
-    data_directory: str = Field(alias="DataDirectory", min_length=1)
-    log_directory: str = Field(alias="LogDirectory", min_length=1)
-    output_format: str = Field(alias="OutputFormat", min_length=1)
+    simulated_photons_dir: str = Field(
+        default="simulatedPhotons",
+        validation_alias=AliasChoices(
+            "SimulatedPhotonsDirectory",
+            "simulated_photons_dir",
+            "simulatedPhotonsDir",
+        ),
+        serialization_alias="SimulatedPhotonsDirectory",
+        min_length=1,
+    )
+    transported_photons_dir: str = Field(
+        default="transportedPhotons",
+        validation_alias=AliasChoices(
+            "TransportedPhotonsDirectory",
+            "transported_photons_dir",
+            "transportedPhotonsDir",
+        ),
+        serialization_alias="TransportedPhotonsDirectory",
+        min_length=1,
+    )
+    output_format: str = Field(alias="OutputFormat", default="hdf5", min_length=1)
+
+
+class RunEnvironmentConfig(StrictModel):
+    """Run directory layout and execution-path context.
+
+    Default layout policy:
+    - `SimulationRunID`: "example"
+    - `WorkingDirectory`: `data/`
+    - `MacroDirectory`: `macros/`
+    - `LogDirectory`: `logs/`
+    - `OutputInfo.SimulatedPhotonsDirectory`: `simulatedPhotons/`
+    - `OutputInfo.TransportedPhotonsDirectory`: `transportedPhotons/`
+    """
+
+    simulation_run_id: str = Field(alias="SimulationRunID", default="example", min_length=1)
+    working_directory: str | None = Field(default=None, alias="WorkingDirectory")
+    macro_directory: str | None = Field(default=None, alias="MacroDirectory")
+    log_directory: str | None = Field(default=None, alias="LogDirectory")
+    output_info: RunEnvironmentOutputInfo = Field(
+        alias="OutputInfo", default_factory=RunEnvironmentOutputInfo
+    )
+
+    @model_validator(mode="after")
+    def apply_layout_defaults(self) -> "RunEnvironmentConfig":
+        """Fill directory defaults for run environment.
+
+        WorkingDirectory defaults to `data`.
+        Run-specific directories are resolved later as
+        `<WorkingDirectory>/<SimulationRunID>/...`.
+        """
+
+        if self.working_directory is None or not self.working_directory.strip():
+            self.working_directory = "data"
+        if self.macro_directory is None or not self.macro_directory.strip():
+            self.macro_directory = "macros"
+        if self.log_directory is None or not self.log_directory.strip():
+            self.log_directory = "logs"
+        return self
 
 
 class MetadataConfig(StrictModel):
@@ -264,9 +321,11 @@ class MetadataConfig(StrictModel):
     date: str = Field(min_length=1)
     version: str = Field(min_length=1)
     description: str = Field(min_length=1)
-    working_directory: str = Field(alias="WorkingDirectory", min_length=1)
-    output_info: OutputInfo = Field(alias="OutputInfo")
-    simulation_run_id: str = Field(alias="SimulationRunID", min_length=1)
+    run_environment: RunEnvironmentConfig = Field(
+        validation_alias=AliasChoices("RunEnvironment", "run_environment"),
+        serialization_alias="RunEnvironment",
+        default_factory=RunEnvironmentConfig,
+    )
 
     @field_validator("date", mode="before")
     @classmethod
@@ -429,13 +488,17 @@ def default_sim_config() -> SimConfig:
                 "date": "YEAR-MONTH-DAY",
                 "version": "ScintPiX [VERSION]",
                 "description": "Simulation configuration for scintillator and optical system.",
-                "WorkingDirectory": "./",
-                "OutputInfo": {
-                    "DataDirectory": "output/",
-                    "LogDirectory": "logs/",
-                    "OutputFormat": "hdf5",
+                "RunEnvironment": {
+                    "SimulationRunID": "sim_001",
+                    "WorkingDirectory": "data",
+                    "MacroDirectory": "macros",
+                    "LogDirectory": "logs",
+                    "OutputInfo": {
+                        "SimulatedPhotonsDirectory": "simulatedPhotons",
+                        "TransportedPhotonsDirectory": "transportedPhotons",
+                        "OutputFormat": "hdf5",
+                    },
                 },
-                "SimulationRunID": "sim_001",
             },
         }
     )

@@ -35,7 +35,7 @@ class MacroCommandGenerationTests(unittest.TestCase):
                 from_macro,
                 from_yaml,
                 macro_commands,
-                resolve_data_directory,
+                resolve_run_environment_directory,
                 write_macro,
             )
         except ModuleNotFoundError as exc:
@@ -56,7 +56,9 @@ class MacroCommandGenerationTests(unittest.TestCase):
         cls._from_macro = staticmethod(from_macro)
         cls._from_yaml = staticmethod(from_yaml)
         cls._macro_commands = staticmethod(macro_commands)
-        cls._resolve_data_directory = staticmethod(resolve_data_directory)
+        cls._resolve_run_environment_directory = staticmethod(
+            resolve_run_environment_directory
+        )
         cls._write_macro = staticmethod(write_macro)
 
     @staticmethod
@@ -128,12 +130,15 @@ class MacroCommandGenerationTests(unittest.TestCase):
                   date: 2026-02-19
                   version: test
                   description: Validate macro command generation.
-                  WorkingDirectory: .
-                  OutputInfo:
-                    DataDirectory: data
-                    LogDirectory: data/logs
-                    OutputFormat: hdf5
-                  SimulationRunID: unit_macro_test
+                  RunEnvironment:
+                    SimulationRunID: unit_macro_test
+                    WorkingDirectory: data
+                    MacroDirectory: macros
+                    LogDirectory: logs
+                    OutputInfo:
+                      SimulatedPhotonsDirectory: simulatedPhotons
+                      TransportedPhotonsDirectory: transportedPhotons
+                      OutputFormat: hdf5
                 """
             ).strip()
         ]
@@ -176,7 +181,7 @@ class MacroCommandGenerationTests(unittest.TestCase):
 
             expected = [
                 "/output/format hdf5",
-                f"/output/path {self._resolve_data_directory(config)}",
+                f"/output/path {self._resolve_run_environment_directory(config, 'data')}",
                 "/output/filename photon_optical_interface_hits",
                 "/output/runname unit_macro_test",
                 "/scintillator/geom/material EJ200",
@@ -463,12 +468,15 @@ class MacroCommandGenerationTests(unittest.TestCase):
                       date: 2026-02-19
                       version: test
                       description: Validate catalogId hydration.
-                      WorkingDirectory: .
-                      OutputInfo:
-                        DataDirectory: data
-                        LogDirectory: data/logs
-                        OutputFormat: hdf5
-                      SimulationRunID: unit_catalog_hydration
+                      RunEnvironment:
+                        SimulationRunID: unit_catalog_hydration
+                        WorkingDirectory: data
+                        MacroDirectory: macros
+                        LogDirectory: logs
+                        OutputInfo:
+                          SimulatedPhotonsDirectory: simulatedPhotons
+                          TransportedPhotonsDirectory: transportedPhotons
+                          OutputFormat: hdf5
                     """
                 ).strip()
                 + "\n",
