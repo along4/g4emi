@@ -49,6 +49,7 @@ try:
         _parse_length_tokens,
         _parse_numeric_list_with_optional_unit,
         _parse_scint_yield_to_per_mev,
+        _parse_time_to_ns,
         _parse_vector3,
         assert_directory_writable,
         assert_distinct_paths,
@@ -72,6 +73,7 @@ except ModuleNotFoundError:
         _parse_length_tokens,
         _parse_numeric_list_with_optional_unit,
         _parse_scint_yield_to_per_mev,
+        _parse_time_to_ns,
         _parse_vector3,
         assert_directory_writable,
         assert_distinct_paths,
@@ -149,6 +151,21 @@ def _require_yaml_dependency() -> Any:
             "Install it in your environment (for example: pixi add pyyaml)."
         )
     return yaml
+
+
+def _parse_scintillation_component_index(
+    command: str,
+    *,
+    prefix: str,
+) -> int | None:
+    """Return zero-based scintillation component index for indexed commands."""
+
+    if not command.startswith(prefix):
+        return None
+    suffix = command[len(prefix) :].strip()
+    if suffix not in {"1", "2", "3"}:
+        return None
+    return int(suffix) - 1
 
 
 def source_commands(config: SimConfig) -> list[str]:
@@ -297,6 +314,18 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
     if not isinstance(scint_properties, dict):
         scint_properties = {}
         scintillator["properties"] = scint_properties
+    time_components = scint_properties.get("time_components")
+    if (
+        not isinstance(time_components, list)
+        or len(time_components) != 3
+        or not all(isinstance(component, dict) for component in time_components)
+    ):
+        time_components = [
+            {"time_constant": 0.0, "yield_fraction": 1.0},
+            {"time_constant": 0.0, "yield_fraction": 0.0},
+            {"time_constant": 0.0, "yield_fraction": 0.0},
+        ]
+        scint_properties["time_components"] = time_components
     optical = payload["optical"]
     geometry = optical["geometry"]
     detector = optical["sensitive_detector_config"]
@@ -547,6 +576,31 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
             continue
         if command == "/scintillator/properties/resolutionScale" and len(tokens) >= 2:
             scint_properties["resolution_scale"] = float(tokens[1])
+            continue
+        component_index = _parse_scintillation_component_index(
+            command,
+            prefix="/scintillator/properties/timeConstant",
+        )
+        if component_index is not None:
+            time_components[component_index]["time_constant"] = _parse_time_to_ns(
+                tokens, command
+            )
+            continue
+        component_index = _parse_scintillation_component_index(
+            command,
+            prefix="/scintillator/properties/yieldFraction",
+        )
+        if component_index is not None:
+            if len(tokens) < 2:
+                raise ValueError(
+                    f"Command '{command}' requires scalar value token, got: {tokens!r}"
+                )
+            try:
+                time_components[component_index]["yield_fraction"] = float(tokens[1])
+            except ValueError as exc:
+                raise ValueError(
+                    f"Command '{command}' has non-numeric value token: {tokens[1]!r}"
+                ) from exc
             continue
         if command in {
             "/scintillator/properties/timeConstant",
@@ -1108,8 +1162,17 @@ def geometry_commands(config: SimConfig) -> list[str]:
             "/scintillator/properties/resolutionScale "
             f"{scint.properties.resolution_scale:g}"
         )
-    # Multi-component time constants are represented in YAML (`timeComponents`)
-    # and catalog data. Macro command emission does not encode these values.
+    # Emit all 3 components explicitly (including zero-valued inactive entries)
+    # so macro snapshots are deterministic and complete.
+    for index, component in enumerate(scint.properties.time_components, start=1):
+        commands.append(
+            "/scintillator/properties/timeConstant"
+            f"{index} {component.time_constant:g} ns"
+        )
+        commands.append(
+            "/scintillator/properties/yieldFraction"
+            f"{index} {component.yield_fraction:g}"
+        )
 
     # Circular detector shape implies an aperture mask command in this
     # simulation pipeline.

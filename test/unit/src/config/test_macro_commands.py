@@ -199,6 +199,12 @@ class MacroCommandGenerationTests(unittest.TestCase):
                 "/scintillator/geom/posZ 0 mm",
                 "/scintillator/properties/photonEnergy 2.8,3,3.2 eV",
                 "/scintillator/properties/rIndex 1.58,1.59,1.6",
+                "/scintillator/properties/timeConstant1 2.1 ns",
+                "/scintillator/properties/yieldFraction1 1",
+                "/scintillator/properties/timeConstant2 0 ns",
+                "/scintillator/properties/yieldFraction2 0",
+                "/scintillator/properties/timeConstant3 0 ns",
+                "/scintillator/properties/yieldFraction3 0",
                 "/scintillator/geom/apertureRadius 18 mm",
                 "/optical_interface/geom/sizeX 60.55 mm",
                 "/optical_interface/geom/sizeY 60.55 mm",
@@ -553,6 +559,12 @@ class MacroCommandGenerationTests(unittest.TestCase):
                         "/scintillator/properties/scintSpectrum 0.05,0.35,1.0,0.45,0.08",
                         "/scintillator/properties/scintYield 10000",
                         "/scintillator/properties/resolutionScale 1.0",
+                        "/scintillator/properties/timeConstant1 2.1 ns",
+                        "/scintillator/properties/yieldFraction1 1.0",
+                        "/scintillator/properties/timeConstant2 0 ns",
+                        "/scintillator/properties/yieldFraction2 0.0",
+                        "/scintillator/properties/timeConstant3 0 ns",
+                        "/scintillator/properties/yieldFraction3 0.0",
                         "/optical_interface/geom/sizeX 60.55 mm",
                         "/optical_interface/geom/sizeY 60.55 mm",
                         "/optical_interface/geom/thickness 0.1 mm",
@@ -578,6 +590,8 @@ class MacroCommandGenerationTests(unittest.TestCase):
             self.assertAlmostEqual(props.scint_yield or 0.0, 10000.0)
             self.assertAlmostEqual(props.resolution_scale or 0.0, 1.0)
             self.assertAlmostEqual(props.time_components[0].yield_fraction, 1.0)
+            self.assertAlmostEqual(props.time_components[1].yield_fraction, 0.0)
+            self.assertAlmostEqual(props.time_components[2].yield_fraction, 0.0)
 
     def test_from_macro_rejects_legacy_time_component_commands(self) -> None:
         """Legacy single-component time commands should be rejected."""

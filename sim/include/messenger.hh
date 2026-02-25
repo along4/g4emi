@@ -3,6 +3,8 @@
 
 #include "G4UImessenger.hh"
 
+#include <array>
+
 class Config;
 class G4UIdirectory;
 class G4UIcmdWithADouble;
@@ -54,8 +56,10 @@ class Messenger : public G4UImessenger {
   G4UIcmdWithAString* fScintSpectrumCmd = nullptr;
   G4UIcmdWithADouble* fScintYieldCmd = nullptr;
   G4UIcmdWithADouble* fScintResolutionScaleCmd = nullptr;
-  G4UIcmdWithADoubleAndUnit* fScintTimeConstantCmd = nullptr;
-  G4UIcmdWithADouble* fScintYield1Cmd = nullptr;
+  std::array<G4UIcmdWithADoubleAndUnit*, 3> fScintTimeConstantCmds = {
+      nullptr, nullptr, nullptr};
+  std::array<G4UIcmdWithADouble*, 3> fScintYieldFractionCmds = {
+      nullptr, nullptr, nullptr};
 
   /// Optical-interface geometry commands (size + thickness).
   G4UIcmdWithADoubleAndUnit* fOpticalInterfaceXCmd = nullptr;

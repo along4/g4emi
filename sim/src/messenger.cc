@@ -237,19 +237,26 @@ Messenger::Messenger(Config* config) : fConfig(config) {
   fScintResolutionScaleCmd->SetRange("resolutionScale > 0.");
   fScintResolutionScaleCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 
-  fScintTimeConstantCmd =
-      new G4UIcmdWithADoubleAndUnit("/scintillator/properties/timeConstant", this);
-  fScintTimeConstantCmd->SetGuidance("Set scintillation time constant");
-  fScintTimeConstantCmd->SetParameterName("timeConstant", false);
-  fScintTimeConstantCmd->SetUnitCategory("Time");
-  fScintTimeConstantCmd->SetRange("timeConstant > 0.");
-  fScintTimeConstantCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
+  for (std::size_t i = 0; i < fScintTimeConstantCmds.size(); ++i) {
+    const auto componentNumber = std::to_string(i + 1);
+    const auto timeCommand = "/scintillator/properties/timeConstant" + componentNumber;
+    fScintTimeConstantCmds[i] =
+        new G4UIcmdWithADoubleAndUnit(timeCommand.c_str(), this);
+    fScintTimeConstantCmds[i]->SetGuidance(
+        ("Set scintillation time constant for component " + componentNumber).c_str());
+    fScintTimeConstantCmds[i]->SetParameterName("timeConstant", false);
+    fScintTimeConstantCmds[i]->SetUnitCategory("Time");
+    fScintTimeConstantCmds[i]->SetRange("timeConstant >= 0.");
+    fScintTimeConstantCmds[i]->AvailableForStates(G4State_PreInit, G4State_Idle);
 
-  fScintYield1Cmd = new G4UIcmdWithADouble("/scintillator/properties/yield1", this);
-  fScintYield1Cmd->SetGuidance("Set SCINTILLATIONYIELD1 component fraction");
-  fScintYield1Cmd->SetParameterName("yield1", false);
-  fScintYield1Cmd->SetRange("yield1 >= 0.");
-  fScintYield1Cmd->AvailableForStates(G4State_PreInit, G4State_Idle);
+    const auto yieldCommand = "/scintillator/properties/yieldFraction" + componentNumber;
+    fScintYieldFractionCmds[i] = new G4UIcmdWithADouble(yieldCommand.c_str(), this);
+    fScintYieldFractionCmds[i]->SetGuidance(
+        ("Set scintillation yield fraction for component " + componentNumber).c_str());
+    fScintYieldFractionCmds[i]->SetParameterName("yieldFraction", false);
+    fScintYieldFractionCmds[i]->SetRange("yieldFraction >= 0.");
+    fScintYieldFractionCmds[i]->AvailableForStates(G4State_PreInit, G4State_Idle);
+  }
 
   // Optical-interface dimensions (X, Y) and thickness (Z).
   fOpticalInterfaceXCmd =
@@ -352,8 +359,12 @@ Messenger::~Messenger() {
   delete fGeomScintPosZCmd;
   delete fGeomScintPosYCmd;
   delete fGeomScintPosXCmd;
-  delete fScintYield1Cmd;
-  delete fScintTimeConstantCmd;
+  for (auto* command : fScintYieldFractionCmds) {
+    delete command;
+  }
+  for (auto* command : fScintTimeConstantCmds) {
+    delete command;
+  }
   delete fScintResolutionScaleCmd;
   delete fScintYieldCmd;
   delete fScintSpectrumCmd;
@@ -548,17 +559,24 @@ void Messenger::SetNewValue(G4UIcommand* command, G4String newValue) {
     return;
   }
 
-  if (command == fScintTimeConstantCmd) {
-    fConfig->SetScintTimeConstant(
-        fScintTimeConstantCmd->GetNewDoubleValue(newValue));
-    NotifyGeometryChanged();
-    return;
+  for (std::size_t i = 0; i < fScintTimeConstantCmds.size(); ++i) {
+    if (command == fScintTimeConstantCmds[i]) {
+      fConfig->SetScintTimeConstant(
+          static_cast<G4int>(i + 1),
+          fScintTimeConstantCmds[i]->GetNewDoubleValue(newValue));
+      NotifyGeometryChanged();
+      return;
+    }
   }
 
-  if (command == fScintYield1Cmd) {
-    fConfig->SetScintYield1(fScintYield1Cmd->GetNewDoubleValue(newValue));
-    NotifyGeometryChanged();
-    return;
+  for (std::size_t i = 0; i < fScintYieldFractionCmds.size(); ++i) {
+    if (command == fScintYieldFractionCmds[i]) {
+      fConfig->SetScintYieldFraction(
+          static_cast<G4int>(i + 1),
+          fScintYieldFractionCmds[i]->GetNewDoubleValue(newValue));
+      NotifyGeometryChanged();
+      return;
+    }
   }
 
   // Optical-interface dimensions are controlled in dedicated /optical_interface/geom subtree.
