@@ -3,7 +3,7 @@
 # Purpose:
 # - Demonstrate the required fixed-size 3-entry `timeComponents` structure.
 # - Use catalogId=EJ-276D for baseline optical/material hydration.
-# - Keep macro generation runnable with current simulation support by leaving
+# - Keep schema-valid defaults for single-profile execution by leaving
 #   secondary/tertiary yields at zero.
 
 scintillator:
@@ -18,7 +18,7 @@ scintillator:
     z_mm: 20.0
   properties:
     # Explicitly provide all 3 components to satisfy schema.
-    # Only component 1 is active for current macro emission.
+    # Only component 1 is active in this example profile.
     timeComponents:
       - timeConstant: 13.0
         yieldFraction: 1.0
