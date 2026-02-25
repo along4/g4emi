@@ -68,6 +68,14 @@ class ScintillatorCatalogTests(unittest.TestCase):
         self.assertEqual(len(loaded.r_index.energy), 5)
         self.assertEqual(loaded.r_index.energy[0], 2.0)
         self.assertEqual(loaded.r_index.value[0], 1.58)
+        self.assertEqual(
+            [c.time_constant.value for c in loaded.material.optical.constants.time_components],
+            [2.1, 0.0, 0.0],
+        )
+        self.assertEqual(
+            [c.yield_fraction for c in loaded.material.optical.constants.time_components],
+            [1.0, 0.0, 0.0],
+        )
 
     def test_load_material_definition(self) -> None:
         """Material-only loader should parse metadata/constants."""

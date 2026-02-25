@@ -501,6 +501,20 @@ class MacroCommandGenerationTests(unittest.TestCase):
                 config.scintillator.properties.time_components[0].time_constant,
                 2.1,
             )
+            self.assertEqual(
+                [
+                    component.time_constant
+                    for component in config.scintillator.properties.time_components
+                ],
+                [2.1, 0.0, 0.0],
+            )
+            self.assertEqual(
+                [
+                    component.yield_fraction
+                    for component in config.scintillator.properties.time_components
+                ],
+                [1.0, 0.0, 0.0],
+            )
 
             commands = self._macro_commands(config)
             self.assertIn("/scintillator/geom/material EJ200", commands)
