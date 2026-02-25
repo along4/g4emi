@@ -36,6 +36,7 @@ class MacroCommandGenerationTests(unittest.TestCase):
                 from_yaml,
                 macro_commands,
                 resolve_run_environment_directory,
+                resolve_run_environment_paths,
                 write_macro,
             )
         except ModuleNotFoundError as exc:
@@ -59,20 +60,28 @@ class MacroCommandGenerationTests(unittest.TestCase):
         cls._resolve_run_environment_directory = staticmethod(
             resolve_run_environment_directory
         )
+        cls._resolve_run_environment_paths = staticmethod(
+            resolve_run_environment_paths
+        )
         cls._write_macro = staticmethod(write_macro)
 
     @staticmethod
     def _write_yaml_config(
         destination: Path,
         *,
+        simulation_run_id: str = "unit_macro_test",
+        working_directory: str | None = None,
         number_of_particles: int | None = None,
         runtime_controls: dict[str, object] | None = None,
     ) -> Path:
         """Write a representative hierarchical YAML config and return its path."""
 
+        if working_directory is None:
+            working_directory = destination.as_posix()
+
         yaml_sections = [
             textwrap.dedent(
-                """
+                f"""
                 scintillator:
                   position_mm:
                     x_mm: 0.0
@@ -131,8 +140,8 @@ class MacroCommandGenerationTests(unittest.TestCase):
                   version: test
                   description: Validate macro command generation.
                   RunEnvironment:
-                    SimulationRunID: unit_macro_test
-                    WorkingDirectory: data
+                    SimulationRunID: {simulation_run_id}
+                    WorkingDirectory: {working_directory}
                     MacroDirectory: macros
                     LogDirectory: logs
                     OutputInfo:
@@ -153,15 +162,6 @@ class MacroCommandGenerationTests(unittest.TestCase):
                     yaml_value = str(value).lower() if isinstance(value, bool) else value
                     simulation_lines.append(f"    {key}: {yaml_value}")
             yaml_sections.append("\n".join(simulation_lines))
-
-        yaml_sections.append(
-            textwrap.dedent(
-                """
-                # Script-level extra should be ignored by ConfigIO.from_yaml.
-                macro_output_path: ./tmp/generated.mac
-                """
-            ).strip()
-        )
 
         yaml_text = "\n\n".join(yaml_sections)
 
@@ -222,17 +222,16 @@ class MacroCommandGenerationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
             yaml_path = self._write_yaml_config(tmp_path)
-            macro_path = tmp_path / "generated.mac"
 
             config = self._from_yaml(yaml_path)
             expected = self._macro_commands(config)
+            macro_path = self._resolve_run_environment_paths(config).macro_file
 
             self._write_macro(
                 config,
-                macro_path=macro_path,
                 include_output=True,
                 include_run_initialize=True,
-                create_output_directories=False,
+                create_output_directories=True,
                 overwrite=True,
             )
 
@@ -245,17 +244,16 @@ class MacroCommandGenerationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
             yaml_path = self._write_yaml_config(tmp_path)
-            macro_path = tmp_path / "generated.mac"
 
             config = self._from_yaml(yaml_path)
             expected = self._macro_commands(config)
+            macro_path = self._resolve_run_environment_paths(config).macro_file
 
             self._write_macro(
                 config,
-                macro_path=macro_path,
                 include_output=True,
                 include_run_initialize=True,
-                create_output_directories=False,
+                create_output_directories=True,
                 overwrite=True,
             )
 

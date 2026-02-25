@@ -26,6 +26,7 @@ Conventions
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date as DateType
 import math
 from pathlib import Path
@@ -36,13 +37,23 @@ from typing import Any, Literal
 try:
     from src.config.SimConfig import SimConfig, default_sim_config
     from src.config.ScintillatorCatalogIO import load_scintillator
-    from src.config.utilsConfig import resolve_path
+    from src.config.utilsConfig import (
+        assert_directory_writable,
+        assert_distinct_paths,
+        ensure_directory,
+        resolve_path,
+    )
 except ModuleNotFoundError:
     # Support imports when repository root is not already on sys.path.
     sys.path.append(str(Path(__file__).resolve().parents[2]))
     from src.config.SimConfig import SimConfig, default_sim_config
     from src.config.ScintillatorCatalogIO import load_scintillator
-    from src.config.utilsConfig import resolve_path
+    from src.config.utilsConfig import (
+        assert_directory_writable,
+        assert_distinct_paths,
+        ensure_directory,
+        resolve_path,
+    )
 
 try:
     import yaml
@@ -56,6 +67,49 @@ MACROS_STAGE_DIR = "macros"
 DEFAULT_GENERATED_MACRO_FILENAME = "generated_from_config.mac"
 DEFAULT_OUTPUT_FILENAME_BASE = "photon_optical_interface_hits"
 DEFAULT_OPTICAL_INTERFACE_THICKNESS_MM = 0.1
+
+RunEnvironmentTarget = Literal[
+    "data",
+    "run_root",
+    "macro",
+    "log",
+    "simulated_photons",
+    "transported_photons",
+]
+
+_RUN_ENVIRONMENT_TARGET_TO_ATTR: dict[RunEnvironmentTarget, str] = {
+    "data": "WorkingDirectory",
+    "run_root": "RunRoot",
+    "macro": "MacroDirectory",
+    "log": "LogDirectory",
+    "simulated_photons": "OutputInfo.SimulatedPhotonsDirectory",
+    "transported_photons": "OutputInfo.TransportedPhotonsDirectory",
+}
+
+
+@dataclass(frozen=True)
+class RunEnvironmentPaths:
+    """Resolved absolute run-environment directory set."""
+
+    data: Path
+    run_root: Path
+    macro: Path
+    macro_file: Path
+    log: Path
+    simulated_photons: Path
+    transported_photons: Path
+
+    def as_dict(self) -> dict[RunEnvironmentTarget, Path]:
+        """Return a target-keyed mapping for validation and lookup."""
+
+        return {
+            "data": self.data,
+            "run_root": self.run_root,
+            "macro": self.macro,
+            "log": self.log,
+            "simulated_photons": self.simulated_photons,
+            "transported_photons": self.transported_photons,
+        }
 
 _LENGTH_UNIT_TO_MM: dict[str, float] = {
     "nm": 1.0e-6,
@@ -908,8 +962,7 @@ def from_yaml(yaml_path: str | Path) -> SimConfig:
     in the same YAML file.
 
     This behavior is intentional for example workflows where a single YAML file
-    carries both strict simulation config and script orchestration values (such
-    as optional script output-path overrides).
+    carries both strict simulation config and script orchestration values.
     """
 
     parsed = load_yaml_mapping(yaml_path)
@@ -973,14 +1026,7 @@ def _run_root(config: SimConfig) -> Path:
 
 def resolve_run_environment_directory(
     config: SimConfig,
-    target: Literal[
-        "data",
-        "run_root",
-        "macro",
-        "log",
-        "simulated_photons",
-        "transported_photons",
-    ],
+    target: RunEnvironmentTarget,
 ) -> Path:
     """Resolve a run-environment directory by semantic target token.
 
@@ -1015,21 +1061,95 @@ def resolve_run_environment_directory(
     return resolve_path(resolved, base_directory=_run_root(config))
 
 
-def resolve_default_macro_path(config: SimConfig) -> Path:
-    """Resolve default macro output path for ``write_macro(..., macro_path=None)``.
-
-    File naming policy:
-    - ``<SimulationRunID>.mac`` when run id is non-empty
-    - ``generated_from_config.mac`` otherwise
-    """
+def resolve_run_environment_paths(config: SimConfig) -> RunEnvironmentPaths:
+    """Resolve all canonical run-environment directories into absolute paths."""
 
     run_name = config.metadata.run_environment.simulation_run_id.strip()
     macro_filename = (
         f"{run_name}.mac" if run_name else DEFAULT_GENERATED_MACRO_FILENAME
     )
-    return (
-        resolve_run_environment_directory(config, "macro") / macro_filename
-    ).resolve()
+    macro_dir = resolve_run_environment_directory(config, "macro")
+
+    return RunEnvironmentPaths(
+        data=resolve_run_environment_directory(config, "data"),
+        run_root=resolve_run_environment_directory(config, "run_root"),
+        macro=macro_dir,
+        macro_file=(macro_dir / macro_filename).resolve(),
+        log=resolve_run_environment_directory(config, "log"),
+        simulated_photons=resolve_run_environment_directory(config, "simulated_photons"),
+        transported_photons=resolve_run_environment_directory(
+            config, "transported_photons"
+        ),
+    )
+
+
+def _directory_map_from_targets(
+    paths: RunEnvironmentPaths,
+    targets: tuple[RunEnvironmentTarget, ...],
+) -> dict[str, Path]:
+    """Build a label->path mapping for the requested run-environment targets."""
+
+    as_dict = paths.as_dict()
+    return {
+        f"RunEnvironment.{_RUN_ENVIRONMENT_TARGET_TO_ATTR[target]}": as_dict[target]
+        for target in targets
+    }
+
+
+def _validate_directory_map(
+    directories: dict[str, Path],
+    *,
+    create_directories: bool,
+) -> None:
+    """Validate or prepare a set of directories."""
+
+    assert_distinct_paths(directories)
+    for label, directory in directories.items():
+        ensure_directory(directory, create=create_directories, label=label)
+        assert_directory_writable(directory, label=label)
+
+
+def validate_run_environment(
+    config: SimConfig,
+    *,
+    targets: tuple[RunEnvironmentTarget, ...] = (
+        "data",
+        "run_root",
+        "macro",
+        "log",
+        "simulated_photons",
+        "transported_photons",
+    ),
+    create_directories: bool = False,
+) -> RunEnvironmentPaths:
+    """Validate resolved run-environment directories.
+
+    Parameters
+    ----------
+    config:
+        Validated simulation configuration.
+    targets:
+        Run-environment targets to validate.
+    create_directories:
+        When ``True``, missing directories are created before writability checks.
+        When ``False``, missing paths raise immediately.
+    """
+
+    paths = resolve_run_environment_paths(config)
+    directories = _directory_map_from_targets(paths, targets)
+    _validate_directory_map(directories, create_directories=create_directories)
+    if paths.macro_file.exists() and paths.macro_file.is_dir():
+        raise IsADirectoryError(
+            "RunEnvironment macro target resolves to an existing directory: "
+            f"{paths.macro_file}"
+        )
+    return paths
+
+
+def prepare_run_environment(config: SimConfig) -> RunEnvironmentPaths:
+    """Create and validate all run-environment directories."""
+
+    return validate_run_environment(config, create_directories=True)
 
 
 def _normalize_output_format_token(value: str) -> str:
@@ -1210,28 +1330,23 @@ def ensure_output_directories(config: SimConfig) -> Path:
     - log directory from `RunEnvironment.LogDirectory`
     """
 
-    # Stage directories are created explicitly from Python so runtime C++ IO can
-    # assume parents already exist.
-    output_stage_dir = resolve_run_environment_directory(config, "simulated_photons")
-    output_stage_dir.mkdir(parents=True, exist_ok=True)
-
-    transport_stage_dir = resolve_run_environment_directory(
-        config, "transported_photons"
+    paths = validate_run_environment(
+        config,
+        targets=("data", "run_root", "log", "simulated_photons", "transported_photons"),
+        create_directories=True,
     )
-    transport_stage_dir.mkdir(parents=True, exist_ok=True)
-
-    log_dir = resolve_run_environment_directory(config, "log")
-    log_dir.mkdir(parents=True, exist_ok=True)
-
-    return output_stage_dir
+    return paths.simulated_photons
 
 
 def ensure_macro_directories(config: SimConfig) -> Path:
     """Create and return the macros stage directory for this config."""
 
-    macro_stage_dir = resolve_run_environment_directory(config, "macro")
-    macro_stage_dir.mkdir(parents=True, exist_ok=True)
-    return macro_stage_dir
+    paths = validate_run_environment(
+        config,
+        targets=("data", "run_root", "macro"),
+        create_directories=True,
+    )
+    return paths.macro
 
 
 def macro_commands(
@@ -1284,7 +1399,6 @@ def macro_commands(
 
 def write_macro(
     config: SimConfig,
-    macro_path: str | Path | None = None,
     *,
     include_output: bool = True,
     include_run_initialize: bool = True,
@@ -1297,28 +1411,30 @@ def write_macro(
     ----------
     config:
         Source validated simulation configuration.
-    macro_path:
-        Destination path. When ``None``, uses ``resolve_default_macro_path``.
     include_output:
         Include output configuration commands.
     include_run_initialize:
         Append ``/run/initialize`` at end of generated macro.
     create_output_directories:
-        Create output/log/macro directories before writing.
+        Create output/log/macro directories before writing. When ``False``,
+        required run-environment paths must already exist.
     overwrite:
         Guard against accidental overwrite when ``False``.
     """
 
-    path = resolve_default_macro_path(config) if macro_path is None else Path(macro_path)
+    if create_output_directories:
+        paths = prepare_run_environment(config)
+    else:
+        paths = validate_run_environment(
+            config,
+            targets=("data", "run_root", "macro"),
+            create_directories=False,
+        )
 
+    path = paths.macro_file
     if path.exists() and not overwrite:
         raise FileExistsError(f"Refusing to overwrite existing file: {path}")
 
-    if create_output_directories:
-        ensure_output_directories(config)
-        ensure_macro_directories(config)
-
-    path.parent.mkdir(parents=True, exist_ok=True)
     payload = "\n".join(
         macro_commands(
             config,

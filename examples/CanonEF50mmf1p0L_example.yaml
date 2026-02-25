@@ -1,9 +1,6 @@
 # Canon EF 50 mm f/1.0L YAML-driven example configuration.
 #
-# This file intentionally contains:
-# 1. SimConfig fields (hierarchical structure consumed by ConfigIO.from_yaml).
-# 2. Script-level keys used by examples/CanonEF50mmf1p0L_example.py:
-#    - macro_output_path (optional; when omitted, ConfigIO default is used)
+# This file contains strict SimConfig fields consumed by ConfigIO.from_yaml.
 
 scintillator:
   position_mm:
