@@ -76,8 +76,8 @@ Metadata:
   version: ScintPiX v0.1
   description: Catalog-based EJ200 with manual optical-property overrides.
   RunEnvironment:
-    SimulationRunID: ScintCatalogOverride_example
     WorkingDirectory: data
+    SimulationRunID: ScintCatalogOverride_example
     MacroDirectory: macros
     LogDirectory: logs
     OutputInfo:
