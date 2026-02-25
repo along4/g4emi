@@ -75,7 +75,70 @@ class ScintillatorCatalogTests(unittest.TestCase):
         material = self._load_scintillator_definition("EJ200")
         self.assertEqual(material.name, "Eljen EJ-200")
         self.assertEqual(material.optical.constants.scint_yield.value, 10000.0)
-        self.assertEqual(material.optical.constants.time_constant.unit, "ns")
+        self.assertEqual(
+            material.optical.constants.time_components[0].time_constant.unit, "ns"
+        )
+
+    def test_time_components_schema_requires_exactly_three(self) -> None:
+        """Catalog materials should expose exactly three time components."""
+
+        for material_id in self._available_scintillators():
+            material = self._load_scintillator_definition(material_id)
+            self.assertEqual(
+                len(material.optical.constants.time_components),
+                3,
+                msg=f"{material_id} did not define exactly three time components.",
+            )
+
+    def test_time_components_schema_rejects_non_three_components(self) -> None:
+        """Schema should reject materials that do not define exactly three components."""
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            (root / "materials").mkdir(parents=True, exist_ok=True)
+
+            (root / "catalog.yaml").write_text(
+                textwrap.dedent(
+                    """
+                    version: 1
+                    default: TEST
+                    materials:
+                      TEST: materials/TEST.yaml
+                    """
+                ).strip()
+                + "\n",
+                encoding="utf-8",
+            )
+
+            (root / "materials" / "TEST.yaml").write_text(
+                textwrap.dedent(
+                    """
+                    id: TEST
+                    name: Test Material
+                    composition:
+                      density: {value: 1.0, unit: g/cm3}
+                      atoms: {C: 1}
+                    optical:
+                      curves:
+                        rIndex: {path: curves/TEST/rindex.csv, xUnit: eV, yUnit: unitless}
+                        absLength: {path: curves/TEST/abs.csv, xUnit: eV, yUnit: cm}
+                        scintSpectrum: {path: curves/TEST/scint.csv, xUnit: eV, yUnit: unitless}
+                      constants:
+                        scintYield: {value: 1000.0, unit: 1/MeV}
+                        resolutionScale: 1.0
+                        timeComponents:
+                          - timeConstant: {value: 1.0, unit: ns}
+                            yieldFraction: 1.0
+                          - timeConstant: {value: 0.0, unit: ns}
+                            yieldFraction: 0.0
+                    """
+                ).strip()
+                + "\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(ValueError):
+                self._load_scintillator_definition("TEST", catalog_path=root / "catalog.yaml")
 
     def test_load_ej276_variants(self) -> None:
         """EJ-276D/G entries should resolve with expected SSLG4 constants."""
@@ -83,13 +146,35 @@ class ScintillatorCatalogTests(unittest.TestCase):
         ej276d = self._load_scintillator("EJ-276D")
         self.assertEqual(ej276d.material.name, "EJ-276D")
         self.assertEqual(ej276d.material.optical.constants.scint_yield.value, 8600.0)
-        self.assertEqual(ej276d.material.optical.constants.time_constant.value, 13.0)
+        self.assertEqual(
+            ej276d.material.optical.constants.time_components[0].time_constant.value,
+            13.0,
+        )
+        self.assertEqual(
+            ej276d.material.optical.constants.time_components[1].time_constant.value,
+            59.0,
+        )
+        self.assertEqual(
+            ej276d.material.optical.constants.time_components[2].time_constant.value,
+            460.0,
+        )
         self.assertEqual(len(ej276d.r_index.energy), 5)
 
         ej276g = self._load_scintillator("EJ-276G")
         self.assertEqual(ej276g.material.name, "EJ-276G")
         self.assertEqual(ej276g.material.optical.constants.scint_yield.value, 8000.0)
-        self.assertEqual(ej276g.material.optical.constants.time_constant.value, 13.0)
+        self.assertEqual(
+            ej276g.material.optical.constants.time_components[0].time_constant.value,
+            13.0,
+        )
+        self.assertEqual(
+            ej276g.material.optical.constants.time_components[1].time_constant.value,
+            35.0,
+        )
+        self.assertEqual(
+            ej276g.material.optical.constants.time_components[2].time_constant.value,
+            270.0,
+        )
         self.assertEqual(len(ej276g.r_index.energy), 5)
 
     def test_load_ej426(self) -> None:
@@ -99,7 +184,10 @@ class ScintillatorCatalogTests(unittest.TestCase):
         self.assertEqual(ej426.material.name, "EJ-426")
         self.assertEqual(ej426.material.composition.density.value, 2.42)
         self.assertEqual(ej426.material.optical.constants.scint_yield.value, 40000.0)
-        self.assertEqual(ej426.material.optical.constants.time_constant.value, 200.0)
+        self.assertEqual(
+            ej426.material.optical.constants.time_components[0].time_constant.value,
+            200.0,
+        )
         self.assertEqual(len(ej426.r_index.energy), 79)
 
     def test_load_csi_and_nai_variants(self) -> None:
@@ -108,19 +196,28 @@ class ScintillatorCatalogTests(unittest.TestCase):
         csi_na = self._load_scintillator("CsI-Na")
         self.assertEqual(csi_na.material.name, "CsI(Na)")
         self.assertEqual(csi_na.material.optical.constants.scint_yield.value, 41000.0)
-        self.assertEqual(csi_na.material.optical.constants.time_constant.value, 630.0)
+        self.assertEqual(
+            csi_na.material.optical.constants.time_components[0].time_constant.value,
+            630.0,
+        )
         self.assertEqual(len(csi_na.r_index.energy), 77)
 
         csi_tl = self._load_scintillator("CsI-Tl")
         self.assertEqual(csi_tl.material.name, "CsI(Tl)")
         self.assertEqual(csi_tl.material.optical.constants.scint_yield.value, 54000.0)
-        self.assertEqual(csi_tl.material.optical.constants.time_constant.value, 1000.0)
+        self.assertEqual(
+            csi_tl.material.optical.constants.time_components[0].time_constant.value,
+            1000.0,
+        )
         self.assertEqual(len(csi_tl.r_index.energy), 77)
 
         nai_tl = self._load_scintillator("NaI-Tl")
         self.assertEqual(nai_tl.material.name, "NaI(Tl)")
         self.assertEqual(nai_tl.material.optical.constants.scint_yield.value, 41000.0)
-        self.assertEqual(nai_tl.material.optical.constants.time_constant.value, 630.0)
+        self.assertEqual(
+            nai_tl.material.optical.constants.time_components[0].time_constant.value,
+            630.0,
+        )
         self.assertEqual(len(nai_tl.r_index.energy), 77)
 
     def test_mismatched_curve_energy_grid_raises(self) -> None:
@@ -160,8 +257,13 @@ class ScintillatorCatalogTests(unittest.TestCase):
                       constants:
                         scintYield: {value: 1000.0, unit: 1/MeV}
                         resolutionScale: 1.0
-                        timeConstant: {value: 1.0, unit: ns}
-                        yield1: 1.0
+                        timeComponents:
+                          - timeConstant: {value: 1.0, unit: ns}
+                            yieldFraction: 1.0
+                          - timeConstant: {value: 0.0, unit: ns}
+                            yieldFraction: 0.0
+                          - timeConstant: {value: 0.0, unit: ns}
+                            yieldFraction: 0.0
                     """
                 ).strip()
                 + "\n",

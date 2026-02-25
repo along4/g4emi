@@ -96,7 +96,13 @@ class MacroCommandGenerationTests(unittest.TestCase):
                     photonEnergy: [2.8, 3.0, 3.2]
                     rIndex: [1.58, 1.59, 1.60]
                     nKEntries: 3
-                    timeConstant: 2.1
+                    timeComponents:
+                      - timeConstant: 2.1
+                        yieldFraction: 1.0
+                      - timeConstant: 0.0
+                        yieldFraction: 0.0
+                      - timeConstant: 0.0
+                        yieldFraction: 0.0
 
                 source:
                   gps:
@@ -194,6 +200,7 @@ class MacroCommandGenerationTests(unittest.TestCase):
                 "/scintillator/properties/photonEnergy 2.8,3,3.2 eV",
                 "/scintillator/properties/rIndex 1.58,1.59,1.6",
                 "/scintillator/properties/timeConstant 2.1 ns",
+                "/scintillator/properties/yield1 1",
                 "/scintillator/geom/apertureRadius 18 mm",
                 "/optical_interface/geom/sizeX 60.55 mm",
                 "/optical_interface/geom/sizeY 60.55 mm",
@@ -490,7 +497,10 @@ class MacroCommandGenerationTests(unittest.TestCase):
             self.assertEqual(len(config.scintillator.properties.photon_energy), 5)
             self.assertIsNotNone(config.scintillator.properties.abs_length)
             self.assertIsNotNone(config.scintillator.properties.scint_spectrum)
-            self.assertAlmostEqual(config.scintillator.properties.time_constant, 2.1)
+            self.assertAlmostEqual(
+                config.scintillator.properties.time_components[0].time_constant,
+                2.1,
+            )
 
             commands = self._macro_commands(config)
             self.assertIn("/scintillator/geom/material EJ200", commands)
@@ -557,7 +567,7 @@ class MacroCommandGenerationTests(unittest.TestCase):
             self.assertIsNotNone(props.scint_spectrum)
             self.assertAlmostEqual(props.scint_yield or 0.0, 10000.0)
             self.assertAlmostEqual(props.resolution_scale or 0.0, 1.0)
-            self.assertAlmostEqual(props.yield1 or 0.0, 1.0)
+            self.assertAlmostEqual(props.time_components[0].yield_fraction, 1.0)
 
 
 if __name__ == "__main__":

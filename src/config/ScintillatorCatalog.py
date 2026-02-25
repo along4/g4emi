@@ -62,13 +62,42 @@ class OpticalCurvesDefinition(StrictModel):
     scint_spectrum: CurveReference = Field(alias="scintSpectrum")
 
 
+class ScintillationTimeComponentDefinition(StrictModel):
+    """Single scintillation decay component for catalog constants."""
+
+    time_constant: ScalarWithUnit = Field(alias="timeConstant")
+    yield_fraction: float = Field(alias="yieldFraction", ge=0)
+
+
 class OpticalConstantsDefinition(StrictModel):
     """Energy-independent optical constants."""
 
     scint_yield: ScalarWithUnit = Field(alias="scintYield")
     resolution_scale: float = Field(alias="resolutionScale", gt=0)
-    time_constant: ScalarWithUnit = Field(alias="timeConstant")
-    yield1: float = Field(ge=0)
+    time_components: list[ScintillationTimeComponentDefinition] = Field(
+        alias="timeComponents",
+        min_length=3,
+        max_length=3,
+    )
+
+    @model_validator(mode="after")
+    def validate_time_components(self) -> "OpticalConstantsDefinition":
+        total = sum(component.yield_fraction for component in self.time_components)
+        if total <= 0.0:
+            raise ValueError(
+                "`optical.constants.timeComponents` must contain at least one active component."
+            )
+        if total > 1.0 + 1.0e-9:
+            raise ValueError(
+                "`optical.constants.timeComponents` yield fractions must sum to <= 1.0."
+            )
+        for index, component in enumerate(self.time_components, start=1):
+            if component.yield_fraction > 0.0 and component.time_constant.value <= 0.0:
+                raise ValueError(
+                    "Active time component must have positive timeConstant "
+                    f"(component {index})."
+                )
+        return self
 
 
 class OpticalDefinition(StrictModel):

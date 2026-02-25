@@ -90,7 +90,7 @@ pixi run g4emi data/CanonEF50mmf1p0L_run/macros/CanonEF50mmf1p0L_run.mac
 
 `examples/scintillator_catalog_override_example.yaml` demonstrates:
 - `scintillator.catalogId: EJ200` baseline hydration from the local catalog.
-- targeted manual overrides in `scintillator.properties` (e.g. `absLength`, `timeConstant`, `scintYield`).
+- targeted manual overrides in `scintillator.properties` (e.g. `absLength`, `timeComponents`, `scintYield`).
 
 A generated command snapshot is committed at:
 

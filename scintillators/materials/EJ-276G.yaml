@@ -3,9 +3,7 @@ name: EJ-276G
 description: >
   Eljen EJ-276G plastic PSD scintillator entry sourced from SSLG4
   (OrganicScintillatorLib::AddEJ276G). Optical curves follow the same
-  energy nodes and analytical profiles used there. SSLG4 uses three
-  scintillation decay components; this schema stores the primary
-  component (13 ns, yield1=0.4).
+  energy nodes and analytical profiles used there.
 
 composition:
   density:
@@ -34,7 +32,10 @@ optical:
       value: 8000.0
       unit: 1/MeV
     resolutionScale: 1.0
-    timeConstant:
-      value: 13.0
-      unit: ns
-    yield1: 0.4
+    timeComponents:
+      - timeConstant: {value: 13.0, unit: ns}
+        yieldFraction: 1.0
+      - timeConstant: {value: 35.0, unit: ns}
+        yieldFraction: 0.0
+      - timeConstant: {value: 270.0, unit: ns}
+        yieldFraction: 0.0

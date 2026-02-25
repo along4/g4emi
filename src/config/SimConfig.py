@@ -64,12 +64,19 @@ class Size3Mm(StrictModel):
     z_mm: float = Field(gt=0)
 
 
+class ScintillationTimeComponent(StrictModel):
+    """Single scintillation decay component in nanoseconds."""
+
+    time_constant: float = Field(alias="timeConstant", ge=0)
+    yield_fraction: float = Field(alias="yieldFraction", ge=0)
+
+
 class ScintillatorProperties(StrictModel):
     """Optical material table for scintillator definition.
 
     Fields map directly to common GEANT4 material-property table concepts.
-    Core fields (`photonEnergy`, `rIndex`, `nKEntries`, `timeConstant`) remain
-    backward compatible with existing YAML, while extended fields enable full
+    Core fields (`photonEnergy`, `rIndex`, `nKEntries`, `timeComponents`)
+    define mandatory optical behavior, while extended fields enable full
     material and optical-table configuration through macros.
     """
 
@@ -77,7 +84,11 @@ class ScintillatorProperties(StrictModel):
     photon_energy: list[float] = Field(alias="photonEnergy", min_length=1)
     r_index: list[float] = Field(alias="rIndex", min_length=1)
     n_k_entries: int = Field(alias="nKEntries", gt=0)
-    time_constant: float = Field(alias="timeConstant", gt=0)
+    time_components: list[ScintillationTimeComponent] = Field(
+        alias="timeComponents",
+        min_length=3,
+        max_length=3,
+    )
     abs_length: list[float] | None = Field(default=None, alias="absLength")
     scint_spectrum: list[float] | None = Field(default=None, alias="scintSpectrum")
     density: float | None = Field(default=None, gt=0)
@@ -85,7 +96,6 @@ class ScintillatorProperties(StrictModel):
     hydrogen_atoms: int | None = Field(default=None, alias="hydrogenAtoms", gt=0)
     scint_yield: float | None = Field(default=None, alias="scintYield", gt=0)
     resolution_scale: float | None = Field(default=None, alias="resolutionScale", gt=0)
-    yield1: float | None = Field(default=None, ge=0)
 
     @model_validator(mode="after")
     def validate_table_lengths(self) -> "ScintillatorProperties":
@@ -106,6 +116,17 @@ class ScintillatorProperties(StrictModel):
             and len(self.scint_spectrum) != self.n_k_entries
         ):
             raise ValueError("`scintSpectrum` length must match `nKEntries`.")
+        total = sum(component.yield_fraction for component in self.time_components)
+        if total <= 0.0:
+            raise ValueError("`timeComponents` must contain at least one active component.")
+        if total > 1.0 + 1.0e-9:
+            raise ValueError("`timeComponents` yield fractions must sum to <= 1.0.")
+        for index, component in enumerate(self.time_components, start=1):
+            if component.yield_fraction > 0.0 and component.time_constant <= 0.0:
+                raise ValueError(
+                    "Active time component must have positive `timeConstant` "
+                    f"(component {index})."
+                )
         return self
 
 
@@ -438,13 +459,16 @@ def default_sim_config() -> SimConfig:
                     "absLength": [380.0, 380.0, 380.0, 300.0, 220.0],
                     "scintSpectrum": [0.05, 0.35, 1.00, 0.45, 0.08],
                     "nKEntries": 5,
-                    "timeConstant": 2.1,
+                    "timeComponents": [
+                        {"timeConstant": 2.1, "yieldFraction": 1.0},
+                        {"timeConstant": 0.0, "yieldFraction": 0.0},
+                        {"timeConstant": 0.0, "yieldFraction": 0.0},
+                    ],
                     "density": 1.023,
                     "carbonAtoms": 9,
                     "hydrogenAtoms": 10,
                     "scintYield": 10000.0,
                     "resolutionScale": 1.0,
-                    "yield1": 1.0,
                 },
             },
             "source": {

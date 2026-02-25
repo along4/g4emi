@@ -299,6 +299,18 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
     if not isinstance(scint_properties, dict):
         scint_properties = {}
         scintillator["properties"] = scint_properties
+    time_components = scint_properties.get("time_components")
+    if (
+        not isinstance(time_components, list)
+        or len(time_components) != 3
+        or not all(isinstance(component, dict) for component in time_components)
+    ):
+        time_components = [
+            {"time_constant": 0.0, "yield_fraction": 1.0},
+            {"time_constant": 0.0, "yield_fraction": 0.0},
+            {"time_constant": 0.0, "yield_fraction": 0.0},
+        ]
+        scint_properties["time_components"] = time_components
     optical = payload["optical"]
     geometry = optical["geometry"]
     detector = optical["sensitive_detector_config"]
@@ -551,10 +563,10 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
             scint_properties["resolution_scale"] = float(tokens[1])
             continue
         if command == "/scintillator/properties/timeConstant":
-            scint_properties["time_constant"] = _parse_time_to_ns(tokens, command)
+            time_components[0]["time_constant"] = _parse_time_to_ns(tokens, command)
             continue
         if command == "/scintillator/properties/yield1" and len(tokens) >= 2:
-            scint_properties["yield1"] = float(tokens[1])
+            time_components[0]["yield_fraction"] = float(tokens[1])
             continue
 
         if command == "/optical_interface/geom/sizeX":
@@ -678,14 +690,24 @@ def _catalog_properties_payload(catalog_id: str) -> dict[str, Any]:
         )
     abs_length_cm = [(value * abs_factor) / 10.0 for value in loaded.abs_length.value]
 
-    time_unit = loaded.material.optical.constants.time_constant.unit.strip().lower()
-    time_factor = _TIME_UNIT_TO_NS.get(time_unit)
-    if time_factor is None:
-        raise ValueError(
-            f"Catalog scintillator '{catalog_id}' uses unsupported time unit "
-            f"{loaded.material.optical.constants.time_constant.unit!r}."
+    time_components: list[dict[str, float]] = []
+    for index, component in enumerate(
+        loaded.material.optical.constants.time_components,
+        start=1,
+    ):
+        time_unit = component.time_constant.unit.strip().lower()
+        time_factor = _TIME_UNIT_TO_NS.get(time_unit)
+        if time_factor is None:
+            raise ValueError(
+                f"Catalog scintillator '{catalog_id}' component {index} uses "
+                f"unsupported time unit {component.time_constant.unit!r}."
+            )
+        time_components.append(
+            {
+                "timeConstant": component.time_constant.value * time_factor,
+                "yieldFraction": component.yield_fraction,
+            }
         )
-    time_constant_ns = loaded.material.optical.constants.time_constant.value * time_factor
 
     density_unit = loaded.material.composition.density.unit.strip().lower()
     density_factor = _DENSITY_UNIT_TO_G_CM3.get(density_unit)
@@ -712,11 +734,10 @@ def _catalog_properties_payload(catalog_id: str) -> dict[str, Any]:
         "absLength": abs_length_cm,
         "scintSpectrum": list(loaded.scint_spectrum.value),
         "nKEntries": len(photon_energy),
-        "timeConstant": time_constant_ns,
+        "timeComponents": time_components,
         "density": density_g_cm3,
         "scintYield": scint_yield_per_mev,
         "resolutionScale": loaded.material.optical.constants.resolution_scale,
-        "yield1": loaded.material.optical.constants.yield1,
     }
     carbon_atoms = loaded.material.composition.atoms.get("C")
     hydrogen_atoms = loaded.material.composition.atoms.get("H")
@@ -1099,11 +1120,23 @@ def geometry_commands(config: SimConfig) -> list[str]:
             "/scintillator/properties/resolutionScale "
             f"{scint.properties.resolution_scale:g}"
         )
+    if any(
+        component.yield_fraction > 0.0
+        for component in scint.properties.time_components[1:]
+    ):
+        raise ValueError(
+            "Macro emission currently supports only the primary scintillation "
+            "time component. Secondary/tertiary non-zero yield fractions are "
+            "not yet supported by simulation commands."
+        )
+    primary_time_component = scint.properties.time_components[0]
     commands.append(
-        f"/scintillator/properties/timeConstant {scint.properties.time_constant:g} ns"
+        "/scintillator/properties/timeConstant "
+        f"{primary_time_component.time_constant:g} ns"
     )
-    if scint.properties.yield1 is not None:
-        commands.append(f"/scintillator/properties/yield1 {scint.properties.yield1:g}")
+    commands.append(
+        f"/scintillator/properties/yield1 {primary_time_component.yield_fraction:g}"
+    )
 
     # Circular detector shape implies an aperture mask command in this
     # simulation pipeline.

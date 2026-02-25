@@ -16,7 +16,13 @@ scintillator:
     photonEnergy: [2.8, 3.0, 3.2]
     rIndex: [1.58, 1.59, 1.60]
     nKEntries: 3
-    timeConstant: 2.1
+    timeComponents:
+      - timeConstant: 2.1
+        yieldFraction: 1.0
+      - timeConstant: 0.0
+        yieldFraction: 0.0
+      - timeConstant: 0.0
+        yieldFraction: 0.0
 
 source:
   gps:

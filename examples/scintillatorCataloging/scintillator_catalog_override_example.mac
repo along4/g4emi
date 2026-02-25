@@ -26,7 +26,7 @@
 /scintillator/properties/scintYield 9800
 /scintillator/properties/resolutionScale 1.1
 /scintillator/properties/timeConstant 2.4 ns
-/scintillator/properties/yield1 0.95
+/scintillator/properties/yield1 1
 /scintillator/geom/apertureRadius 18 mm
 /optical_interface/geom/sizeX 60.55 mm
 /optical_interface/geom/sizeY 60.55 mm

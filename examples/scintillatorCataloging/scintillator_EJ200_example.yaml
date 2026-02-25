@@ -20,10 +20,15 @@ scintillator:
     density: 1.05
     absLength: [420.0, 420.0, 340.0, 260.0, 180.0]
     scintSpectrum: [0.04, 0.30, 1.00, 0.52, 0.12]
-    timeConstant: 2.4
+    timeComponents:
+      - timeConstant: 2.4
+        yieldFraction: 1.0
+      - timeConstant: 0.0
+        yieldFraction: 0.0
+      - timeConstant: 0.0
+        yieldFraction: 0.0
     scintYield: 9800.0
     resolutionScale: 1.1
-    yield1: 0.95
 
 source:
   gps:
