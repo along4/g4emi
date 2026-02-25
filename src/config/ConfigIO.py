@@ -38,6 +38,19 @@ try:
     from src.config.SimConfig import SimConfig, default_sim_config
     from src.config.ScintillatorCatalogIO import load_scintillator
     from src.config.utilsConfig import (
+        _DENSITY_UNIT_TO_G_CM3,
+        _ENERGY_UNIT_TO_EV,
+        _LENGTH_UNIT_TO_MM,
+        _SCINT_YIELD_UNIT_TO_PER_MEV,
+        _TIME_UNIT_TO_NS,
+        _length_to_mm,
+        _parse_density_to_g_cm3,
+        _parse_energy_to_mev,
+        _parse_length_tokens,
+        _parse_numeric_list_with_optional_unit,
+        _parse_scint_yield_to_per_mev,
+        _parse_time_to_ns,
+        _parse_vector3,
         assert_directory_writable,
         assert_distinct_paths,
         ensure_directory,
@@ -49,6 +62,19 @@ except ModuleNotFoundError:
     from src.config.SimConfig import SimConfig, default_sim_config
     from src.config.ScintillatorCatalogIO import load_scintillator
     from src.config.utilsConfig import (
+        _DENSITY_UNIT_TO_G_CM3,
+        _ENERGY_UNIT_TO_EV,
+        _LENGTH_UNIT_TO_MM,
+        _SCINT_YIELD_UNIT_TO_PER_MEV,
+        _TIME_UNIT_TO_NS,
+        _length_to_mm,
+        _parse_density_to_g_cm3,
+        _parse_energy_to_mev,
+        _parse_length_tokens,
+        _parse_numeric_list_with_optional_unit,
+        _parse_scint_yield_to_per_mev,
+        _parse_time_to_ns,
+        _parse_vector3,
         assert_directory_writable,
         assert_distinct_paths,
         ensure_directory,
@@ -111,60 +137,6 @@ class RunEnvironmentPaths:
             "transported_photons": self.transported_photons,
         }
 
-_LENGTH_UNIT_TO_MM: dict[str, float] = {
-    "nm": 1.0e-6,
-    "nanometer": 1.0e-6,
-    "nanometers": 1.0e-6,
-    "um": 1.0e-3,
-    "micrometer": 1.0e-3,
-    "micrometers": 1.0e-3,
-    "mm": 1.0,
-    "millimeter": 1.0,
-    "millimeters": 1.0,
-    "cm": 10.0,
-    "centimeter": 10.0,
-    "centimeters": 10.0,
-    "m": 1000.0,
-    "meter": 1000.0,
-    "meters": 1000.0,
-}
-
-_ENERGY_UNIT_TO_MEV: dict[str, float] = {
-    "ev": 1.0e-6,
-    "kev": 1.0e-3,
-    "mev": 1.0,
-    "gev": 1.0e3,
-}
-
-_ENERGY_UNIT_TO_EV: dict[str, float] = {
-    "ev": 1.0,
-    "kev": 1.0e3,
-    "mev": 1.0e6,
-    "gev": 1.0e9,
-}
-
-_TIME_UNIT_TO_NS: dict[str, float] = {
-    "s": 1.0e9,
-    "ms": 1.0e6,
-    "us": 1.0e3,
-    "ns": 1.0,
-    "ps": 1.0e-3,
-}
-
-_DENSITY_UNIT_TO_G_CM3: dict[str, float] = {
-    "g/cm3": 1.0,
-    "g/cm^3": 1.0,
-    "kg/m3": 1.0e-3,
-    "kg/m^3": 1.0e-3,
-}
-
-_SCINT_YIELD_UNIT_TO_PER_MEV: dict[str, float] = {
-    "1/mev": 1.0,
-    "1/kev": 1.0e3,
-    "1/gev": 1.0e-3,
-}
-
-
 def _require_yaml_dependency() -> Any:
     """Return PyYAML module object or raise a dependency error.
 
@@ -179,175 +151,6 @@ def _require_yaml_dependency() -> Any:
             "Install it in your environment (for example: pixi add pyyaml)."
         )
     return yaml
-
-
-def _length_to_mm(value: float, unit: str) -> float:
-    """Convert Geant4-style length value/unit tokens to millimeters."""
-
-    factor = _LENGTH_UNIT_TO_MM.get(unit.strip().lower())
-    if factor is None:
-        raise ValueError(f"Unsupported length unit '{unit}'.")
-    return value * factor
-
-
-def _parse_length_tokens(tokens: list[str], command: str) -> float:
-    """Parse macro tokenized length command payload and return millimeters."""
-
-    if len(tokens) < 3:
-        raise ValueError(
-            f"Command '{command}' requires '<value> <unit>' tokens, got: {tokens!r}"
-        )
-
-    try:
-        value = float(tokens[1])
-    except ValueError as exc:
-        raise ValueError(
-            f"Command '{command}' has non-numeric value token: {tokens[1]!r}"
-        ) from exc
-
-    return _length_to_mm(value, tokens[2])
-
-
-def _parse_vector3(tokens: list[str], command: str) -> tuple[float, float, float]:
-    """Parse three scalar tokens from a macro command."""
-
-    if len(tokens) < 4:
-        raise ValueError(
-            f"Command '{command}' requires three scalar tokens, got: {tokens!r}"
-        )
-    try:
-        return float(tokens[1]), float(tokens[2]), float(tokens[3])
-    except ValueError as exc:
-        raise ValueError(
-            f"Command '{command}' requires numeric vector tokens, got: {tokens[1:4]!r}"
-        ) from exc
-
-
-def _parse_energy_to_mev(tokens: list[str], command: str) -> float:
-    """Parse `<value> <unit>` energy tokens and convert to MeV."""
-
-    if len(tokens) < 3:
-        raise ValueError(
-            f"Command '{command}' requires '<value> <unit>' tokens, got: {tokens!r}"
-        )
-    try:
-        value = float(tokens[1])
-    except ValueError as exc:
-        raise ValueError(
-            f"Command '{command}' has non-numeric value token: {tokens[1]!r}"
-        ) from exc
-    factor = _ENERGY_UNIT_TO_MEV.get(tokens[2].strip().lower())
-    if factor is None:
-        raise ValueError(
-            f"Command '{command}' has unsupported energy unit: {tokens[2]!r}."
-        )
-    return value * factor
-
-
-def _parse_numeric_list_with_optional_unit(
-    tokens: list[str],
-    command: str,
-) -> tuple[list[float], str | None]:
-    """Parse list command payload into numeric values plus optional unit token."""
-
-    if len(tokens) < 2:
-        raise ValueError(
-            f"Command '{command}' requires a numeric list payload, got: {tokens!r}"
-        )
-
-    unit: str | None = None
-    payload_tokens = tokens[1:]
-    if len(payload_tokens) >= 2:
-        try:
-            float(payload_tokens[-1])
-        except ValueError:
-            unit = payload_tokens[-1]
-            payload_tokens = payload_tokens[:-1]
-
-    if not payload_tokens:
-        raise ValueError(f"Command '{command}' is missing numeric list values.")
-
-    raw_payload = " ".join(payload_tokens).replace(",", " ")
-    values: list[float] = []
-    for piece in raw_payload.split():
-        try:
-            values.append(float(piece))
-        except ValueError as exc:
-            raise ValueError(
-                f"Command '{command}' has non-numeric list token: {piece!r}"
-            ) from exc
-
-    if not values:
-        raise ValueError(f"Command '{command}' is missing numeric list values.")
-
-    return values, unit
-
-
-def _parse_time_to_ns(tokens: list[str], command: str) -> float:
-    """Parse `<value> <unit>` time tokens and convert to nanoseconds."""
-
-    if len(tokens) < 3:
-        raise ValueError(
-            f"Command '{command}' requires '<value> <unit>' tokens, got: {tokens!r}"
-        )
-    try:
-        value = float(tokens[1])
-    except ValueError as exc:
-        raise ValueError(
-            f"Command '{command}' has non-numeric value token: {tokens[1]!r}"
-        ) from exc
-    factor = _TIME_UNIT_TO_NS.get(tokens[2].strip().lower())
-    if factor is None:
-        raise ValueError(
-            f"Command '{command}' has unsupported time unit: {tokens[2]!r}."
-        )
-    return value * factor
-
-
-def _parse_density_to_g_cm3(tokens: list[str], command: str) -> float:
-    """Parse `<value> <unit>` density tokens and convert to g/cm3."""
-
-    if len(tokens) < 3:
-        raise ValueError(
-            f"Command '{command}' requires '<value> <unit>' tokens, got: {tokens!r}"
-        )
-    try:
-        value = float(tokens[1])
-    except ValueError as exc:
-        raise ValueError(
-            f"Command '{command}' has non-numeric value token: {tokens[1]!r}"
-        ) from exc
-    factor = _DENSITY_UNIT_TO_G_CM3.get(tokens[2].strip().lower())
-    if factor is None:
-        raise ValueError(
-            f"Command '{command}' has unsupported density unit: {tokens[2]!r}."
-        )
-    return value * factor
-
-
-def _parse_scint_yield_to_per_mev(tokens: list[str], command: str) -> float:
-    """Parse scintillation-yield command payload into photons/MeV."""
-
-    if len(tokens) < 2:
-        raise ValueError(
-            f"Command '{command}' requires at least a value token, got: {tokens!r}"
-        )
-    try:
-        value = float(tokens[1])
-    except ValueError as exc:
-        raise ValueError(
-            f"Command '{command}' has non-numeric value token: {tokens[1]!r}"
-        ) from exc
-
-    if len(tokens) == 2:
-        return value
-
-    factor = _SCINT_YIELD_UNIT_TO_PER_MEV.get(tokens[2].strip().lower())
-    if factor is None:
-        raise ValueError(
-            f"Command '{command}' has unsupported scintillation-yield unit: {tokens[2]!r}."
-        )
-    return value * factor
 
 
 def source_commands(config: SimConfig) -> list[str]:
