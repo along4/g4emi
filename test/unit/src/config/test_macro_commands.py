@@ -32,6 +32,7 @@ class MacroCommandGenerationTests(unittest.TestCase):
 
         try:
             from src.config.ConfigIO import (
+                append_macro_line,
                 from_macro,
                 from_yaml,
                 macro_commands,
@@ -56,6 +57,7 @@ class MacroCommandGenerationTests(unittest.TestCase):
 
         cls._from_macro = staticmethod(from_macro)
         cls._from_yaml = staticmethod(from_yaml)
+        cls._append_macro_line = staticmethod(append_macro_line)
         cls._macro_commands = staticmethod(macro_commands)
         cls._resolve_run_environment_directory = staticmethod(
             resolve_run_environment_directory
@@ -248,6 +250,23 @@ class MacroCommandGenerationTests(unittest.TestCase):
 
             written_lines = macro_path.read_text(encoding="utf-8").splitlines()
             self.assertEqual(written_lines, expected)
+
+    def test_append_macro_line_appends_single_line(self) -> None:
+        """append_macro_line should append one normalized line per call."""
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            macro_path = tmp_path / "append_test.mac"
+            macro_path.write_text("/run/initialize\n", encoding="utf-8")
+
+            self._append_macro_line(macro_path, "/vis/open OGL")
+            self._append_macro_line(macro_path, "/vis/drawVolume\n")
+
+            written_lines = macro_path.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(
+                written_lines,
+                ["/run/initialize", "/vis/open OGL", "/vis/drawVolume"],
+            )
 
     def test_from_macro_round_trip_with_template(self) -> None:
         """from_macro should reconstruct geometry/output commands with a template."""

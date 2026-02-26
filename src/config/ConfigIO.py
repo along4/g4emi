@@ -1297,3 +1297,27 @@ def write_macro(
         )
     )
     path.write_text(payload + "\n", encoding="utf-8")
+
+
+def append_macro_line(macro_file: str | Path, string_to_append: str) -> None:
+    """Append one command/comment line to an existing macro file.
+
+    Parameters
+    ----------
+    macro_file:
+        Macro file path to append into. Parent directory must already exist.
+    string_to_append:
+        Line content to append. A trailing newline is always normalized.
+    """
+
+    path = Path(macro_file)
+    if path.exists() and path.is_dir():
+        raise IsADirectoryError(f"Macro target is a directory, not a file: {path}")
+    if not path.parent.exists():
+        raise FileNotFoundError(
+            f"Macro parent directory does not exist: {path.parent}"
+        )
+
+    normalized = string_to_append.rstrip("\n")
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(normalized + "\n")
