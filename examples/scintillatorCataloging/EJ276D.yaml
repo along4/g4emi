@@ -16,30 +16,6 @@ scintillator:
     x_mm: 100.0
     y_mm: 100.0
     z_mm: 20.0
-  properties:
-    # Explicitly provide all profile entries with 3 components each.
-    timeComponents:
-      default:
-        - timeConstant: 13.0
-          yieldFraction: 1.0
-        - timeConstant: 59.0
-          yieldFraction: 0.0
-        - timeConstant: 460.0
-          yieldFraction: 0.0
-      neutron:
-        - timeConstant: 13.0
-          yieldFraction: 1.0
-        - timeConstant: 59.0
-          yieldFraction: 0.0
-        - timeConstant: 460.0
-          yieldFraction: 0.0
-      gamma:
-        - timeConstant: 13.0
-          yieldFraction: 1.0
-        - timeConstant: 35.0
-          yieldFraction: 0.0
-        - timeConstant: 270.0
-          yieldFraction: 0.0
 
 source:
   gps:

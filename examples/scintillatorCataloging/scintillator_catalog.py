@@ -16,7 +16,7 @@ import sys
 
 # Ensure repository root is importable when this file is run directly.
 # This keeps example scripts runnable without installing the package.
-sys.path.append(str(Path(__file__).resolve().parents[1]))
+sys.path.append(str(Path(__file__).resolve().parents[2]))
 
 from src.config.ConfigIO import (  # noqa: E402
     from_yaml,
@@ -38,9 +38,16 @@ def main() -> None:
     4. Print canonical run-environment paths for reproducible invocation.
     """
 
+    # Use optional CLI YAML path; default to local EJ200 example.
+    yaml_path = (
+        Path(sys.argv[1]).resolve()
+        if len(sys.argv) > 1
+        else EXAMPLE_YAML_PATH.resolve()
+    )
+
     # Parse + validate simulation schema, including catalog hydration
     # (catalogId -> scintillator properties) handled inside ConfigIO.
-    config = from_yaml(EXAMPLE_YAML_PATH)
+    config = from_yaml(yaml_path)
 
     # Write macro text from validated config.
     # This call also prepares run-environment directories in Python.
@@ -55,7 +62,7 @@ def main() -> None:
 
     # Emit explicit paths so users can copy/paste the run command and know
     # exactly where outputs are expected to appear.
-    print(f"Loaded YAML: {EXAMPLE_YAML_PATH.resolve()}")
+    print(f"Loaded YAML: {yaml_path}")
     print(f"Run root: {paths.run_root}")
     print(f"Wrote macro: {macro_path}")
     print(f"Output stage directory: {paths.simulated_photons}")
