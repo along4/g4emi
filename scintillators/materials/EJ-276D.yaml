@@ -33,9 +33,24 @@ optical:
       unit: 1/MeV
     resolutionScale: 1.0
     timeComponents:
-      - timeConstant: {value: 13.0, unit: ns}
-        yieldFraction: 1.0
-      - timeConstant: {value: 59.0, unit: ns}
-        yieldFraction: 0.0
-      - timeConstant: {value: 460.0, unit: ns}
-        yieldFraction: 0.0
+      default:
+        - timeConstant: {value: 13.0, unit: ns}
+          yieldFraction: 1.0
+        - timeConstant: {value: 59.0, unit: ns}
+          yieldFraction: 0.0
+        - timeConstant: {value: 460.0, unit: ns}
+          yieldFraction: 0.0
+      neutron:
+        - timeConstant: {value: 13.0, unit: ns}
+          yieldFraction: 1.0
+        - timeConstant: {value: 59.0, unit: ns}
+          yieldFraction: 0.0
+        - timeConstant: {value: 460.0, unit: ns}
+          yieldFraction: 0.0
+      gamma:
+        - timeConstant: {value: 13.0, unit: ns}
+          yieldFraction: 1.0
+        - timeConstant: {value: 35.0, unit: ns}
+          yieldFraction: 0.0
+        - timeConstant: {value: 270.0, unit: ns}
+          yieldFraction: 0.0

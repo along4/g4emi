@@ -40,9 +40,10 @@ optical:
       unit: 1/MeV
     resolutionScale: 1.0
     timeComponents:
-      - timeConstant: {value: 200.0, unit: ns}
-        yieldFraction: 1.0
-      - timeConstant: {value: 0.0, unit: ns}
-        yieldFraction: 0.0
-      - timeConstant: {value: 0.0, unit: ns}
-        yieldFraction: 0.0
+      default:
+        - timeConstant: {value: 200.0, unit: ns}
+          yieldFraction: 1.0
+        - timeConstant: {value: 0.0, unit: ns}
+          yieldFraction: 0.0
+        - timeConstant: {value: 0.0, unit: ns}
+          yieldFraction: 0.0
