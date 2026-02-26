@@ -534,6 +534,92 @@ class MacroCommandGenerationTests(unittest.TestCase):
             )
             self.assertIn("/scintillator/properties/scintYield 10000", commands)
 
+    def test_catalog_hydration_preserves_user_properties_name_override(self) -> None:
+        """User-provided `properties.name` should override catalog material id."""
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            yaml_path = tmp_path / "catalog_name_override.yaml"
+            yaml_path.write_text(
+                textwrap.dedent(
+                    """
+                    scintillator:
+                      catalogId: EJ200
+                      position_mm:
+                        x_mm: 0.0
+                        y_mm: 0.0
+                        z_mm: 0.0
+                      dimension_mm:
+                        x_mm: 100.0
+                        y_mm: 100.0
+                        z_mm: 20.0
+                      properties:
+                        name: EJ200_CustomRunLabel
+
+                    source:
+                      gps:
+                        particle: neutron
+                        position:
+                          type: Plane
+                          shape: Circle
+                          centerMm:
+                            x_mm: 0.0
+                            y_mm: 0.0
+                            z_mm: -100.0
+                          radiusMm: 10.0
+                        angular:
+                          type: beam2d
+                          rot1: {x: 1.0, y: 0.0, z: 0.0}
+                          rot2: {x: 0.0, y: 1.0, z: 0.0}
+                          direction: {x: 0.0, y: 0.0, z: 1.0}
+                        energy:
+                          type: Mono
+                          monoMeV: 6.0
+
+                    optical:
+                      lenses:
+                        - name: CanonEF50mmf1.0L
+                          primary: true
+                          zmxFile: CanonEF50mmf1.0L.zmx
+                      geometry:
+                        entranceDiameter: 60.55
+                        sensorMaxWidth: 36.0
+                      sensitiveDetectorConfig:
+                        position_mm:
+                          x_mm: 0.0
+                          y_mm: 0.0
+                          z_mm: 210.05
+                        shape: circle
+                        diameterRule: min(entranceDiameter,sensorMaxWidth)
+
+                    Metadata:
+                      author: Unit Test
+                      date: 2026-02-26
+                      version: test
+                      description: Validate catalog hydration with name override.
+                      RunEnvironment:
+                        SimulationRunID: unit_catalog_name_override
+                        WorkingDirectory: data
+                        MacroDirectory: macros
+                        LogDirectory: logs
+                        OutputInfo:
+                          SimulatedPhotonsDirectory: simulatedPhotons
+                          TransportedPhotonsDirectory: transportedPhotons
+                          OutputFormat: hdf5
+                    """
+                ).strip()
+                + "\n",
+                encoding="utf-8",
+            )
+
+            config = self._from_yaml(yaml_path)
+            assert config.scintillator.properties is not None
+            self.assertEqual(
+                config.scintillator.properties.name,
+                "EJ200_CustomRunLabel",
+            )
+            self.assertEqual(config.scintillator.catalog_id, "EJ200")
+
     def test_from_macro_parses_scintillator_property_commands(self) -> None:
         """Scintillator property commands should populate extended properties."""
 
