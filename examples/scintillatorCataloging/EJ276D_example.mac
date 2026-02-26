@@ -1,0 +1,51 @@
+/control/verbose 0
+/run/verbose 0
+/event/verbose 0
+/tracking/verbose 0
+/run/printProgress 500
+/output/format hdf5
+/output/path data
+/output/filename photon_optical_interface_hits
+/output/runname EJ276D_time_components_example
+/scintillator/geom/material EJ-276D
+/scintillator/geom/scintX 100 mm
+/scintillator/geom/scintY 100 mm
+/scintillator/geom/scintZ 20 mm
+/scintillator/geom/posX 0 mm
+/scintillator/geom/posY 0 mm
+/scintillator/geom/posZ 0 mm
+/scintillator/properties/density 1.06384 g/cm3
+/scintillator/properties/carbonAtoms 4944
+/scintillator/properties/hydrogenAtoms 4647
+/scintillator/properties/photonEnergy 2.78,2.92,3.08,3.22,3.4 eV
+/scintillator/properties/rIndex 1.58,1.58,1.58,1.58,1.58
+/scintillator/properties/absLength 500,500,296.63,95.3491,11.3795 cm
+/scintillator/properties/scintSpectrum 0,1,0.770234,0.43669,0.150861
+/scintillator/properties/scintYield 8600
+/scintillator/properties/resolutionScale 1
+/scintillator/properties/timeConstant1 13 ns
+/scintillator/properties/yieldFraction1 1
+/scintillator/properties/timeConstant2 59 ns
+/scintillator/properties/yieldFraction2 0
+/scintillator/properties/timeConstant3 460 ns
+/scintillator/properties/yieldFraction3 0
+/scintillator/geom/apertureRadius 18 mm
+/optical_interface/geom/sizeX 60.55 mm
+/optical_interface/geom/sizeY 60.55 mm
+/optical_interface/geom/thickness 0.1 mm
+/optical_interface/geom/posX 0 mm
+/optical_interface/geom/posY 0 mm
+/optical_interface/geom/posZ 210.05 mm
+/run/initialize
+/gps/particle neutron
+/gps/pos/type Plane
+/gps/pos/shape Circle
+/gps/pos/centre 0 0 -100 mm
+/gps/pos/radius 10 mm
+/gps/ang/type beam2d
+/gps/ang/rot1 1 0 0
+/gps/ang/rot2 0 1 0
+/gps/direction 0 0 1
+/gps/ene/type Mono
+/gps/ene/mono 6 MeV
+/run/beamOn 5000

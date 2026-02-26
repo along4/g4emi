@@ -97,12 +97,13 @@ class MacroCommandGenerationTests(unittest.TestCase):
                     rIndex: [1.58, 1.59, 1.60]
                     nKEntries: 3
                     timeComponents:
-                      - timeConstant: 2.1
-                        yieldFraction: 1.0
-                      - timeConstant: 0.0
-                        yieldFraction: 0.0
-                      - timeConstant: 0.0
-                        yieldFraction: 0.0
+                      default:
+                        - timeConstant: 2.1
+                          yieldFraction: 1.0
+                        - timeConstant: 0.0
+                          yieldFraction: 0.0
+                        - timeConstant: 0.0
+                          yieldFraction: 0.0
 
                 source:
                   gps:
@@ -501,21 +502,23 @@ class MacroCommandGenerationTests(unittest.TestCase):
             self.assertEqual(len(config.scintillator.properties.photon_energy), 5)
             self.assertIsNotNone(config.scintillator.properties.abs_length)
             self.assertIsNotNone(config.scintillator.properties.scint_spectrum)
+            default_profile = config.scintillator.properties.time_components.default
+            assert default_profile is not None
             self.assertAlmostEqual(
-                config.scintillator.properties.time_components[0].time_constant,
+                default_profile[0].time_constant,
                 2.1,
             )
             self.assertEqual(
                 [
                     component.time_constant
-                    for component in config.scintillator.properties.time_components
+                    for component in default_profile
                 ],
                 [2.1, 0.0, 0.0],
             )
             self.assertEqual(
                 [
                     component.yield_fraction
-                    for component in config.scintillator.properties.time_components
+                    for component in default_profile
                 ],
                 [1.0, 0.0, 0.0],
             )
@@ -589,9 +592,13 @@ class MacroCommandGenerationTests(unittest.TestCase):
             self.assertIsNotNone(props.scint_spectrum)
             self.assertAlmostEqual(props.scint_yield or 0.0, 10000.0)
             self.assertAlmostEqual(props.resolution_scale or 0.0, 1.0)
-            self.assertAlmostEqual(props.time_components[0].yield_fraction, 1.0)
-            self.assertAlmostEqual(props.time_components[1].yield_fraction, 0.0)
-            self.assertAlmostEqual(props.time_components[2].yield_fraction, 0.0)
+            profile_name, components = props.time_components.resolve_for_particle(
+                imported.source.gps.particle
+            )
+            self.assertEqual(profile_name, "neutron")
+            self.assertAlmostEqual(components[0].yield_fraction, 1.0)
+            self.assertAlmostEqual(components[1].yield_fraction, 0.0)
+            self.assertAlmostEqual(components[2].yield_fraction, 0.0)
 
     def test_from_macro_rejects_legacy_time_component_commands(self) -> None:
         """Legacy single-component time commands should be rejected."""
@@ -612,6 +619,175 @@ class MacroCommandGenerationTests(unittest.TestCase):
 
             with self.assertRaises(ValueError):
                 self._from_macro(macro_path)
+
+    def test_time_components_select_neutron_profile_for_neutron_source(self) -> None:
+        """Neutron source should emit neutron profile time constants."""
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            yaml_path = tmp_path / "neutron_profile.yaml"
+            yaml_path.write_text(
+                textwrap.dedent(
+                    """
+                    scintillator:
+                      position_mm: {x_mm: 0.0, y_mm: 0.0, z_mm: 0.0}
+                      dimension_mm: {x_mm: 100.0, y_mm: 100.0, z_mm: 20.0}
+                      properties:
+                        name: EJ-276D
+                        photonEnergy: [2.8, 3.0, 3.2]
+                        rIndex: [1.58, 1.59, 1.60]
+                        nKEntries: 3
+                        timeComponents:
+                          default:
+                            - timeConstant: 2.1
+                              yieldFraction: 1.0
+                            - timeConstant: 0.0
+                              yieldFraction: 0.0
+                            - timeConstant: 0.0
+                              yieldFraction: 0.0
+                          neutron:
+                            - timeConstant: 13.0
+                              yieldFraction: 1.0
+                            - timeConstant: 59.0
+                              yieldFraction: 0.0
+                            - timeConstant: 460.0
+                              yieldFraction: 0.0
+                          gamma:
+                            - timeConstant: 13.0
+                              yieldFraction: 1.0
+                            - timeConstant: 35.0
+                              yieldFraction: 0.0
+                            - timeConstant: 270.0
+                              yieldFraction: 0.0
+                    source:
+                      gps:
+                        particle: neutron
+                        position:
+                          type: Plane
+                          shape: Circle
+                          centerMm: {x_mm: 0.0, y_mm: 0.0, z_mm: -100.0}
+                          radiusMm: 10.0
+                        angular:
+                          type: beam2d
+                          rot1: {x: 1.0, y: 0.0, z: 0.0}
+                          rot2: {x: 0.0, y: 1.0, z: 0.0}
+                          direction: {x: 0.0, y: 0.0, z: 1.0}
+                        energy: {type: Mono, monoMeV: 6.0}
+                    optical:
+                      lenses:
+                        - name: CanonEF50mmf1.0L
+                          primary: true
+                          zmxFile: CanonEF50mmf1.0L.zmx
+                      geometry: {entranceDiameter: 60.55, sensorMaxWidth: 36.0}
+                      sensitiveDetectorConfig:
+                        position_mm: {x_mm: 0.0, y_mm: 0.0, z_mm: 210.05}
+                        shape: circle
+                        diameterRule: min(entranceDiameter,sensorMaxWidth)
+                    Metadata:
+                      author: Unit Test
+                      date: 2026-02-26
+                      version: test
+                      description: Profile selection
+                      RunEnvironment:
+                        SimulationRunID: neutron_profile
+                        WorkingDirectory: data
+                        MacroDirectory: macros
+                        LogDirectory: logs
+                        OutputInfo:
+                          SimulatedPhotonsDirectory: simulatedPhotons
+                          TransportedPhotonsDirectory: transportedPhotons
+                          OutputFormat: hdf5
+                    """
+                ).strip()
+                + "\n",
+                encoding="utf-8",
+            )
+
+            config = self._from_yaml(yaml_path)
+            commands = self._macro_commands(config)
+            self.assertIn("/scintillator/properties/timeConstant2 59 ns", commands)
+            self.assertIn("/scintillator/properties/timeConstant3 460 ns", commands)
+
+    def test_time_components_select_gamma_profile_for_gamma_source(self) -> None:
+        """Gamma source should emit gamma profile time constants."""
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            yaml_path = tmp_path / "gamma_profile.yaml"
+            yaml_path.write_text(
+                textwrap.dedent(
+                    """
+                    scintillator:
+                      position_mm: {x_mm: 0.0, y_mm: 0.0, z_mm: 0.0}
+                      dimension_mm: {x_mm: 100.0, y_mm: 100.0, z_mm: 20.0}
+                      properties:
+                        name: EJ-276G
+                        photonEnergy: [2.8, 3.0, 3.2]
+                        rIndex: [1.58, 1.59, 1.60]
+                        nKEntries: 3
+                        timeComponents:
+                          default:
+                            - timeConstant: 2.1
+                              yieldFraction: 1.0
+                            - timeConstant: 0.0
+                              yieldFraction: 0.0
+                            - timeConstant: 0.0
+                              yieldFraction: 0.0
+                          gamma:
+                            - timeConstant: 13.0
+                              yieldFraction: 1.0
+                            - timeConstant: 35.0
+                              yieldFraction: 0.0
+                            - timeConstant: 270.0
+                              yieldFraction: 0.0
+                    source:
+                      gps:
+                        particle: gamma
+                        position:
+                          type: Plane
+                          shape: Circle
+                          centerMm: {x_mm: 0.0, y_mm: 0.0, z_mm: -100.0}
+                          radiusMm: 10.0
+                        angular:
+                          type: beam2d
+                          rot1: {x: 1.0, y: 0.0, z: 0.0}
+                          rot2: {x: 0.0, y: 1.0, z: 0.0}
+                          direction: {x: 0.0, y: 0.0, z: 1.0}
+                        energy: {type: Mono, monoMeV: 6.0}
+                    optical:
+                      lenses:
+                        - name: CanonEF50mmf1.0L
+                          primary: true
+                          zmxFile: CanonEF50mmf1.0L.zmx
+                      geometry: {entranceDiameter: 60.55, sensorMaxWidth: 36.0}
+                      sensitiveDetectorConfig:
+                        position_mm: {x_mm: 0.0, y_mm: 0.0, z_mm: 210.05}
+                        shape: circle
+                        diameterRule: min(entranceDiameter,sensorMaxWidth)
+                    Metadata:
+                      author: Unit Test
+                      date: 2026-02-26
+                      version: test
+                      description: Profile selection
+                      RunEnvironment:
+                        SimulationRunID: gamma_profile
+                        WorkingDirectory: data
+                        MacroDirectory: macros
+                        LogDirectory: logs
+                        OutputInfo:
+                          SimulatedPhotonsDirectory: simulatedPhotons
+                          TransportedPhotonsDirectory: transportedPhotons
+                          OutputFormat: hdf5
+                    """
+                ).strip()
+                + "\n",
+                encoding="utf-8",
+            )
+
+            config = self._from_yaml(yaml_path)
+            commands = self._macro_commands(config)
+            self.assertIn("/scintillator/properties/timeConstant2 35 ns", commands)
+            self.assertIn("/scintillator/properties/timeConstant3 270 ns", commands)
 
 
 if __name__ == "__main__":

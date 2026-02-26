@@ -168,6 +168,17 @@ def _parse_scintillation_component_index(
     return int(suffix) - 1
 
 
+def _scintillation_profile_key_for_particle(particle: str) -> str | None:
+    """Map source particle token to scintillation profile key."""
+
+    token = particle.strip().lower()
+    if token in {"neutron", "n"}:
+        return "neutron"
+    if token in {"gamma", "g"}:
+        return "gamma"
+    return None
+
+
 def source_commands(config: SimConfig) -> list[str]:
     """Build GEANT4 GPS command lines from strict `source.gps` configuration."""
 
@@ -314,18 +325,12 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
     if not isinstance(scint_properties, dict):
         scint_properties = {}
         scintillator["properties"] = scint_properties
-    time_components = scint_properties.get("time_components")
-    if (
-        not isinstance(time_components, list)
-        or len(time_components) != 3
-        or not all(isinstance(component, dict) for component in time_components)
-    ):
-        time_components = [
-            {"time_constant": 0.0, "yield_fraction": 1.0},
-            {"time_constant": 0.0, "yield_fraction": 0.0},
-            {"time_constant": 0.0, "yield_fraction": 0.0},
-        ]
-        scint_properties["time_components"] = time_components
+    parsed_time_components = [
+        {"time_constant": 0.0, "yield_fraction": 1.0},
+        {"time_constant": 0.0, "yield_fraction": 0.0},
+        {"time_constant": 0.0, "yield_fraction": 0.0},
+    ]
+    saw_time_component_command = False
     optical = payload["optical"]
     geometry = optical["geometry"]
     detector = optical["sensitive_detector_config"]
@@ -582,9 +587,10 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
             prefix="/scintillator/properties/timeConstant",
         )
         if component_index is not None:
-            time_components[component_index]["time_constant"] = _parse_time_to_ns(
+            parsed_time_components[component_index]["time_constant"] = _parse_time_to_ns(
                 tokens, command
             )
+            saw_time_component_command = True
             continue
         component_index = _parse_scintillation_component_index(
             command,
@@ -596,11 +602,12 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
                     f"Command '{command}' requires scalar value token, got: {tokens!r}"
                 )
             try:
-                time_components[component_index]["yield_fraction"] = float(tokens[1])
+                parsed_time_components[component_index]["yield_fraction"] = float(tokens[1])
             except ValueError as exc:
                 raise ValueError(
                     f"Command '{command}' has non-numeric value token: {tokens[1]!r}"
                 ) from exc
+            saw_time_component_command = True
             continue
         if command in {
             "/scintillator/properties/timeConstant",
@@ -608,7 +615,7 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
         }:
             raise ValueError(
                 f"Legacy command '{command}' is no longer supported. "
-                "Use `scintillator.properties.timeComponents` in YAML."
+                "Use `scintillator.properties.timeComponents.{default|neutron|gamma}` in YAML."
             )
 
         if command == "/optical_interface/geom/sizeX":
@@ -695,6 +702,21 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
     if parsed_output_path is not None:
         run_environment["working_directory"] = str(Path(parsed_output_path))
 
+    if saw_time_component_command:
+        time_components = scint_properties.get("time_components")
+        if time_components is None:
+            time_components = {}
+        elif not isinstance(time_components, dict):
+            raise ValueError(
+                "`scintillator.properties.timeComponents` must be an object with "
+                "`default`, `neutron`, and/or `gamma` keys."
+            )
+        profile_key = _scintillation_profile_key_for_particle(source_gps["particle"])
+        if profile_key is None:
+            profile_key = "default"
+        time_components[profile_key] = parsed_time_components
+        scint_properties["time_components"] = time_components
+
     return SimConfig.model_validate(payload)
 
 
@@ -732,24 +754,28 @@ def _catalog_properties_payload(catalog_id: str) -> dict[str, Any]:
         )
     abs_length_cm = [(value * abs_factor) / 10.0 for value in loaded.abs_length.value]
 
-    time_components: list[dict[str, float]] = []
-    for index, component in enumerate(
-        loaded.material.optical.constants.time_components,
-        start=1,
-    ):
-        time_unit = component.time_constant.unit.strip().lower()
-        time_factor = _TIME_UNIT_TO_NS.get(time_unit)
-        if time_factor is None:
-            raise ValueError(
-                f"Catalog scintillator '{catalog_id}' component {index} uses "
-                f"unsupported time unit {component.time_constant.unit!r}."
+    time_components: dict[str, list[dict[str, float]]] = {}
+    for profile_name in ("default", "neutron", "gamma"):
+        profile = getattr(loaded.material.optical.constants.time_components, profile_name)
+        if profile is None:
+            continue
+        converted_profile: list[dict[str, float]] = []
+        for index, component in enumerate(profile, start=1):
+            time_unit = component.time_constant.unit.strip().lower()
+            time_factor = _TIME_UNIT_TO_NS.get(time_unit)
+            if time_factor is None:
+                raise ValueError(
+                    f"Catalog scintillator '{catalog_id}' profile '{profile_name}' "
+                    f"component {index} uses unsupported time unit "
+                    f"{component.time_constant.unit!r}."
+                )
+            converted_profile.append(
+                {
+                    "timeConstant": component.time_constant.value * time_factor,
+                    "yieldFraction": component.yield_fraction,
+                }
             )
-        time_components.append(
-            {
-                "timeConstant": component.time_constant.value * time_factor,
-                "yieldFraction": component.yield_fraction,
-            }
-        )
+        time_components[profile_name] = converted_profile
 
     density_unit = loaded.material.composition.density.unit.strip().lower()
     density_factor = _DENSITY_UNIT_TO_G_CM3.get(density_unit)
@@ -815,6 +841,24 @@ def _apply_scintillator_catalog_defaults(payload: dict[str, Any]) -> dict[str, A
 
     # Explicit YAML values win; catalog fills missing keys.
     for key, value in catalog_props.items():
+        if key == "timeComponents":
+            if key not in merged_properties:
+                merged_properties[key] = value
+                continue
+            current = merged_properties[key]
+            if not isinstance(current, dict):
+                raise ValueError(
+                    "`scintillator.properties.timeComponents` must be an object with "
+                    "`default`, `neutron`, and/or `gamma` keys."
+                )
+            if not isinstance(value, dict):
+                raise ValueError(
+                    "Catalog `timeComponents` payload must be an object with "
+                    "`default`, `neutron`, and/or `gamma` keys."
+                )
+            for profile_name, profile_payload in value.items():
+                current.setdefault(profile_name, profile_payload)
+            continue
         merged_properties.setdefault(key, value)
 
     scintillator["properties"] = merged_properties
@@ -1162,9 +1206,14 @@ def geometry_commands(config: SimConfig) -> list[str]:
             "/scintillator/properties/resolutionScale "
             f"{scint.properties.resolution_scale:g}"
         )
+    # Select profile based on source particle, with `default`/single-profile
+    # fallback handled by schema-level resolver.
+    _, selected_components = scint.properties.time_components.resolve_for_particle(
+        config.source.gps.particle
+    )
     # Emit all 3 components explicitly (including zero-valued inactive entries)
     # so macro snapshots are deterministic and complete.
-    for index, component in enumerate(scint.properties.time_components, start=1):
+    for index, component in enumerate(selected_components, start=1):
         commands.append(
             "/scintillator/properties/timeConstant"
             f"{index} {component.time_constant:g} ns"

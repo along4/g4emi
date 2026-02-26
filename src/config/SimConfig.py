@@ -72,6 +72,91 @@ class ScintillationTimeComponent(StrictModel):
     yield_fraction: float = Field(alias="yieldFraction", ge=0)
 
 
+class ScintillationTimeComponentsByExcitation(StrictModel):
+    """Particle-keyed scintillation component profiles.
+
+    Supported optional profiles:
+    - ``default``: generic fallback profile
+    - ``neutron``: profile selected for neutron sources
+    - ``gamma``: profile selected for gamma sources
+    """
+
+    default: list[ScintillationTimeComponent] | None = None
+    neutron: list[ScintillationTimeComponent] | None = None
+    gamma: list[ScintillationTimeComponent] | None = None
+
+    @staticmethod
+    def _validate_profile(
+        profile_name: str,
+        components: list[ScintillationTimeComponent],
+    ) -> None:
+        if len(components) != 3:
+            raise ValueError(
+                f"`timeComponents.{profile_name}` must define exactly 3 components."
+            )
+        total = sum(component.yield_fraction for component in components)
+        if not math.isclose(total, 1.0, rel_tol=0.0, abs_tol=1.0e-9):
+            raise ValueError(
+                f"`timeComponents.{profile_name}` yield fractions must sum to ~1.0."
+            )
+        for index, component in enumerate(components, start=1):
+            if component.yield_fraction > 0.0 and component.time_constant <= 0.0:
+                raise ValueError(
+                    "Active time component must have positive `timeConstant` "
+                    f"(profile={profile_name}, component={index})."
+                )
+
+    @model_validator(mode="after")
+    def validate_profiles(self) -> "ScintillationTimeComponentsByExcitation":
+        """Require at least one profile and validate each present profile."""
+
+        profile_names = ("default", "neutron", "gamma")
+        present = False
+        for profile_name in profile_names:
+            components = getattr(self, profile_name)
+            if components is None:
+                continue
+            present = True
+            self._validate_profile(profile_name, components)
+        if not present:
+            raise ValueError(
+                "`timeComponents` must provide at least one profile: "
+                "`default`, `neutron`, or `gamma`."
+            )
+        return self
+
+    def resolve_for_particle(
+        self,
+        particle: str,
+    ) -> tuple[str, list[ScintillationTimeComponent]]:
+        """Select profile for a source particle with fallback handling."""
+
+        token = particle.strip().lower()
+        if token in {"neutron", "n"} and self.neutron is not None:
+            return "neutron", self.neutron
+        if token in {"gamma", "g"} and self.gamma is not None:
+            return "gamma", self.gamma
+        if self.default is not None:
+            return "default", self.default
+
+        available_profiles = [
+            profile_name
+            for profile_name in ("neutron", "gamma")
+            if getattr(self, profile_name) is not None
+        ]
+        if len(available_profiles) == 1:
+            profile_name = available_profiles[0]
+            components = getattr(self, profile_name)
+            assert components is not None
+            return profile_name, components
+
+        raise ValueError(
+            "Could not resolve scintillation `timeComponents` profile for "
+            f"particle {particle!r}. Provide a matching profile "
+            "(`neutron`/`gamma`) or `default`."
+        )
+
+
 class ScintillatorProperties(StrictModel):
     """Optical material table for scintillator definition.
 
@@ -85,10 +170,8 @@ class ScintillatorProperties(StrictModel):
     photon_energy: list[float] = Field(alias="photonEnergy", min_length=1)
     r_index: list[float] = Field(alias="rIndex", min_length=1)
     n_k_entries: int = Field(alias="nKEntries", gt=0)
-    time_components: list[ScintillationTimeComponent] = Field(
-        alias="timeComponents",
-        min_length=3,
-        max_length=3,
+    time_components: ScintillationTimeComponentsByExcitation = Field(
+        alias="timeComponents"
     )
     abs_length: list[float] | None = Field(default=None, alias="absLength")
     scint_spectrum: list[float] | None = Field(default=None, alias="scintSpectrum")
@@ -117,15 +200,6 @@ class ScintillatorProperties(StrictModel):
             and len(self.scint_spectrum) != self.n_k_entries
         ):
             raise ValueError("`scintSpectrum` length must match `nKEntries`.")
-        total = sum(component.yield_fraction for component in self.time_components)
-        if not math.isclose(total, 1.0, rel_tol=0.0, abs_tol=1.0e-9):
-            raise ValueError("`timeComponents` yield fractions must sum to ~1.0.")
-        for index, component in enumerate(self.time_components, start=1):
-            if component.yield_fraction > 0.0 and component.time_constant <= 0.0:
-                raise ValueError(
-                    "Active time component must have positive `timeConstant` "
-                    f"(component {index})."
-                )
         return self
 
 
@@ -437,6 +511,15 @@ class SimConfig(StrictModel):
         serialization_alias="Metadata",
     )
 
+    @model_validator(mode="after")
+    def validate_scintillation_profile_selection(self) -> "SimConfig":
+        """Ensure configured source particle has a resolvable time profile."""
+
+        properties = self.scintillator.properties
+        if properties is not None:
+            properties.time_components.resolve_for_particle(self.source.gps.particle)
+        return self
+
 
 def default_sim_config() -> SimConfig:
     """Return a minimal valid configuration for bootstrapping/tests.
@@ -458,11 +541,13 @@ def default_sim_config() -> SimConfig:
                     "absLength": [380.0, 380.0, 380.0, 300.0, 220.0],
                     "scintSpectrum": [0.05, 0.35, 1.00, 0.45, 0.08],
                     "nKEntries": 5,
-                    "timeComponents": [
-                        {"timeConstant": 2.1, "yieldFraction": 1.0},
-                        {"timeConstant": 0.0, "yieldFraction": 0.0},
-                        {"timeConstant": 0.0, "yieldFraction": 0.0},
-                    ],
+                    "timeComponents": {
+                        "default": [
+                            {"timeConstant": 2.1, "yieldFraction": 1.0},
+                            {"timeConstant": 0.0, "yieldFraction": 0.0},
+                            {"timeConstant": 0.0, "yieldFraction": 0.0},
+                        ]
+                    },
                     "density": 1.023,
                     "carbonAtoms": 9,
                     "hydrogenAtoms": 10,

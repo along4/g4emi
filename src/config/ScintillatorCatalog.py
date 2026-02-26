@@ -70,31 +70,64 @@ class ScintillationTimeComponentDefinition(StrictModel):
     yield_fraction: float = Field(alias="yieldFraction", ge=0)
 
 
+class ScintillationTimeComponentsByExcitationDefinition(StrictModel):
+    """Catalog time profiles keyed by excitation/source family."""
+
+    default: list[ScintillationTimeComponentDefinition] | None = None
+    neutron: list[ScintillationTimeComponentDefinition] | None = None
+    gamma: list[ScintillationTimeComponentDefinition] | None = None
+
+    @staticmethod
+    def _validate_profile(
+        profile_name: str,
+        components: list[ScintillationTimeComponentDefinition],
+    ) -> None:
+        if len(components) != 3:
+            raise ValueError(
+                f"`optical.constants.timeComponents.{profile_name}` must define exactly 3 components."
+            )
+        total = sum(component.yield_fraction for component in components)
+        if not math.isclose(total, 1.0, rel_tol=0.0, abs_tol=1.0e-9):
+            raise ValueError(
+                "`optical.constants.timeComponents."
+                f"{profile_name}` yield fractions must sum to ~1.0."
+            )
+        for index, component in enumerate(components, start=1):
+            if component.yield_fraction > 0.0 and component.time_constant.value <= 0.0:
+                raise ValueError(
+                    "Active time component must have positive timeConstant "
+                    f"(profile={profile_name}, component={index})."
+                )
+
+    @model_validator(mode="after")
+    def validate_profiles(
+        self,
+    ) -> "ScintillationTimeComponentsByExcitationDefinition":
+        """Require at least one profile and validate each profile independently."""
+
+        present = False
+        for profile_name in ("default", "neutron", "gamma"):
+            components = getattr(self, profile_name)
+            if components is None:
+                continue
+            present = True
+            self._validate_profile(profile_name, components)
+        if not present:
+            raise ValueError(
+                "`optical.constants.timeComponents` must include at least one "
+                "profile: `default`, `neutron`, or `gamma`."
+            )
+        return self
+
+
 class OpticalConstantsDefinition(StrictModel):
     """Energy-independent optical constants."""
 
     scint_yield: ScalarWithUnit = Field(alias="scintYield")
     resolution_scale: float = Field(alias="resolutionScale", gt=0)
-    time_components: list[ScintillationTimeComponentDefinition] = Field(
-        alias="timeComponents",
-        min_length=3,
-        max_length=3,
+    time_components: ScintillationTimeComponentsByExcitationDefinition = Field(
+        alias="timeComponents"
     )
-
-    @model_validator(mode="after")
-    def validate_time_components(self) -> "OpticalConstantsDefinition":
-        total = sum(component.yield_fraction for component in self.time_components)
-        if not math.isclose(total, 1.0, rel_tol=0.0, abs_tol=1.0e-9):
-            raise ValueError(
-                "`optical.constants.timeComponents` yield fractions must sum to ~1.0."
-            )
-        for index, component in enumerate(self.time_components, start=1):
-            if component.yield_fraction > 0.0 and component.time_constant.value <= 0.0:
-                raise ValueError(
-                    "Active time component must have positive timeConstant "
-                    f"(component {index})."
-                )
-        return self
 
 
 class OpticalDefinition(StrictModel):
