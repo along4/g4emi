@@ -301,12 +301,6 @@ bool EnsureReady(const std::string& hdf5Path, std::string* errorMessage) {
   H5Tinsert(s.photonType, "photon_origin_z_mm",
             HOFFSET(detail::Hdf5PhotonNativeRow, photon_origin_z_mm),
             H5T_NATIVE_DOUBLE);
-  H5Tinsert(s.photonType, "optical_interface_hit_x_mm",
-            HOFFSET(detail::Hdf5PhotonNativeRow, optical_interface_hit_x_mm),
-            H5T_NATIVE_DOUBLE);
-  H5Tinsert(s.photonType, "optical_interface_hit_y_mm",
-            HOFFSET(detail::Hdf5PhotonNativeRow, optical_interface_hit_y_mm),
-            H5T_NATIVE_DOUBLE);
   H5Tinsert(s.photonType, "scint_exit_x_mm",
             HOFFSET(detail::Hdf5PhotonNativeRow, scint_exit_x_mm),
             H5T_NATIVE_DOUBLE);
@@ -315,6 +309,12 @@ bool EnsureReady(const std::string& hdf5Path, std::string* errorMessage) {
             H5T_NATIVE_DOUBLE);
   H5Tinsert(s.photonType, "scint_exit_z_mm",
             HOFFSET(detail::Hdf5PhotonNativeRow, scint_exit_z_mm),
+            H5T_NATIVE_DOUBLE);
+  H5Tinsert(s.photonType, "optical_interface_hit_x_mm",
+            HOFFSET(detail::Hdf5PhotonNativeRow, optical_interface_hit_x_mm),
+            H5T_NATIVE_DOUBLE);
+  H5Tinsert(s.photonType, "optical_interface_hit_y_mm",
+            HOFFSET(detail::Hdf5PhotonNativeRow, optical_interface_hit_y_mm),
             H5T_NATIVE_DOUBLE);
 
   // Optical-interface crossing optical state used for downstream lens/ray propagation.
@@ -426,11 +426,11 @@ std::vector<detail::Hdf5PhotonNativeRow> ToNative(
     native.photon_origin_x_mm = row.photonOriginXmm;
     native.photon_origin_y_mm = row.photonOriginYmm;
     native.photon_origin_z_mm = row.photonOriginZmm;
-    native.optical_interface_hit_x_mm = row.opticalInterfaceHitXmm;
-    native.optical_interface_hit_y_mm = row.opticalInterfaceHitYmm;
     native.scint_exit_x_mm = row.scintExitXmm;
     native.scint_exit_y_mm = row.scintExitYmm;
     native.scint_exit_z_mm = row.scintExitZmm;
+    native.optical_interface_hit_x_mm = row.opticalInterfaceHitXmm;
+    native.optical_interface_hit_y_mm = row.opticalInterfaceHitYmm;
     native.optical_interface_hit_dir_x = row.opticalInterfaceHitDirX;
     native.optical_interface_hit_dir_y = row.opticalInterfaceHitDirY;
     native.optical_interface_hit_dir_z = row.opticalInterfaceHitDirZ;

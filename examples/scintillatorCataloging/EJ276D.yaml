@@ -16,6 +16,7 @@ scintillator:
     x_mm: 100.0
     y_mm: 100.0
     z_mm: 20.0
+  maskRadius: 18.0
 
 source:
   gps:

@@ -11,6 +11,7 @@ scintillator:
     x_mm: 100.0
     y_mm: 100.0
     z_mm: 20.0
+  maskRadius: 18.0
   properties:
     name: EJ200
     photonEnergy: [2.8, 3.0, 3.2]

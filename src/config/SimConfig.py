@@ -209,6 +209,12 @@ class ScintillatorConfig(StrictModel):
     catalog_id: str | None = Field(default=None, alias="catalogId", min_length=1)
     position_mm: Vec3Mm
     dimension_mm: Size3Mm
+    mask_radius_mm: float = Field(
+        default=0.0,
+        validation_alias=AliasChoices("maskRadius", "maskRadiusMm", "mask_radius_mm"),
+        serialization_alias="maskRadius",
+        ge=0,
+    )
     properties: ScintillatorProperties | None = None
 
     @model_validator(mode="after")

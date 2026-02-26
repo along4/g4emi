@@ -348,7 +348,7 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
     entrance_diameter_mm: float | None = None
     size_x_mm: float | None = None
     size_y_mm: float | None = None
-    aperture_radius_mm: float | None = None
+    mask_radius_mm: float | None = None
     parsed_thickness_mm: float | None = None
     parsed_output_path: str | None = None
     parsed_output_runname: str | None = None
@@ -525,8 +525,8 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
         if command == "/scintillator/geom/posZ":
             scintillator["position_mm"]["z_mm"] = _parse_length_tokens(tokens, command)
             continue
-        if command == "/scintillator/geom/apertureRadius":
-            aperture_radius_mm = _parse_length_tokens(tokens, command)
+        if command == "/scintillator/geom/maskRadius":
+            mask_radius_mm = _parse_length_tokens(tokens, command)
             continue
         if command == "/scintillator/properties/density":
             scint_properties["density"] = _parse_density_to_g_cm3(tokens, command)
@@ -664,28 +664,8 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
     if entrance_diameter_mm is not None:
         geometry["entrance_diameter"] = entrance_diameter_mm
 
-    # Aperture command is represented indirectly in SimConfig through
-    # detector shape + diameter rule. Choose a rule that reproduces parsed
-    # aperture radius exactly.
-    if aperture_radius_mm is not None:
-        desired_diameter_mm = 2.0 * aperture_radius_mm
-        geometry.setdefault("sensor_max_width", desired_diameter_mm)
-        detector["shape"] = "circle"
-        if entrance_diameter_mm is None:
-            geometry["entrance_diameter"] = desired_diameter_mm
-            geometry["sensor_max_width"] = desired_diameter_mm
-            detector["diameter_rule"] = "min(entranceDiameter,sensorMaxWidth)"
-        elif entrance_diameter_mm + 1.0e-9 >= desired_diameter_mm:
-            geometry["sensor_max_width"] = desired_diameter_mm
-            detector["diameter_rule"] = "min(entranceDiameter,sensorMaxWidth)"
-        else:
-            geometry["sensor_max_width"] = desired_diameter_mm
-            detector["diameter_rule"] = "sensorMaxWidth"
-    else:
-        detector["shape"] = "none"
-        detector["diameter_rule"] = "entranceDiameter"
-        if entrance_diameter_mm is not None:
-            geometry["sensor_max_width"] = entrance_diameter_mm
+    if mask_radius_mm is not None:
+        scintillator["mask_radius_mm"] = mask_radius_mm
 
     # Ensure required GPS fields remain valid if a macro omits specific commands.
     position.setdefault("type", "Plane")
@@ -1097,33 +1077,6 @@ def output_commands(config: SimConfig) -> list[str]:
     ]
 
 
-def _resolve_sensitive_detector_diameter_mm(config: SimConfig) -> float:
-    """Resolve sensitive-detector diameter from configured rule expression.
-
-    Supported rules intentionally mirror a constrained expression set rather
-    than a general expression evaluator:
-    - ``min(entranceDiameter,sensorMaxWidth)``
-    - ``entranceDiameter``
-    - ``sensorMaxWidth``
-    """
-
-    geometry = config.optical.geometry
-    rule = config.optical.sensitive_detector_config.diameter_rule.replace(" ", "")
-
-    if rule == "min(entranceDiameter,sensorMaxWidth)":
-        return min(geometry.entrance_diameter, geometry.sensor_max_width)
-    if rule == "entranceDiameter":
-        return geometry.entrance_diameter
-    if rule == "sensorMaxWidth":
-        return geometry.sensor_max_width
-
-    raise ValueError(
-        "Unsupported `optical.sensitiveDetectorConfig.diameterRule`: "
-        f"{config.optical.sensitive_detector_config.diameter_rule!r}. "
-        "Supported rules: min(entranceDiameter,sensorMaxWidth), entranceDiameter, sensorMaxWidth."
-    )
-
-
 def _format_float_list(values: list[float]) -> str:
     """Format list values for compact macro list payloads."""
 
@@ -1137,8 +1090,7 @@ def geometry_commands(config: SimConfig) -> list[str]:
     -------------------------
     - Scintillator dimensions/position map directly from ``scintillator`` block.
     - Scintillator material uses ``scintillator.properties.name``.
-    - Aperture command is emitted only for circular detector shape.
-      Aperture radius is half of the resolved detector diameter rule.
+    - Scintillator mask command is emitted when ``scintillator.maskRadius > 0``.
     - Optical-interface XY uses ``optical.geometry.entranceDiameter``.
     - Optical-interface Z thickness uses project default
       ``DEFAULT_OPTICAL_INTERFACE_THICKNESS_MM``.
@@ -1223,11 +1175,8 @@ def geometry_commands(config: SimConfig) -> list[str]:
             f"{index} {component.yield_fraction:g}"
         )
 
-    # Circular detector shape implies an aperture mask command in this
-    # simulation pipeline.
-    if detector.shape.strip().lower() == "circle":
-        aperture_radius_mm = 0.5 * _resolve_sensitive_detector_diameter_mm(config)
-        commands.append(f"/scintillator/geom/apertureRadius {aperture_radius_mm:g} mm")
+    if scint.mask_radius_mm > 0.0:
+        commands.append(f"/scintillator/geom/maskRadius {scint.mask_radius_mm:g} mm")
 
     commands.extend(
         [

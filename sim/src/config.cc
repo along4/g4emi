@@ -42,7 +42,7 @@ Config::Config()
       fScintPosX(0.0),
       fScintPosY(0.0),
       fScintPosZ(0.0),
-      fApertureRadius(0.0),
+      fMaskRadius(0.0),
       fOpticalInterfaceX(0.0),
       fOpticalInterfaceY(0.0),
       fOpticalInterfaceThickness(0.1 * mm),
@@ -184,10 +184,10 @@ G4double Config::GetScintPosZ() const {
   return fScintPosZ;
 }
 
-/// Thread-safe geometry getter: aperture radius at scintillator +Z face.
-G4double Config::GetApertureRadius() const {
+/// Thread-safe geometry getter: mask radius at scintillator +Z face.
+G4double Config::GetMaskRadius() const {
   std::lock_guard<std::mutex> lock(fMutex);
-  return fApertureRadius;
+  return fMaskRadius;
 }
 
 /// Thread-safe geometry getter: optical-interface size in X.
@@ -262,10 +262,10 @@ void Config::SetScintPosZ(G4double value) {
   fScintPosZ = value;
 }
 
-/// Thread-safe geometry setter: aperture radius at scintillator +Z face.
-void Config::SetApertureRadius(G4double value) {
+/// Thread-safe geometry setter: mask radius at scintillator +Z face.
+void Config::SetMaskRadius(G4double value) {
   std::lock_guard<std::mutex> lock(fMutex);
-  fApertureRadius = value;
+  fMaskRadius = value;
 }
 
 /// Thread-safe geometry setter: optical-interface size in X.

@@ -163,15 +163,15 @@ Messenger::Messenger(Config* config) : fConfig(config) {
   fGeomScintPosZCmd->SetUnitCategory("Length");
   fGeomScintPosZCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 
-  // Aperture radius command for circular pass-through region at scintillator +Z face.
-  fGeomApertureRadiusCmd =
-      new G4UIcmdWithADoubleAndUnit("/scintillator/geom/apertureRadius", this);
-  fGeomApertureRadiusCmd->SetGuidance(
-      "Set circular aperture radius on scintillator +Z face (0 disables aperture)");
-  fGeomApertureRadiusCmd->SetParameterName("apertureRadius", false);
-  fGeomApertureRadiusCmd->SetUnitCategory("Length");
-  fGeomApertureRadiusCmd->SetRange("apertureRadius >= 0.");
-  fGeomApertureRadiusCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
+  // Mask radius command for circular pass-through region at scintillator +Z face.
+  fGeomMaskRadiusCmd =
+      new G4UIcmdWithADoubleAndUnit("/scintillator/geom/maskRadius", this);
+  fGeomMaskRadiusCmd->SetGuidance(
+      "Set circular mask pass-through radius on scintillator +Z face (0 disables mask)");
+  fGeomMaskRadiusCmd->SetParameterName("maskRadius", false);
+  fGeomMaskRadiusCmd->SetUnitCategory("Length");
+  fGeomMaskRadiusCmd->SetRange("maskRadius >= 0.");
+  fGeomMaskRadiusCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 
   // Scintillator material-property commands.
   fScintDensityCmd =
@@ -374,7 +374,7 @@ Messenger::~Messenger() {
   delete fScintHydrogenAtomsCmd;
   delete fScintCarbonAtomsCmd;
   delete fScintDensityCmd;
-  delete fGeomApertureRadiusCmd;
+  delete fGeomMaskRadiusCmd;
   delete fGeomScintZCmd;
   delete fGeomScintYCmd;
   delete fGeomScintXCmd;
@@ -448,9 +448,9 @@ void Messenger::SetNewValue(G4UIcommand* command, G4String newValue) {
     return;
   }
 
-  if (command == fGeomApertureRadiusCmd) {
-    fConfig->SetApertureRadius(
-        fGeomApertureRadiusCmd->GetNewDoubleValue(newValue));
+  if (command == fGeomMaskRadiusCmd) {
+    fConfig->SetMaskRadius(
+        fGeomMaskRadiusCmd->GetNewDoubleValue(newValue));
     NotifyGeometryChanged();
     return;
   }

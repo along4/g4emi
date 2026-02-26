@@ -151,15 +151,15 @@ G4Material* BuildOrGetEJ200(G4NistManager* nist, const Config* config) {
 }
 
 /**
- * Build (once) and return a highly absorbing optical material for aperture masks.
+ * Build (once) and return a highly absorbing optical material for scintillator masks.
  */
-G4Material* BuildOrGetApertureAbsorber(G4NistManager* nist) {
-  if (auto* existing = G4Material::GetMaterial("ApertureAbsorber", false)) {
+G4Material* BuildOrGetMaskAbsorber(G4NistManager* nist) {
+  if (auto* existing = G4Material::GetMaterial("ScintMaskAbsorber", false)) {
     return existing;
   }
 
   auto* carbon = nist->FindOrBuildElement("C");
-  auto* absorber = new G4Material("ApertureAbsorber", 2.0 * g / cm3, 1);
+  auto* absorber = new G4Material("ScintMaskAbsorber", 2.0 * g / cm3, 1);
   absorber->AddElement(carbon, 1);
 
   G4double photonEnergy[kNEntries] = {2.00 * eV, 2.40 * eV, 2.76 * eV, 3.10 * eV,
@@ -251,9 +251,9 @@ G4VPhysicalVolume* DetectorConstruction::Construct() {
   auto opticalInterfacePosY = std::numeric_limits<G4double>::quiet_NaN();
   auto opticalInterfacePosZ = std::numeric_limits<G4double>::quiet_NaN();
 
-  // Optional circular aperture pass-through radius at scintillator +Z face.
-  auto apertureRadius = 0.0 * mm;
-  const auto apertureThickness = 0.01 * mm;
+  // Optional circular mask pass-through radius at scintillator +Z face.
+  auto maskRadius = 0.0 * mm;
+  const auto maskThickness = 0.01 * mm;
 
   if (fConfig) {
     scintX = PositiveOrDefault(fConfig->GetScintX(), scintX);
@@ -272,26 +272,26 @@ G4VPhysicalVolume* DetectorConstruction::Construct() {
     opticalInterfacePosX = fConfig->GetOpticalInterfacePosX();
     opticalInterfacePosY = fConfig->GetOpticalInterfacePosY();
     opticalInterfacePosZ = fConfig->GetOpticalInterfacePosZ();
-    apertureRadius = std::max(0.0, fConfig->GetApertureRadius());
+    maskRadius = std::max(0.0, fConfig->GetMaskRadius());
   }
 
   const auto scintBackFaceZ = scintPosZ + 0.5 * scintZ;
-  const auto apertureCenterZ = scintBackFaceZ + 0.5 * apertureThickness;
-  const auto apertureMaxRadius = std::hypot(0.5 * scintX, 0.5 * scintY);
-  auto apertureEnabled = apertureRadius > 0.0;
+  const auto maskCenterZ = scintBackFaceZ + 0.5 * maskThickness;
+  const auto maskMaxRadius = std::hypot(0.5 * scintX, 0.5 * scintY);
+  auto maskEnabled = maskRadius > 0.0;
 
-  if (apertureEnabled && apertureRadius >= apertureMaxRadius) {
-    G4cout << "[Geom] apertureRadius (" << apertureRadius / mm
+  if (maskEnabled && maskRadius >= maskMaxRadius) {
+    G4cout << "[Geom] maskRadius (" << maskRadius / mm
            << " mm) is larger than the scintillator half-diagonal ("
-           << apertureMaxRadius / mm << " mm). Aperture mask disabled."
+           << maskMaxRadius / mm << " mm). Scintillator mask disabled."
            << G4endl;
-    apertureEnabled = false;
+    maskEnabled = false;
   }
 
   const auto defaultOpticalInterfaceX = scintPosX;
   const auto defaultOpticalInterfaceY = scintPosY;
   const auto defaultOpticalInterfaceZ =
-      scintBackFaceZ + (apertureEnabled ? apertureThickness : 0.0) +
+      scintBackFaceZ + (maskEnabled ? maskThickness : 0.0) +
       0.5 * opticalInterfaceThickness;
 
   const auto opticalInterfaceCenterX = std::isnan(opticalInterfacePosX) ? defaultOpticalInterfaceX : opticalInterfacePosX;
@@ -301,7 +301,7 @@ G4VPhysicalVolume* DetectorConstruction::Construct() {
   G4cout << "[Geom] Scint(mm)=(" << scintPosX / mm << "," << scintPosY / mm
          << "," << scintPosZ / mm << ") OpticalInterface(mm)=(" << opticalInterfaceCenterX / mm
          << "," << opticalInterfaceCenterY / mm << "," << opticalInterfaceCenterZ / mm
-         << ") ApertureR(mm)=" << apertureRadius / mm << G4endl;
+         << ") MaskR(mm)=" << maskRadius / mm << G4endl;
 
   // Keep world automatically large enough even when volumes are shifted.
   // We size from required half-extents with a 4x safety factor.
@@ -311,9 +311,9 @@ G4VPhysicalVolume* DetectorConstruction::Construct() {
                                       std::abs(opticalInterfaceCenterY) + 0.5 * opticalInterfaceY);
   auto requiredHalfZ = std::max(std::abs(scintPosZ) + 0.5 * scintZ,
                                 std::abs(opticalInterfaceCenterZ) + 0.5 * opticalInterfaceThickness);
-  if (apertureEnabled) {
+  if (maskEnabled) {
     requiredHalfZ =
-        std::max(requiredHalfZ, std::abs(apertureCenterZ) + 0.5 * apertureThickness);
+        std::max(requiredHalfZ, std::abs(maskCenterZ) + 0.5 * maskThickness);
   }
 
   const auto worldX = std::max(1.0 * m, 8.0 * requiredHalfX);
@@ -348,34 +348,34 @@ G4VPhysicalVolume* DetectorConstruction::Construct() {
   }();
   fScoringVolume->SetVisAttributes(scintVisAttributes);
 
-  if (apertureEnabled) {
-    constexpr auto kApertureClearance = 1.0 * um;
-    const auto maskHalfX = std::max(0.0 * mm, 0.5 * scintX - kApertureClearance);
-    const auto maskHalfY = std::max(0.0 * mm, 0.5 * scintY - kApertureClearance);
+  if (maskEnabled) {
+    constexpr auto kMaskClearance = 1.0 * um;
+    const auto maskHalfX = std::max(0.0 * mm, 0.5 * scintX - kMaskClearance);
+    const auto maskHalfY = std::max(0.0 * mm, 0.5 * scintY - kMaskClearance);
 
     if (maskHalfX > 0.0 && maskHalfY > 0.0) {
-      auto* apertureOuter = new G4Box("ScintApertureOuterSolid", maskHalfX, maskHalfY,
-                                      0.5 * apertureThickness);
-      auto* apertureHole =
-          new G4Tubs("ScintApertureHoleSolid", 0.0, apertureRadius,
-                     0.5 * apertureThickness + kApertureClearance, 0.0, 360.0 * deg);
-      auto* apertureSolid =
-          new G4SubtractionSolid("ScintApertureSolid", apertureOuter, apertureHole);
-      auto* apertureLV = new G4LogicalVolume(
-          apertureSolid, BuildOrGetApertureAbsorber(nist), "ScintApertureLV");
+      auto* maskOuter = new G4Box("ScintMaskOuterSolid", maskHalfX, maskHalfY,
+                                  0.5 * maskThickness);
+      auto* maskHole =
+          new G4Tubs("ScintMaskHoleSolid", 0.0, maskRadius,
+                     0.5 * maskThickness + kMaskClearance, 0.0, 360.0 * deg);
+      auto* maskSolid =
+          new G4SubtractionSolid("ScintMaskSolid", maskOuter, maskHole);
+      auto* maskLV = new G4LogicalVolume(
+          maskSolid, BuildOrGetMaskAbsorber(nist), "ScintMaskLV");
 
-      static auto* apertureVisAttributes = []() {
+      static auto* maskVisAttributes = []() {
         auto* vis = new G4VisAttributes(G4Colour(0.0, 0.2, 1.0, 0.9));
         vis->SetVisibility(true);
         vis->SetForceSolid(true);
         return vis;
       }();
-      apertureLV->SetVisAttributes(apertureVisAttributes);
+      maskLV->SetVisAttributes(maskVisAttributes);
 
       new G4PVPlacement(nullptr,
-                        G4ThreeVector(scintPosX, scintPosY, apertureCenterZ),
-                        apertureLV,
-                        "ScintAperturePV",
+                        G4ThreeVector(scintPosX, scintPosY, maskCenterZ),
+                        maskLV,
+                        "ScintMaskPV",
                         worldLV,
                         false,
                         0,

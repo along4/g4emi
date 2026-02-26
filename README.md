@@ -179,7 +179,7 @@ Dataset columns:
 
 - `/primaries`: `gun_call_id`, `primary_track_id`, `primary_species`, `primary_x_mm`, `primary_y_mm`, `primary_energy_MeV`
 - `/secondaries`: `gun_call_id`, `primary_track_id`, `secondary_track_id`, `secondary_species`, `secondary_origin_x_mm`, `secondary_origin_y_mm`, `secondary_origin_z_mm`, `secondary_origin_energy_MeV`
-- `/photons`: `gun_call_id`, `primary_track_id`, `secondary_track_id`, `photon_track_id`, `photon_origin_x_mm`, `photon_origin_y_mm`, `photon_origin_z_mm`, `optical_interface_hit_x_mm`, `optical_interface_hit_y_mm`, `scint_exit_x_mm`, `scint_exit_y_mm`, `scint_exit_z_mm`, `optical_interface_hit_dir_x`, `optical_interface_hit_dir_y`, `optical_interface_hit_dir_z`, `optical_interface_hit_pol_x`, `optical_interface_hit_pol_y`, `optical_interface_hit_pol_z`, `optical_interface_hit_energy_eV`, `optical_interface_hit_wavelength_nm`
+- `/photons`: `gun_call_id`, `primary_track_id`, `secondary_track_id`, `photon_track_id`, `photon_origin_x_mm`, `photon_origin_y_mm`, `photon_origin_z_mm`, `scint_exit_x_mm`, `scint_exit_y_mm`, `scint_exit_z_mm`, `optical_interface_hit_x_mm`, `optical_interface_hit_y_mm`, `optical_interface_hit_dir_x`, `optical_interface_hit_dir_y`, `optical_interface_hit_dir_z`, `optical_interface_hit_pol_x`, `optical_interface_hit_pol_y`, `optical_interface_hit_pol_z`, `optical_interface_hit_energy_eV`, `optical_interface_hit_wavelength_nm`
 
 `/photons` captures both geometric and optical state at the crossing point (position, direction, polarization, energy, wavelength) so downstream ray tracing does not need to reconstruct those values.
 

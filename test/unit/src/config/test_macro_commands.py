@@ -91,6 +91,7 @@ class MacroCommandGenerationTests(unittest.TestCase):
                     x_mm: 100.0
                     y_mm: 100.0
                     z_mm: 20.0
+                  maskRadius: 18.0
                   properties:
                     name: EJ200
                     photonEnergy: [2.8, 3.0, 3.2]
@@ -206,7 +207,7 @@ class MacroCommandGenerationTests(unittest.TestCase):
                 "/scintillator/properties/yieldFraction2 0",
                 "/scintillator/properties/timeConstant3 0 ns",
                 "/scintillator/properties/yieldFraction3 0",
-                "/scintillator/geom/apertureRadius 18 mm",
+                "/scintillator/geom/maskRadius 18 mm",
                 "/optical_interface/geom/sizeX 60.55 mm",
                 "/optical_interface/geom/sizeY 60.55 mm",
                 "/optical_interface/geom/thickness 0.1 mm",
@@ -273,18 +274,18 @@ class MacroCommandGenerationTests(unittest.TestCase):
             reconstructed = self._macro_commands(imported)
             self.assertEqual(reconstructed, expected)
 
-    def test_from_macro_without_aperture_disables_aperture_command(self) -> None:
-        """Missing aperture command should map to non-circular detector shape."""
+    def test_from_macro_without_mask_command_disables_mask_command(self) -> None:
+        """Missing mask command should keep maskRadius at disabled default."""
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
-            macro_path = tmp_path / "no_aperture.mac"
+            macro_path = tmp_path / "no_mask.mac"
             macro_path.write_text(
                 "\n".join(
                     [
                         "/output/format hdf5",
                         "/output/path data",
-                        "/output/runname no_aperture_case",
+                        "/output/runname no_mask_case",
                         "/scintillator/geom/material EJ200",
                         "/scintillator/geom/scintX 100 mm",
                         "/scintillator/geom/scintY 100 mm",
@@ -309,15 +310,16 @@ class MacroCommandGenerationTests(unittest.TestCase):
             commands = self._macro_commands(imported)
 
             self.assertNotIn(
-                "/scintillator/geom/apertureRadius 18 mm",
+                "/scintillator/geom/maskRadius 18 mm",
                 commands,
             )
             self.assertFalse(
                 any(
-                    line.startswith("/scintillator/geom/apertureRadius")
+                    line.startswith("/scintillator/geom/maskRadius")
                     for line in commands
                 )
             )
+            self.assertEqual(imported.scintillator.mask_radius_mm, 0.0)
             self.assertFalse(
                 any(line.startswith("/run/beamOn") for line in commands)
             )

@@ -11,7 +11,7 @@
 /scintillator/geom/posX 0 cm
 /scintillator/geom/posY 0 cm
 /scintillator/geom/posZ 0 cm
-/scintillator/geom/apertureRadius 8 mm
+/scintillator/geom/maskRadius 8 mm
 
 
 /optical_interface/geom/sizeX 2 cm
