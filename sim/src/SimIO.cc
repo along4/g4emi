@@ -307,6 +307,15 @@ bool EnsureReady(const std::string& hdf5Path, std::string* errorMessage) {
   H5Tinsert(s.photonType, "optical_interface_hit_y_mm",
             HOFFSET(detail::Hdf5PhotonNativeRow, optical_interface_hit_y_mm),
             H5T_NATIVE_DOUBLE);
+  H5Tinsert(s.photonType, "scint_exit_x_mm",
+            HOFFSET(detail::Hdf5PhotonNativeRow, scint_exit_x_mm),
+            H5T_NATIVE_DOUBLE);
+  H5Tinsert(s.photonType, "scint_exit_y_mm",
+            HOFFSET(detail::Hdf5PhotonNativeRow, scint_exit_y_mm),
+            H5T_NATIVE_DOUBLE);
+  H5Tinsert(s.photonType, "scint_exit_z_mm",
+            HOFFSET(detail::Hdf5PhotonNativeRow, scint_exit_z_mm),
+            H5T_NATIVE_DOUBLE);
 
   // Optical-interface crossing optical state used for downstream lens/ray propagation.
   H5Tinsert(s.photonType, "optical_interface_hit_dir_x",
@@ -419,6 +428,9 @@ std::vector<detail::Hdf5PhotonNativeRow> ToNative(
     native.photon_origin_z_mm = row.photonOriginZmm;
     native.optical_interface_hit_x_mm = row.opticalInterfaceHitXmm;
     native.optical_interface_hit_y_mm = row.opticalInterfaceHitYmm;
+    native.scint_exit_x_mm = row.scintExitXmm;
+    native.scint_exit_y_mm = row.scintExitYmm;
+    native.scint_exit_z_mm = row.scintExitZmm;
     native.optical_interface_hit_dir_x = row.opticalInterfaceHitDirX;
     native.optical_interface_hit_dir_y = row.opticalInterfaceHitDirY;
     native.optical_interface_hit_dir_z = row.opticalInterfaceHitDirZ;
@@ -585,7 +597,8 @@ bool AppendCsv(const std::string& csvPath,
   if (writeHeader) {
     out << "event_id,primary_id,secondary_id,photon_id,prim_spec,prim_x,prim_y,sec_spec,"
            "sec_origin_x,sec_origin_y,sec_origin_z,sec_origin_eng,scin_orig_x,"
-           "scin_orig_y,scin_orig_z,scin_face_x,scin_face_y\n";
+           "scin_orig_y,scin_orig_z,scin_face_x,scin_face_y,"
+           "scin_exit_x,scin_exit_y,scin_exit_z\n";
   }
 
   for (const auto& row : rows) {
@@ -596,7 +609,8 @@ bool AppendCsv(const std::string& csvPath,
         << row.secondaryOriginZmm << "," << row.secondaryOriginEnergyMeV << ","
         << row.scintOriginXmm << "," << row.scintOriginYmm << ","
         << row.scintOriginZmm << "," << row.opticalInterfaceHitXmm << ","
-        << row.opticalInterfaceHitYmm << "\n";
+        << row.opticalInterfaceHitYmm << "," << row.scintExitXmm << ","
+        << row.scintExitYmm << "," << row.scintExitZmm << "\n";
   }
 
   return true;

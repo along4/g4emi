@@ -7,7 +7,7 @@ class DetectorConstruction;
 class EventAction;
 class G4Step;
 
-/// Per-step hook for scoring deposition and capturing new optical secondaries.
+/// Per-step hook for scoring deposition and optical-photon context capture.
 class SteppingAction : public G4UserSteppingAction {
  public:
   /// Requires detector/scoring-volume access plus event-level accumulator.

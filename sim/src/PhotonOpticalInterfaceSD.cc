@@ -107,6 +107,9 @@ G4bool PhotonOpticalInterfaceSD::ProcessHits(G4Step* step, G4TouchableHistory*) 
     hit.scintOriginPosition = track->GetVertexPosition();
   }
 
+  hit.hasScintExitPosition = eventAction->ConsumePhotonScintillatorExit(
+      track->GetTrackID(), &hit.scintExitPosition);
+
   // Commit one finalized hit row for this photon.
   eventAction->RecordPhotonHit(hit);
 

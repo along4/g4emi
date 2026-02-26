@@ -13,6 +13,7 @@
 #include "G4ios.hh"
 
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -111,6 +112,7 @@ void EventAction::BeginOfEventAction(const G4Event* event) {
   fTrackInfo.clear();
   fPhotonCreationInfo.clear();
   fPendingPhotonOrigin.clear();
+  fPhotonScintillatorExit.clear();
   fPhotonHits.clear();
 
   if (!event) {
@@ -170,6 +172,7 @@ void EventAction::EndOfEventAction(const G4Event* event) {
   // Build flat CSV rows (one row per detected photon hit).
   std::vector<SimIO::CsvPhotonHitInfo> csvRows;
   if (WritesCsv(outputMode)) {
+    const auto nan = std::numeric_limits<double>::quiet_NaN();
     csvRows.reserve(fPhotonHits.size());
     for (const auto& hit : fPhotonHits) {
       SimIO::CsvPhotonHitInfo row;
@@ -190,6 +193,12 @@ void EventAction::EndOfEventAction(const G4Event* event) {
       row.scintOriginZmm = hit.scintOriginPosition.z() / mm;
       row.opticalInterfaceHitXmm = hit.opticalInterfaceHitPosition.x() / mm;
       row.opticalInterfaceHitYmm = hit.opticalInterfaceHitPosition.y() / mm;
+      row.scintExitXmm =
+          hit.hasScintExitPosition ? hit.scintExitPosition.x() / mm : nan;
+      row.scintExitYmm =
+          hit.hasScintExitPosition ? hit.scintExitPosition.y() / mm : nan;
+      row.scintExitZmm =
+          hit.hasScintExitPosition ? hit.scintExitPosition.z() / mm : nan;
       csvRows.push_back(row);
     }
   }
@@ -271,6 +280,15 @@ void EventAction::EndOfEventAction(const G4Event* event) {
       row.opticalInterfaceHitDirX = hit.opticalInterfaceHitDirection.x();
       row.opticalInterfaceHitDirY = hit.opticalInterfaceHitDirection.y();
       row.opticalInterfaceHitDirZ = hit.opticalInterfaceHitDirection.z();
+      row.scintExitXmm =
+          hit.hasScintExitPosition ? hit.scintExitPosition.x() / mm
+                                   : std::numeric_limits<double>::quiet_NaN();
+      row.scintExitYmm =
+          hit.hasScintExitPosition ? hit.scintExitPosition.y() / mm
+                                   : std::numeric_limits<double>::quiet_NaN();
+      row.scintExitZmm =
+          hit.hasScintExitPosition ? hit.scintExitPosition.z() / mm
+                                   : std::numeric_limits<double>::quiet_NaN();
       row.opticalInterfaceHitPolX = hit.opticalInterfaceHitPolarization.x();
       row.opticalInterfaceHitPolY = hit.opticalInterfaceHitPolarization.y();
       row.opticalInterfaceHitPolZ = hit.opticalInterfaceHitPolarization.z();
@@ -368,6 +386,30 @@ bool EventAction::ConsumePendingPhotonOrigin(const G4Track* photonTrack,
     *origin = it->second;
   }
   fPendingPhotonOrigin.erase(it);
+  return true;
+}
+
+/**
+ * Store/update the most recent scintillator-exit boundary crossing for a photon.
+ */
+void EventAction::RecordPhotonScintillatorExit(
+    G4int photonTrackID, const G4ThreeVector& position) {
+  fPhotonScintillatorExit[photonTrackID] = position;
+}
+
+/**
+ * Consume and erase a scintillator-exit boundary crossing for a photon.
+ */
+bool EventAction::ConsumePhotonScintillatorExit(G4int photonTrackID,
+                                                G4ThreeVector* position) {
+  const auto it = fPhotonScintillatorExit.find(photonTrackID);
+  if (it == fPhotonScintillatorExit.end()) {
+    return false;
+  }
+  if (position) {
+    *position = it->second;
+  }
+  fPhotonScintillatorExit.erase(it);
   return true;
 }
 

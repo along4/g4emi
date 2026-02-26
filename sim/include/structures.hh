@@ -74,6 +74,11 @@ struct PhotonInfo {
   double opticalInterfaceHitXmm = 0.0;
   double opticalInterfaceHitYmm = 0.0;
 
+  /// Position (mm) where the photon last exited the scintillator volume.
+  double scintExitXmm = 0.0;
+  double scintExitYmm = 0.0;
+  double scintExitZmm = 0.0;
+
   /// Unit momentum-direction components at optical-interface crossing.
   double opticalInterfaceHitDirX = 0.0;
   double opticalInterfaceHitDirY = 0.0;
@@ -118,6 +123,9 @@ struct CsvPhotonHitInfo {
 
   double opticalInterfaceHitXmm = 0.0;
   double opticalInterfaceHitYmm = 0.0;
+  double scintExitXmm = 0.0;
+  double scintExitYmm = 0.0;
+  double scintExitZmm = 0.0;
 };
 
 namespace detail {
@@ -175,6 +183,9 @@ struct Hdf5PhotonNativeRow {
   double photon_origin_z_mm;
   double optical_interface_hit_x_mm;
   double optical_interface_hit_y_mm;
+  double scint_exit_x_mm;
+  double scint_exit_y_mm;
+  double scint_exit_z_mm;
   double optical_interface_hit_dir_x;
   double optical_interface_hit_dir_y;
   double optical_interface_hit_dir_z;

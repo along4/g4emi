@@ -53,6 +53,10 @@ class EventAction : public G4UserEventAction {
 
     /// Optical-photon creation point inside the scintillator volume.
     G4ThreeVector scintOriginPosition;
+    /// Last recorded point where this photon crossed out of the scintillator volume.
+    G4ThreeVector scintExitPosition;
+    /// True when a scintillator-exit crossing was captured for this photon.
+    G4bool hasScintExitPosition = false;
 
     /// Optical-interface crossing position (world frame) at pre-step boundary entry.
     G4ThreeVector opticalInterfaceHitPosition;
@@ -95,6 +99,12 @@ class EventAction : public G4UserEventAction {
   /// Retrieve-and-remove pending origin; returns false when none exists.
   bool ConsumePendingPhotonOrigin(const G4Track* photonTrack,
                                   G4ThreeVector* origin);
+  /// Record/update the most recent scintillator-exit boundary point for a photon.
+  void RecordPhotonScintillatorExit(G4int photonTrackID,
+                                    const G4ThreeVector& position);
+  /// Retrieve-and-remove scintillator-exit point by photon track ID.
+  bool ConsumePhotonScintillatorExit(G4int photonTrackID,
+                                     G4ThreeVector* position);
 
   /// Append one finalized optical-interface hit including crossing ray state metadata.
   void RecordPhotonHit(const PhotonHitRecord& hit);
@@ -125,6 +135,8 @@ class EventAction : public G4UserEventAction {
   std::unordered_map<G4int, PhotonCreationInfo> fPhotonCreationInfo;
   /// Track pointer -> pending origin captured at stepping-time.
   std::unordered_map<const void*, G4ThreeVector> fPendingPhotonOrigin;
+  /// Photon track ID -> latest scintillator-exit boundary position.
+  std::unordered_map<G4int, G4ThreeVector> fPhotonScintillatorExit;
   /// Collected optical-interface-hit rows for end-of-event serialization.
   std::vector<PhotonHitRecord> fPhotonHits;
 };
