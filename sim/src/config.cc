@@ -31,7 +31,7 @@ std::size_t ToZeroBasedComponentIndex(G4int componentIndex) {
  *   - X/Y align to scintillator center,
  *   - Z uses default flush placement at scintillator +Z face.
  * - Material: EJ200.
- * - Output: CSV mode (enum default in header), output base name
+ * - Output: HDF5 file path derived from output base name
  *   "data/photon_optical_interface_hits", no explicit output-path override,
  *   and no run-name subdirectory.
  */
@@ -65,88 +65,6 @@ Config::Config()
       fOutputFilename("data/photon_optical_interface_hits"),
       fOutputPath(""),
       fOutputRunName("") {}
-
-/**
- * Thread-safe getter for output mode.
- *
- * Access is locked because this object is shared across components and may be
- * read from event-processing code while UI commands are applied.
- */
-Config::OutputFormat Config::GetOutputFormat() const {
-  std::lock_guard<std::mutex> lock(fMutex);
-  return fOutputFormat;
-}
-
-/**
- * Parse and set output mode from user text.
- *
- * Returns:
- * - true: recognized value and internal mode updated.
- * - false: value is invalid and state is unchanged.
- */
-bool Config::SetOutputFormat(const std::string& value) {
-  OutputFormat parsed = OutputFormat::kCsv;
-  if (!ParseOutputFormat(value, &parsed)) {
-    return false;
-  }
-  SetOutputFormat(parsed);
-  return true;
-}
-
-/// Thread-safe setter overload for already-parsed enum values.
-void Config::SetOutputFormat(OutputFormat value) {
-  std::lock_guard<std::mutex> lock(fMutex);
-  fOutputFormat = value;
-}
-
-/**
- * Convert UI text into OutputFormat enum.
- *
- * Accepted tokens:
- * - "csv"
- * - "hdf5" or "h5"
- * - "both"
- *
- * This method is pure parsing: it does not mutate Config state.
- */
-bool Config::ParseOutputFormat(std::string value, OutputFormat* out) {
-  if (!out) {
-    return false;
-  }
-
-  value = Utils::ToLower(value);
-  if (value == "csv") {
-    *out = OutputFormat::kCsv;
-    return true;
-  }
-  if (value == "hdf5" || value == "h5") {
-    *out = OutputFormat::kHdf5;
-    return true;
-  }
-  if (value == "both") {
-    *out = OutputFormat::kBoth;
-    return true;
-  }
-  return false;
-}
-
-/**
- * Convert OutputFormat enum to canonical UI/storage text.
- *
- * The fallback return ("csv") protects against undefined enum values if the
- * code is extended in the future and this switch is not updated.
- */
-const char* Config::OutputFormatToString(OutputFormat value) {
-  switch (value) {
-    case OutputFormat::kCsv:
-      return "csv";
-    case OutputFormat::kHdf5:
-      return "hdf5";
-    case OutputFormat::kBoth:
-      return "both";
-  }
-  return "csv";
-}
 
 /// Thread-safe geometry getter: scintillator size in X (Geant4 internal units).
 G4double Config::GetScintX() const {
@@ -580,7 +498,7 @@ std::string Config::GetOutputFilename() const {
 /**
  * Set output base filename/path.
  *
- * If the user passes a recognized output extension (.csv/.h5/.hdf5), that
+ * If the user passes a recognized output extension (.h5/.hdf5), that
  * extension is removed so format-specific getters can append the selected
  * canonical extension.
  */
@@ -638,13 +556,6 @@ std::string Config::GetOutputRunName() const {
 void Config::SetOutputRunName(const std::string& value) {
   std::lock_guard<std::mutex> lock(fMutex);
   fOutputRunName = SimIO::NormalizeRunName(value);
-}
-
-/// Thread-safe getter for CSV output path derived from output settings.
-std::string Config::GetCsvFilePath() const {
-  std::lock_guard<std::mutex> lock(fMutex);
-  return SimIO::ComposeOutputPath(fOutputFilename, fOutputPath, fOutputRunName,
-                                  ".csv");
 }
 
 /// Thread-safe getter for HDF5 output path derived from output settings.

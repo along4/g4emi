@@ -12,7 +12,6 @@ namespace SimIO {
 using PrimaryInfo = SimStructures::PrimaryInfo;
 using SecondaryInfo = SimStructures::SecondaryInfo;
 using PhotonInfo = SimStructures::PhotonInfo;
-using CsvPhotonHitInfo = SimStructures::CsvPhotonHitInfo;
 
 namespace detail {
 
@@ -42,7 +41,7 @@ std::string NormalizeRunName(const std::string& value);
 /**
  * Strip a known output extension from a base file name/path.
  *
- * Recognized extensions are `.csv`, `.h5`, and `.hdf5` (case-insensitive).
+ * Recognized extensions are `.h5` and `.hdf5` (case-insensitive).
  * Unknown extensions are preserved as-is.
  */
 std::string StripKnownOutputExtension(const std::string& value);
@@ -68,11 +67,6 @@ std::string ComposeOutputPath(const std::string& base,
                               const std::string& outputPath,
                               const std::string& runName,
                               const char* extension);
-
-/// Append flat photon-hit rows to CSV output (creates header for new file).
-bool AppendCsv(const std::string& csvPath,
-               const std::vector<CsvPhotonHitInfo>& rows,
-               std::string* errorMessage);
 
 /// Append primary/secondary/photon rows to structured HDF5 datasets.
 bool AppendHdf5(const std::string& hdf5Path,

@@ -11,24 +11,9 @@
 /// Thread-safe runtime configuration shared across geometry/actions/messenger.
 class Config {
  public:
-  /// Supported output serialization modes.
-  enum class OutputFormat { kCsv, kHdf5, kBoth };
-
-  /// Initialize defaults (geometry, material, output mode/paths).
+  /// Initialize defaults (geometry, material, and output paths).
   Config();
   ~Config() = default;
-
-  /// Get current output mode.
-  OutputFormat GetOutputFormat() const;
-  /// Parse and set output mode from text token (csv/hdf5/both).
-  bool SetOutputFormat(const std::string& value);
-  /// Set output mode directly.
-  void SetOutputFormat(OutputFormat value);
-
-  /// Parse output-mode text token into enum.
-  static bool ParseOutputFormat(std::string value, OutputFormat* out);
-  /// Convert output-mode enum to canonical string token.
-  static const char* OutputFormatToString(OutputFormat value);
 
   /// Scintillator X length.
   G4double GetScintX() const;
@@ -187,17 +172,12 @@ class Config {
   /// `data/<runName>/simulatedPhotons/`.
   void SetOutputRunName(const std::string& value);
 
-  /// Get CSV output file path derived from output settings.
-  std::string GetCsvFilePath() const;
   /// Get HDF5 output file path derived from output settings.
   std::string GetHdf5FilePath() const;
 
  private:
   /// Guards all mutable config fields for cross-thread read/write safety.
   mutable std::mutex fMutex;
-
-  /// Selected output format.
-  OutputFormat fOutputFormat = OutputFormat::kCsv;
 
   /// Scintillator dimensions in Geant4 internal units.
   G4double fScintX = 0.0;

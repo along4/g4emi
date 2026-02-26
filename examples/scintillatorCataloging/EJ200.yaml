@@ -89,4 +89,3 @@ Metadata:
     OutputInfo:
       SimulatedPhotonsDirectory: simulatedPhotons
       TransportedPhotonsDirectory: transportedPhotons
-      OutputFormat: hdf5

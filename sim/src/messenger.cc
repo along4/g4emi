@@ -110,7 +110,7 @@ Messenger::Messenger(Config* config) : fConfig(config) {
   fOpticalInterfaceGeomDir = new G4UIdirectory("/optical_interface/geom/");
   fOpticalInterfaceGeomDir->SetGuidance("Optical-interface geometry controls");
 
-  // Output subtree (format and file destination controls).
+  // Output subtree (file destination controls).
   fOutputDir = new G4UIdirectory("/output/");
   fOutputDir->SetGuidance("Output controls");
 
@@ -307,13 +307,6 @@ Messenger::Messenger(Config* config) : fConfig(config) {
   fOpticalInterfacePosZCmd->SetUnitCategory("Length");
   fOpticalInterfacePosZCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 
-  // Output format command. Allowed values are constrained by SetCandidates.
-  fOutputFormatCmd = new G4UIcmdWithAString("/output/format", this);
-  fOutputFormatCmd->SetGuidance("Set output format: csv, hdf5, both");
-  fOutputFormatCmd->SetParameterName("format", false);
-  fOutputFormatCmd->SetCandidates("csv hdf5 both");
-  fOutputFormatCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
-
   // Output directory command. Empty string clears explicit override.
   fOutputPathCmd = new G4UIcmdWithAString("/output/path", this);
   fOutputPathCmd->SetGuidance(
@@ -324,7 +317,7 @@ Messenger::Messenger(Config* config) : fConfig(config) {
   // Output filename command.
   fOutputFilenameCmd = new G4UIcmdWithAString("/output/filename", this);
   fOutputFilenameCmd->SetGuidance(
-      "Set output base filename/path; .csv/.h5 extension is added automatically");
+      "Set output base filename/path; .h5 extension is added automatically");
   fOutputFilenameCmd->SetParameterName("filename", false);
   fOutputFilenameCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 
@@ -346,7 +339,6 @@ Messenger::~Messenger() {
   delete fOutputRunNameCmd;
   delete fOutputFilenameCmd;
   delete fOutputPathCmd;
-  delete fOutputFormatCmd;
 
   delete fOpticalInterfacePosZCmd;
   delete fOpticalInterfacePosYCmd;
@@ -623,19 +615,6 @@ void Messenger::SetNewValue(G4UIcommand* command, G4String newValue) {
     return;
   }
 
-  // Output format selection controls which writer(s) EventAction invokes.
-  if (command == fOutputFormatCmd) {
-    if (!fConfig->SetOutputFormat(newValue)) {
-      G4cout << "Unknown format '" << newValue
-             << "'. Allowed values: csv, hdf5, both" << G4endl;
-      return;
-    }
-    G4cout << "Output format set to '"
-           << Config::OutputFormatToString(fConfig->GetOutputFormat()) << "'."
-           << G4endl;
-    return;
-  }
-
   // Output-path override controls destination directory for output writers.
   if (command == fOutputPathCmd) {
     fConfig->SetOutputPath(newValue);
@@ -646,35 +625,15 @@ void Messenger::SetNewValue(G4UIcommand* command, G4String newValue) {
     } else {
       G4cout << "Output path set to '" << configuredPath << "'." << G4endl;
     }
-
-    const auto mode = fConfig->GetOutputFormat();
-    if (mode == Config::OutputFormat::kCsv) {
-      G4cout << "CSV path: '" << fConfig->GetCsvFilePath() << "'." << G4endl;
-    } else if (mode == Config::OutputFormat::kHdf5) {
-      G4cout << "HDF5 path: '" << fConfig->GetHdf5FilePath() << "'." << G4endl;
-    } else {
-      G4cout << "CSV path: '" << fConfig->GetCsvFilePath()
-             << "', HDF5 path: '" << fConfig->GetHdf5FilePath() << "'."
-             << G4endl;
-    }
+    G4cout << "HDF5 path: '" << fConfig->GetHdf5FilePath() << "'." << G4endl;
     return;
   }
 
-  // Output filename is format-agnostic; extension is derived automatically.
+  // Output filename targets HDF5 output; extension is derived automatically.
   if (command == fOutputFilenameCmd) {
     fConfig->SetOutputFilename(newValue);
-    const auto mode = fConfig->GetOutputFormat();
-    if (mode == Config::OutputFormat::kCsv) {
-      G4cout << "Output filename set. CSV path: '" << fConfig->GetCsvFilePath()
-             << "'." << G4endl;
-    } else if (mode == Config::OutputFormat::kHdf5) {
-      G4cout << "Output filename set. HDF5 path: '" << fConfig->GetHdf5FilePath()
-             << "'." << G4endl;
-    } else {
-      G4cout << "Output filename set. CSV path: '" << fConfig->GetCsvFilePath()
-             << "', HDF5 path: '" << fConfig->GetHdf5FilePath() << "'."
-             << G4endl;
-    }
+    G4cout << "Output filename set. HDF5 path: '" << fConfig->GetHdf5FilePath()
+           << "'." << G4endl;
     return;
   }
 
@@ -687,17 +646,7 @@ void Messenger::SetNewValue(G4UIcommand* command, G4String newValue) {
     } else {
       G4cout << "Output run name set to '" << runName << "'." << G4endl;
     }
-
-    const auto mode = fConfig->GetOutputFormat();
-    if (mode == Config::OutputFormat::kCsv) {
-      G4cout << "CSV path: '" << fConfig->GetCsvFilePath() << "'." << G4endl;
-    } else if (mode == Config::OutputFormat::kHdf5) {
-      G4cout << "HDF5 path: '" << fConfig->GetHdf5FilePath() << "'." << G4endl;
-    } else {
-      G4cout << "CSV path: '" << fConfig->GetCsvFilePath()
-             << "', HDF5 path: '" << fConfig->GetHdf5FilePath() << "'."
-             << G4endl;
-    }
+    G4cout << "HDF5 path: '" << fConfig->GetHdf5FilePath() << "'." << G4endl;
     return;
   }
 }

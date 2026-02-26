@@ -238,7 +238,6 @@ def _default_import_template(macro_path: Path) -> SimConfig:
     run_environment["log_directory"] = "logs"
     output_info["simulated_photons_dir"] = SIMULATED_PHOTONS_STAGE_DIR
     output_info["transported_photons_dir"] = TRANSPORT_PHOTONS_STAGE_DIR
-    output_info["output_format"] = "hdf5"
 
     # Macro files may omit `/run/beamOn` and runtime-control preamble commands.
     # Keep simulation block unset by default so import does not invent them.
@@ -319,7 +318,6 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
 
     metadata = payload["metadata"]
     run_environment = metadata["run_environment"]
-    output_info = run_environment["output_info"]
     scintillator = payload["scintillator"]
     scint_properties = scintillator.get("properties")
     if not isinstance(scint_properties, dict):
@@ -365,9 +363,11 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
 
         command = tokens[0]
 
-        if command == "/output/format" and len(tokens) >= 2:
-            output_info["output_format"] = tokens[1].strip().lower()
-            continue
+        if command == "/output/format":
+            raise ValueError(
+                "Legacy command '/output/format' is no longer supported. "
+                "HDF5 output is always enabled."
+            )
         if command == "/output/path" and len(tokens) >= 2:
             parsed_output_path = tokens[1]
             continue
@@ -1042,26 +1042,11 @@ def prepare_run_environment(config: SimConfig) -> RunEnvironmentPaths:
     return validate_run_environment(config, create_directories=True)
 
 
-def _normalize_output_format_token(value: str) -> str:
-    """Normalize output format token to Geant4 command-compatible text.
-
-    Currently this only maps ``h5`` to ``hdf5`` and lowercases all values.
-    Validation of allowed final values is delegated to runtime Geant4 command
-    handling and/or higher-level config conventions.
-    """
-
-    token = value.strip().lower()
-    if token == "h5":
-        return "hdf5"
-    return token
-
-
 def output_commands(config: SimConfig) -> list[str]:
     """Build Geant4 ``/output/*`` command lines from metadata settings.
 
     Command mapping:
-    - ``RunEnvironment.OutputInfo.OutputFormat`` -> ``/output/format``
-    - ``RunEnvironment.WorkingDirectory``            -> ``/output/path``
+    - ``RunEnvironment.WorkingDirectory``          -> ``/output/path``
     - fixed base filename                          -> ``/output/filename``
     - ``RunEnvironment.SimulationRunID``          -> ``/output/runname``
 
@@ -1070,7 +1055,6 @@ def output_commands(config: SimConfig) -> list[str]:
     """
 
     return [
-        f"/output/format {_normalize_output_format_token(config.metadata.run_environment.output_info.output_format)}",
         f"/output/path {resolve_run_environment_directory(config, 'data')}",
         f"/output/filename {DEFAULT_OUTPUT_FILENAME_BASE}",
         f"/output/runname {config.metadata.run_environment.simulation_run_id}",

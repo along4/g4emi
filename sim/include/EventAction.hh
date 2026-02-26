@@ -54,9 +54,9 @@ class EventAction : public G4UserEventAction {
     /// Optical-photon creation point inside the scintillator volume.
     G4ThreeVector scintOriginPosition;
     /// Last recorded point where this photon crossed out of the scintillator volume.
-    G4ThreeVector scintExitPosition;
+    G4ThreeVector photonScintExitPosition;
     /// True when a scintillator-exit crossing was captured for this photon.
-    G4bool hasScintExitPosition = false;
+    G4bool hasPhotonScintExitPosition = false;
 
     /// Optical-interface crossing position (world frame) at pre-step boundary entry.
     G4ThreeVector opticalInterfaceHitPosition;

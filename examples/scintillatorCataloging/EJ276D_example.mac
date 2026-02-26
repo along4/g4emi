@@ -3,7 +3,6 @@
 /event/verbose 0
 /tracking/verbose 0
 /run/printProgress 500
-/output/format hdf5
 /output/path data
 /output/filename photon_optical_interface_hits
 /output/runname EJ276D_time_components_example

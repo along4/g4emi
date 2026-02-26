@@ -21,7 +21,7 @@ namespace {
 /**
  * Convert Geant4 particle names into compact analysis labels.
  *
- * Stable short labels keep CSV/HDF5 records easier to read and post-process.
+ * Stable short labels keep HDF5 records easier to read and post-process.
  */
 std::string ToSpeciesLabel(const G4String& particleName) {
   if (particleName == "neutron") return "n";
