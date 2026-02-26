@@ -1,0 +1,41 @@
+id: EJ200
+name: Eljen EJ-200
+description: >
+  Default plastic scintillator used by g4emi.
+  Values mirror the current EJ200 baseline in DetectorConstruction.
+
+composition:
+  density:
+    value: 1.023
+    unit: g/cm3
+  atoms:
+    C: 9
+    H: 10
+
+optical:
+  curves:
+    rIndex:
+      path: curves/EJ200/rindex.csv
+      xUnit: eV
+      yUnit: unitless
+    absLength:
+      path: curves/EJ200/abs_length_cm.csv
+      xUnit: eV
+      yUnit: cm
+    scintSpectrum:
+      path: curves/EJ200/scint_spectrum.csv
+      xUnit: eV
+      yUnit: unitless
+  constants:
+    scintYield:
+      value: 10000.0
+      unit: 1/MeV
+    resolutionScale: 1.0
+    timeComponents:
+      default:
+        - timeConstant: {value: 2.1, unit: ns}
+          yieldFraction: 1.0
+        - timeConstant: {value: 0.0, unit: ns}
+          yieldFraction: 0.0
+        - timeConstant: {value: 0.0, unit: ns}
+          yieldFraction: 0.0

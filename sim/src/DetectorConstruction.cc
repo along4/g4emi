@@ -22,6 +22,7 @@
 #include <cmath>
 #include <limits>
 #include <string>
+#include <vector>
 
 namespace {
 /**
@@ -43,62 +44,107 @@ G4double PositiveOrDefault(G4double value, G4double fallback) {
   return (value > 0.0) ? value : fallback;
 }
 
+struct ScintillatorMaterialConfig {
+  std::string baseName = "EJ200";
+  G4double density = 1.023 * g / cm3;
+  G4int carbonAtoms = 9;
+  G4int hydrogenAtoms = 10;
+  std::vector<G4double> photonEnergy = {
+      2.00 * eV, 2.40 * eV, 2.76 * eV, 3.10 * eV, 3.50 * eV};
+  std::vector<G4double> rIndex = {1.58, 1.58, 1.58, 1.58, 1.58};
+  std::vector<G4double> absLength = {
+      380.0 * cm, 380.0 * cm, 380.0 * cm, 300.0 * cm, 220.0 * cm};
+  std::vector<G4double> scintSpectrum = {0.05, 0.35, 1.00, 0.45, 0.08};
+  G4double scintYieldPerMeV = 10000.0;
+  G4double resolutionScale = 1.0;
+  G4double timeConstant = 2.1 * ns;
+  G4double yield1 = 1.0;
+  G4int version = 0;
+};
+
+ScintillatorMaterialConfig ResolveScintillatorMaterialConfig(const Config* config) {
+  ScintillatorMaterialConfig out;
+  if (!config) {
+    return out;
+  }
+
+  out.density = config->GetScintDensity();
+  out.carbonAtoms = config->GetScintCarbonAtoms();
+  out.hydrogenAtoms = config->GetScintHydrogenAtoms();
+  out.photonEnergy = config->GetScintPhotonEnergy();
+  out.rIndex = config->GetScintRIndex();
+  out.absLength = config->GetScintAbsLength();
+  out.scintSpectrum = config->GetScintSpectrum();
+  out.scintYieldPerMeV = config->GetScintYield();
+  out.resolutionScale = config->GetScintResolutionScale();
+  out.timeConstant = config->GetScintTimeConstant();
+  out.yield1 = config->GetScintYield1();
+  out.version = config->GetScintMaterialVersion();
+
+  if (out.density <= 0.0) {
+    out.density = 1.023 * g / cm3;
+  }
+  if (out.carbonAtoms <= 0) {
+    out.carbonAtoms = 9;
+  }
+  if (out.hydrogenAtoms <= 0) {
+    out.hydrogenAtoms = 10;
+  }
+  if (out.scintYieldPerMeV <= 0.0) {
+    out.scintYieldPerMeV = 10000.0;
+  }
+  if (out.resolutionScale <= 0.0) {
+    out.resolutionScale = 1.0;
+  }
+  if (out.timeConstant <= 0.0) {
+    out.timeConstant = 2.1 * ns;
+  }
+  if (out.yield1 < 0.0) {
+    out.yield1 = 1.0;
+  }
+
+  const std::size_t nEntries = out.photonEnergy.size();
+  if (nEntries == 0 || out.rIndex.size() != nEntries || out.absLength.size() != nEntries ||
+      out.scintSpectrum.size() != nEntries) {
+    G4cout << "[Scintillator] Invalid material-table sizes; falling back to EJ200 defaults."
+           << G4endl;
+    out.photonEnergy = {2.00 * eV, 2.40 * eV, 2.76 * eV, 3.10 * eV, 3.50 * eV};
+    out.rIndex = {1.58, 1.58, 1.58, 1.58, 1.58};
+    out.absLength = {380.0 * cm, 380.0 * cm, 380.0 * cm, 300.0 * cm, 220.0 * cm};
+    out.scintSpectrum = {0.05, 0.35, 1.00, 0.45, 0.08};
+  }
+
+  return out;
+}
+
 /**
- * Build (once) and return the custom EJ200 material used by this application.
- *
- * Design notes:
- * - We use a custom material rather than a NIST alias to control scintillation
- *   and optical transport parameters explicitly.
- * - The function first checks the Geant4 material table so repeated
- *   geometry reinitialization does not duplicate EJ200 definitions.
- *
- * Data provenance for EJ200 constants used below:
- * - Primary source: Eljen EJ-200/EJ-204/EJ-208/EJ-212 product page and data sheet.
- *   URL: https://eljentechnology.com/products
- * - Values taken directly from Eljen tables:
- *   density = 1.023 g/cm^3, refractive index = 1.58,
- *   attenuation length = 380 cm, decay time = 2.1 ns,
- *   scintillation efficiency = 10,000 photons / MeV.
- * - Emission-shape weights (scintSpectrum) are an approximate discretization
- *   of the EJ-200 emission-spectrum plot, not a digitized vendor table.
- *   They should be treated as a practical placeholder shape for transport studies.
+ * Build (once per version) and return a configurable EJ200-like material.
  */
-G4Material* BuildOrGetEJ200(G4NistManager* nist) {
-  if (auto* existing = G4Material::GetMaterial("EJ200", false)) {
+G4Material* BuildOrGetEJ200(G4NistManager* nist, const Config* config) {
+  const auto settings = ResolveScintillatorMaterialConfig(config);
+  const std::string runtimeName =
+      settings.baseName + "_cfg_" + std::to_string(settings.version);
+
+  if (auto* existing = G4Material::GetMaterial(runtimeName, false)) {
     return existing;
   }
 
   auto* carbon = nist->FindOrBuildElement("C");
   auto* hydrogen = nist->FindOrBuildElement("H");
 
-  auto* scintMaterial = new G4Material("EJ200", 1.023 * g / cm3, 2);
-  scintMaterial->AddElement(carbon, 9);
-  scintMaterial->AddElement(hydrogen, 10);
-
-  // Energy nodes spanning the visible/near-UV region around EJ-200 emission.
-  // Chosen as a compact grid for interpolation (not a vendor tabulation).
-  G4double photonEnergy[kNEntries] = {2.00 * eV, 2.40 * eV, 2.76 * eV, 3.10 * eV,
-                                      3.50 * eV};
-  // Vendor value: refractive index n = 1.58 (treated as approximately flat here).
-  G4double rIndex[kNEntries] = {1.58, 1.58, 1.58, 1.58, 1.58};
-  // Vendor value: light attenuation length = 380 cm.
-  // We taper at higher energies to emulate stronger short-wavelength loss.
-  G4double absLength[kNEntries] = {380.0 * cm, 380.0 * cm, 380.0 * cm, 300.0 * cm,
-                                   220.0 * cm};
-  // Approximate relative emission profile from EJ-200 spectrum figure.
-  // Normalize shape with SCINTILLATIONYIELD below (absolute photon yield).
-  G4double scintSpectrum[kNEntries] = {0.05, 0.35, 1.00, 0.45, 0.08};
+  auto* scintMaterial = new G4Material(runtimeName, settings.density, 2);
+  scintMaterial->AddElement(carbon, settings.carbonAtoms);
+  scintMaterial->AddElement(hydrogen, settings.hydrogenAtoms);
 
   auto* mpt = new G4MaterialPropertiesTable();
-  mpt->AddProperty("RINDEX", photonEnergy, rIndex, kNEntries);
-  mpt->AddProperty("ABSLENGTH", photonEnergy, absLength, kNEntries);
-  mpt->AddProperty("SCINTILLATIONCOMPONENT1", photonEnergy, scintSpectrum, kNEntries);
-  // Vendor scintillation efficiency: ~10,000 photons / MeV for EJ-200.
-  mpt->AddConstProperty("SCINTILLATIONYIELD", 10000.0 / MeV);
-  mpt->AddConstProperty("RESOLUTIONSCALE", 1.0);
-  // Vendor decay time: 2.1 ns (single-component model used here).
-  mpt->AddConstProperty("SCINTILLATIONTIMECONSTANT1", 2.1 * ns);
-  mpt->AddConstProperty("SCINTILLATIONYIELD1", 1.0);
+  mpt->AddProperty("RINDEX", settings.photonEnergy, settings.rIndex);
+  mpt->AddProperty("ABSLENGTH", settings.photonEnergy, settings.absLength);
+  mpt->AddProperty("SCINTILLATIONCOMPONENT1", settings.photonEnergy,
+                   settings.scintSpectrum);
+  mpt->AddConstProperty("SCINTILLATIONYIELD", settings.scintYieldPerMeV / MeV);
+  mpt->AddConstProperty("RESOLUTIONSCALE", settings.resolutionScale);
+  mpt->AddConstProperty("SCINTILLATIONTIMECONSTANT1", settings.timeConstant);
+  mpt->AddConstProperty("SCINTILLATIONYIELD1", settings.yield1);
   scintMaterial->SetMaterialPropertiesTable(mpt);
 
   return scintMaterial;
@@ -162,13 +208,13 @@ G4VPhysicalVolume* DetectorConstruction::Construct() {
   }
 
   if (scintMaterialName == "EJ200") {
-    scintMaterial = BuildOrGetEJ200(nist);
+    scintMaterial = BuildOrGetEJ200(nist, fConfig);
   } else {
     scintMaterial = nist->FindOrBuildMaterial(scintMaterialName, false);
     if (!scintMaterial) {
       G4cout << "Material '" << scintMaterialName
              << "' not found. Falling back to EJ200." << G4endl;
-      scintMaterial = BuildOrGetEJ200(nist);
+      scintMaterial = BuildOrGetEJ200(nist, fConfig);
     }
   }
 

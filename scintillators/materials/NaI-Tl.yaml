@@ -1,0 +1,44 @@
+id: NaI-Tl
+name: NaI(Tl)
+description: >
+  SSLG4-derived iodide scintillator entry from isc-2004 (NaITI).
+  Optical constants come from sslg4/macros/iscnt/isc-2004.mac.
+  SSLG4 does not define ABSLENGTH for this material; a large flat
+  placeholder (1e6 cm) is used to emulate no explicit absorption limit.
+
+composition:
+  density:
+    value: 3.67
+    unit: g/cm3
+  atoms:
+    Na: 1520
+    I: 8380
+    Tl: 100
+
+optical:
+  curves:
+    rIndex:
+      path: curves/NaI-Tl/rindex.csv
+      xUnit: eV
+      yUnit: unitless
+    absLength:
+      path: curves/NaI-Tl/abs_length_cm.csv
+      xUnit: eV
+      yUnit: cm
+    scintSpectrum:
+      path: curves/NaI-Tl/scint_spectrum.csv
+      xUnit: eV
+      yUnit: unitless
+  constants:
+    scintYield:
+      value: 41000.0
+      unit: 1/MeV
+    resolutionScale: 1.0
+    timeComponents:
+      default:
+        - timeConstant: {value: 630.0, unit: ns}
+          yieldFraction: 1.0
+        - timeConstant: {value: 0.0, unit: ns}
+          yieldFraction: 0.0
+        - timeConstant: {value: 0.0, unit: ns}
+          yieldFraction: 0.0

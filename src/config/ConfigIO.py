@@ -26,21 +26,60 @@ Conventions
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date as DateType
 import math
 from pathlib import Path
 import shlex
 import sys
-from typing import Any
+from typing import Any, Literal
 
 try:
     from src.config.SimConfig import SimConfig, default_sim_config
-    from src.config.utilsConfig import resolve_path
+    from src.config.ScintillatorCatalogIO import load_scintillator
+    from src.config.utilsConfig import (
+        _DENSITY_UNIT_TO_G_CM3,
+        _ENERGY_UNIT_TO_EV,
+        _LENGTH_UNIT_TO_MM,
+        _SCINT_YIELD_UNIT_TO_PER_MEV,
+        _TIME_UNIT_TO_NS,
+        _length_to_mm,
+        _parse_density_to_g_cm3,
+        _parse_energy_to_mev,
+        _parse_length_tokens,
+        _parse_numeric_list_with_optional_unit,
+        _parse_scint_yield_to_per_mev,
+        _parse_time_to_ns,
+        _parse_vector3,
+        assert_directory_writable,
+        assert_distinct_paths,
+        ensure_directory,
+        resolve_path,
+    )
 except ModuleNotFoundError:
     # Support imports when repository root is not already on sys.path.
     sys.path.append(str(Path(__file__).resolve().parents[2]))
     from src.config.SimConfig import SimConfig, default_sim_config
-    from src.config.utilsConfig import resolve_path
+    from src.config.ScintillatorCatalogIO import load_scintillator
+    from src.config.utilsConfig import (
+        _DENSITY_UNIT_TO_G_CM3,
+        _ENERGY_UNIT_TO_EV,
+        _LENGTH_UNIT_TO_MM,
+        _SCINT_YIELD_UNIT_TO_PER_MEV,
+        _TIME_UNIT_TO_NS,
+        _length_to_mm,
+        _parse_density_to_g_cm3,
+        _parse_energy_to_mev,
+        _parse_length_tokens,
+        _parse_numeric_list_with_optional_unit,
+        _parse_scint_yield_to_per_mev,
+        _parse_time_to_ns,
+        _parse_vector3,
+        assert_directory_writable,
+        assert_distinct_paths,
+        ensure_directory,
+        resolve_path,
+    )
 
 try:
     import yaml
@@ -49,37 +88,54 @@ except ModuleNotFoundError:  # pragma: no cover - dependency availability varies
 
 
 SIMULATED_PHOTONS_STAGE_DIR = "simulatedPhotons"
-TRANSPORT_PHOTONS_STAGE_DIR = "transportPhotons"
+TRANSPORT_PHOTONS_STAGE_DIR = "transportedPhotons"
 MACROS_STAGE_DIR = "macros"
 DEFAULT_GENERATED_MACRO_FILENAME = "generated_from_config.mac"
 DEFAULT_OUTPUT_FILENAME_BASE = "photon_optical_interface_hits"
 DEFAULT_OPTICAL_INTERFACE_THICKNESS_MM = 0.1
 
-_LENGTH_UNIT_TO_MM: dict[str, float] = {
-    "nm": 1.0e-6,
-    "nanometer": 1.0e-6,
-    "nanometers": 1.0e-6,
-    "um": 1.0e-3,
-    "micrometer": 1.0e-3,
-    "micrometers": 1.0e-3,
-    "mm": 1.0,
-    "millimeter": 1.0,
-    "millimeters": 1.0,
-    "cm": 10.0,
-    "centimeter": 10.0,
-    "centimeters": 10.0,
-    "m": 1000.0,
-    "meter": 1000.0,
-    "meters": 1000.0,
+RunEnvironmentTarget = Literal[
+    "data",
+    "run_root",
+    "macro",
+    "log",
+    "simulated_photons",
+    "transported_photons",
+]
+
+_RUN_ENVIRONMENT_TARGET_TO_ATTR: dict[RunEnvironmentTarget, str] = {
+    "data": "WorkingDirectory",
+    "run_root": "RunRoot",
+    "macro": "MacroDirectory",
+    "log": "LogDirectory",
+    "simulated_photons": "OutputInfo.SimulatedPhotonsDirectory",
+    "transported_photons": "OutputInfo.TransportedPhotonsDirectory",
 }
 
-_ENERGY_UNIT_TO_MEV: dict[str, float] = {
-    "ev": 1.0e-6,
-    "kev": 1.0e-3,
-    "mev": 1.0,
-    "gev": 1.0e3,
-}
 
+@dataclass(frozen=True)
+class RunEnvironmentPaths:
+    """Resolved absolute run-environment directory set."""
+
+    data: Path
+    run_root: Path
+    macro: Path
+    macro_file: Path
+    log: Path
+    simulated_photons: Path
+    transported_photons: Path
+
+    def as_dict(self) -> dict[RunEnvironmentTarget, Path]:
+        """Return a target-keyed mapping for validation and lookup."""
+
+        return {
+            "data": self.data,
+            "run_root": self.run_root,
+            "macro": self.macro,
+            "log": self.log,
+            "simulated_photons": self.simulated_photons,
+            "transported_photons": self.transported_photons,
+        }
 
 def _require_yaml_dependency() -> Any:
     """Return PyYAML module object or raise a dependency error.
@@ -97,67 +153,30 @@ def _require_yaml_dependency() -> Any:
     return yaml
 
 
-def _length_to_mm(value: float, unit: str) -> float:
-    """Convert Geant4-style length value/unit tokens to millimeters."""
+def _parse_scintillation_component_index(
+    command: str,
+    *,
+    prefix: str,
+) -> int | None:
+    """Return zero-based scintillation component index for indexed commands."""
 
-    factor = _LENGTH_UNIT_TO_MM.get(unit.strip().lower())
-    if factor is None:
-        raise ValueError(f"Unsupported length unit '{unit}'.")
-    return value * factor
-
-
-def _parse_length_tokens(tokens: list[str], command: str) -> float:
-    """Parse macro tokenized length command payload and return millimeters."""
-
-    if len(tokens) < 3:
-        raise ValueError(
-            f"Command '{command}' requires '<value> <unit>' tokens, got: {tokens!r}"
-        )
-
-    try:
-        value = float(tokens[1])
-    except ValueError as exc:
-        raise ValueError(
-            f"Command '{command}' has non-numeric value token: {tokens[1]!r}"
-        ) from exc
-
-    return _length_to_mm(value, tokens[2])
+    if not command.startswith(prefix):
+        return None
+    suffix = command[len(prefix) :].strip()
+    if suffix not in {"1", "2", "3"}:
+        return None
+    return int(suffix) - 1
 
 
-def _parse_vector3(tokens: list[str], command: str) -> tuple[float, float, float]:
-    """Parse three scalar tokens from a macro command."""
+def _scintillation_profile_key_for_particle(particle: str) -> str | None:
+    """Map source particle token to scintillation profile key."""
 
-    if len(tokens) < 4:
-        raise ValueError(
-            f"Command '{command}' requires three scalar tokens, got: {tokens!r}"
-        )
-    try:
-        return float(tokens[1]), float(tokens[2]), float(tokens[3])
-    except ValueError as exc:
-        raise ValueError(
-            f"Command '{command}' requires numeric vector tokens, got: {tokens[1:4]!r}"
-        ) from exc
-
-
-def _parse_energy_to_mev(tokens: list[str], command: str) -> float:
-    """Parse `<value> <unit>` energy tokens and convert to MeV."""
-
-    if len(tokens) < 3:
-        raise ValueError(
-            f"Command '{command}' requires '<value> <unit>' tokens, got: {tokens!r}"
-        )
-    try:
-        value = float(tokens[1])
-    except ValueError as exc:
-        raise ValueError(
-            f"Command '{command}' has non-numeric value token: {tokens[1]!r}"
-        ) from exc
-    factor = _ENERGY_UNIT_TO_MEV.get(tokens[2].strip().lower())
-    if factor is None:
-        raise ValueError(
-            f"Command '{command}' has unsupported energy unit: {tokens[2]!r}."
-        )
-    return value * factor
+    token = particle.strip().lower()
+    if token in {"neutron", "n"}:
+        return "neutron"
+    if token in {"gamma", "g"}:
+        return "gamma"
+    return None
 
 
 def source_commands(config: SimConfig) -> list[str]:
@@ -206,16 +225,19 @@ def _default_import_template(macro_path: Path) -> SimConfig:
 
     payload = default_sim_config().model_dump(mode="python")
     metadata = payload["metadata"]
-    output_info = metadata["output_info"]
+    run_environment = metadata["run_environment"]
+    output_info = run_environment["output_info"]
 
     metadata["author"] = "Macro Import"
     metadata["date"] = DateType.today().isoformat()
     metadata["version"] = "imported"
     metadata["description"] = f"Imported from macro: {macro_path.name}"
-    metadata["working_directory"] = str(macro_path.resolve().parent)
-    metadata["simulation_run_id"] = macro_path.stem
-    output_info["data_directory"] = "data"
-    output_info["log_directory"] = "data/logs"
+    run_environment["simulation_run_id"] = macro_path.stem
+    run_environment["working_directory"] = "data"
+    run_environment["macro_directory"] = "macros"
+    run_environment["log_directory"] = "logs"
+    output_info["simulated_photons_dir"] = SIMULATED_PHOTONS_STAGE_DIR
+    output_info["transported_photons_dir"] = TRANSPORT_PHOTONS_STAGE_DIR
     output_info["output_format"] = "hdf5"
 
     # Macro files may omit `/run/beamOn` and runtime-control preamble commands.
@@ -296,8 +318,19 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
     payload = base.model_dump(mode="python")
 
     metadata = payload["metadata"]
-    output_info = metadata["output_info"]
+    run_environment = metadata["run_environment"]
+    output_info = run_environment["output_info"]
     scintillator = payload["scintillator"]
+    scint_properties = scintillator.get("properties")
+    if not isinstance(scint_properties, dict):
+        scint_properties = {}
+        scintillator["properties"] = scint_properties
+    parsed_time_components = [
+        {"time_constant": 0.0, "yield_fraction": 1.0},
+        {"time_constant": 0.0, "yield_fraction": 0.0},
+        {"time_constant": 0.0, "yield_fraction": 0.0},
+    ]
+    saw_time_component_command = False
     optical = payload["optical"]
     geometry = optical["geometry"]
     detector = optical["sensitive_detector_config"]
@@ -317,6 +350,8 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
     size_y_mm: float | None = None
     aperture_radius_mm: float | None = None
     parsed_thickness_mm: float | None = None
+    parsed_output_path: str | None = None
+    parsed_output_runname: str | None = None
 
     for raw_line in path.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
@@ -334,10 +369,10 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
             output_info["output_format"] = tokens[1].strip().lower()
             continue
         if command == "/output/path" and len(tokens) >= 2:
-            output_info["data_directory"] = tokens[1]
+            parsed_output_path = tokens[1]
             continue
         if command == "/output/runname" and len(tokens) >= 2:
-            metadata["simulation_run_id"] = tokens[1]
+            parsed_output_runname = tokens[1].strip()
             continue
         if command == "/control/verbose" and len(tokens) >= 2:
             if simulation is None:
@@ -470,7 +505,7 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
             continue
 
         if command == "/scintillator/geom/material" and len(tokens) >= 2:
-            scintillator["properties"]["name"] = tokens[1]
+            scint_properties["name"] = tokens[1]
             continue
         if command == "/scintillator/geom/scintX":
             scintillator["dimension_mm"]["x_mm"] = _parse_length_tokens(tokens, command)
@@ -493,6 +528,95 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
         if command == "/scintillator/geom/apertureRadius":
             aperture_radius_mm = _parse_length_tokens(tokens, command)
             continue
+        if command == "/scintillator/properties/density":
+            scint_properties["density"] = _parse_density_to_g_cm3(tokens, command)
+            continue
+        if command == "/scintillator/properties/carbonAtoms" and len(tokens) >= 2:
+            scint_properties["carbon_atoms"] = int(tokens[1])
+            continue
+        if command == "/scintillator/properties/hydrogenAtoms" and len(tokens) >= 2:
+            scint_properties["hydrogen_atoms"] = int(tokens[1])
+            continue
+        if command == "/scintillator/properties/photonEnergy":
+            values, unit = _parse_numeric_list_with_optional_unit(tokens, command)
+            factor = _ENERGY_UNIT_TO_EV.get((unit or "eV").strip().lower())
+            if factor is None:
+                raise ValueError(
+                    f"Command '{command}' has unsupported energy unit: {unit!r}."
+                )
+            scint_properties["photon_energy"] = [value * factor for value in values]
+            scint_properties["n_k_entries"] = len(values)
+            continue
+        if command == "/scintillator/properties/rIndex":
+            values, unit = _parse_numeric_list_with_optional_unit(tokens, command)
+            if unit is not None and unit.strip().lower() not in {"unitless", "none"}:
+                raise ValueError(
+                    f"Command '{command}' does not support unit token {unit!r}."
+                )
+            scint_properties["r_index"] = values
+            if "n_k_entries" not in scint_properties:
+                scint_properties["n_k_entries"] = len(values)
+            continue
+        if command == "/scintillator/properties/absLength":
+            values, unit = _parse_numeric_list_with_optional_unit(tokens, command)
+            factor = _LENGTH_UNIT_TO_MM.get((unit or "cm").strip().lower())
+            if factor is None:
+                raise ValueError(
+                    f"Command '{command}' has unsupported length unit: {unit!r}."
+                )
+            scint_properties["abs_length"] = [(value * factor) / 10.0 for value in values]
+            continue
+        if command == "/scintillator/properties/scintSpectrum":
+            values, unit = _parse_numeric_list_with_optional_unit(tokens, command)
+            if unit is not None and unit.strip().lower() not in {"unitless", "none"}:
+                raise ValueError(
+                    f"Command '{command}' does not support unit token {unit!r}."
+                )
+            scint_properties["scint_spectrum"] = values
+            continue
+        if command == "/scintillator/properties/scintYield":
+            scint_properties["scint_yield"] = _parse_scint_yield_to_per_mev(
+                tokens, command
+            )
+            continue
+        if command == "/scintillator/properties/resolutionScale" and len(tokens) >= 2:
+            scint_properties["resolution_scale"] = float(tokens[1])
+            continue
+        component_index = _parse_scintillation_component_index(
+            command,
+            prefix="/scintillator/properties/timeConstant",
+        )
+        if component_index is not None:
+            parsed_time_components[component_index]["time_constant"] = _parse_time_to_ns(
+                tokens, command
+            )
+            saw_time_component_command = True
+            continue
+        component_index = _parse_scintillation_component_index(
+            command,
+            prefix="/scintillator/properties/yieldFraction",
+        )
+        if component_index is not None:
+            if len(tokens) < 2:
+                raise ValueError(
+                    f"Command '{command}' requires scalar value token, got: {tokens!r}"
+                )
+            try:
+                parsed_time_components[component_index]["yield_fraction"] = float(tokens[1])
+            except ValueError as exc:
+                raise ValueError(
+                    f"Command '{command}' has non-numeric value token: {tokens[1]!r}"
+                ) from exc
+            saw_time_component_command = True
+            continue
+        if command in {
+            "/scintillator/properties/timeConstant",
+            "/scintillator/properties/yield1",
+        }:
+            raise ValueError(
+                f"Legacy command '{command}' is no longer supported. "
+                "Use `scintillator.properties.timeComponents.{default|neutron|gamma}` in YAML."
+            )
 
         if command == "/optical_interface/geom/sizeX":
             size_x_mm = _parse_length_tokens(tokens, command)
@@ -570,6 +694,29 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
     if energy.get("type", "").strip().lower() == "mono":
         energy.setdefault("mono_mev", 1.0)
 
+    # Consolidate Geant4 output commands into run-environment layout.
+    # /output/path <base>     -> WorkingDirectory=<base>
+    # /output/runname <id>    -> SimulationRunID=<id>
+    if parsed_output_runname is not None and parsed_output_runname.strip():
+        run_environment["simulation_run_id"] = parsed_output_runname.strip()
+    if parsed_output_path is not None:
+        run_environment["working_directory"] = str(Path(parsed_output_path))
+
+    if saw_time_component_command:
+        time_components = scint_properties.get("time_components")
+        if time_components is None:
+            time_components = {}
+        elif not isinstance(time_components, dict):
+            raise ValueError(
+                "`scintillator.properties.timeComponents` must be an object with "
+                "`default`, `neutron`, and/or `gamma` keys."
+            )
+        profile_key = _scintillation_profile_key_for_particle(source_gps["particle"])
+        if profile_key is None:
+            profile_key = "default"
+        time_components[profile_key] = parsed_time_components
+        scint_properties["time_components"] = time_components
+
     return SimConfig.model_validate(payload)
 
 
@@ -585,6 +732,139 @@ def _extract_sim_config_payload(parsed: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in parsed.items() if key in accepted_keys}
 
 
+def _catalog_properties_payload(catalog_id: str) -> dict[str, Any]:
+    """Resolve baseline `scintillator.properties` payload from catalog id."""
+
+    loaded = load_scintillator(catalog_id)
+    energy_unit = loaded.r_index.x_unit.strip().lower()
+    energy_factor = _ENERGY_UNIT_TO_EV.get(energy_unit)
+    if energy_factor is None:
+        raise ValueError(
+            f"Catalog scintillator '{catalog_id}' uses unsupported energy unit "
+            f"{loaded.r_index.x_unit!r}; supported: eV, keV, MeV, GeV."
+        )
+    photon_energy = [value * energy_factor for value in loaded.r_index.energy]
+
+    abs_unit = loaded.abs_length.y_unit.strip().lower()
+    abs_factor = _LENGTH_UNIT_TO_MM.get(abs_unit)
+    if abs_factor is None:
+        raise ValueError(
+            f"Catalog scintillator '{catalog_id}' uses unsupported absLength unit "
+            f"{loaded.abs_length.y_unit!r}."
+        )
+    abs_length_cm = [(value * abs_factor) / 10.0 for value in loaded.abs_length.value]
+
+    time_components: dict[str, list[dict[str, float]]] = {}
+    for profile_name in ("default", "neutron", "gamma"):
+        profile = getattr(loaded.material.optical.constants.time_components, profile_name)
+        if profile is None:
+            continue
+        converted_profile: list[dict[str, float]] = []
+        for index, component in enumerate(profile, start=1):
+            time_unit = component.time_constant.unit.strip().lower()
+            time_factor = _TIME_UNIT_TO_NS.get(time_unit)
+            if time_factor is None:
+                raise ValueError(
+                    f"Catalog scintillator '{catalog_id}' profile '{profile_name}' "
+                    f"component {index} uses unsupported time unit "
+                    f"{component.time_constant.unit!r}."
+                )
+            converted_profile.append(
+                {
+                    "timeConstant": component.time_constant.value * time_factor,
+                    "yieldFraction": component.yield_fraction,
+                }
+            )
+        time_components[profile_name] = converted_profile
+
+    density_unit = loaded.material.composition.density.unit.strip().lower()
+    density_factor = _DENSITY_UNIT_TO_G_CM3.get(density_unit)
+    if density_factor is None:
+        raise ValueError(
+            f"Catalog scintillator '{catalog_id}' uses unsupported density unit "
+            f"{loaded.material.composition.density.unit!r}."
+        )
+    density_g_cm3 = loaded.material.composition.density.value * density_factor
+
+    yield_unit = loaded.material.optical.constants.scint_yield.unit.strip().lower()
+    yield_factor = _SCINT_YIELD_UNIT_TO_PER_MEV.get(yield_unit)
+    if yield_factor is None:
+        raise ValueError(
+            f"Catalog scintillator '{catalog_id}' uses unsupported scintYield unit "
+            f"{loaded.material.optical.constants.scint_yield.unit!r}."
+        )
+    scint_yield_per_mev = loaded.material.optical.constants.scint_yield.value * yield_factor
+
+    payload: dict[str, Any] = {
+        "name": loaded.material.id,
+        "photonEnergy": photon_energy,
+        "rIndex": list(loaded.r_index.value),
+        "absLength": abs_length_cm,
+        "scintSpectrum": list(loaded.scint_spectrum.value),
+        "nKEntries": len(photon_energy),
+        "timeComponents": time_components,
+        "density": density_g_cm3,
+        "scintYield": scint_yield_per_mev,
+        "resolutionScale": loaded.material.optical.constants.resolution_scale,
+    }
+    carbon_atoms = loaded.material.composition.atoms.get("C")
+    hydrogen_atoms = loaded.material.composition.atoms.get("H")
+    if carbon_atoms is not None:
+        payload["carbonAtoms"] = carbon_atoms
+    if hydrogen_atoms is not None:
+        payload["hydrogenAtoms"] = hydrogen_atoms
+    return payload
+
+
+def _apply_scintillator_catalog_defaults(payload: dict[str, Any]) -> dict[str, Any]:
+    """Hydrate `scintillator.properties` from catalog defaults when requested."""
+
+    scintillator = payload.get("scintillator")
+    if not isinstance(scintillator, dict):
+        return payload
+
+    catalog_id = scintillator.get("catalogId", scintillator.get("catalog_id"))
+    if catalog_id is None:
+        return payload
+    if not isinstance(catalog_id, str) or not catalog_id.strip():
+        raise ValueError("`scintillator.catalogId` must be a non-empty string.")
+
+    catalog_props = _catalog_properties_payload(catalog_id.strip())
+
+    raw_properties = scintillator.get("properties")
+    if raw_properties is None:
+        merged_properties: dict[str, Any] = {}
+    elif isinstance(raw_properties, dict):
+        merged_properties = dict(raw_properties)
+    else:
+        raise ValueError("`scintillator.properties` must be a mapping/object.")
+
+    # Explicit YAML values win; catalog fills missing keys.
+    for key, value in catalog_props.items():
+        if key == "timeComponents":
+            if key not in merged_properties:
+                merged_properties[key] = value
+                continue
+            current = merged_properties[key]
+            if not isinstance(current, dict):
+                raise ValueError(
+                    "`scintillator.properties.timeComponents` must be an object with "
+                    "`default`, `neutron`, and/or `gamma` keys."
+                )
+            if not isinstance(value, dict):
+                raise ValueError(
+                    "Catalog `timeComponents` payload must be an object with "
+                    "`default`, `neutron`, and/or `gamma` keys."
+                )
+            for profile_name, profile_payload in value.items():
+                current.setdefault(profile_name, profile_payload)
+            continue
+        merged_properties.setdefault(key, value)
+
+    scintillator["properties"] = merged_properties
+    return payload
+
+
 def from_yaml(yaml_path: str | Path) -> SimConfig:
     """Load and validate a :class:`SimConfig` from YAML file.
 
@@ -592,12 +872,13 @@ def from_yaml(yaml_path: str | Path) -> SimConfig:
     in the same YAML file.
 
     This behavior is intentional for example workflows where a single YAML file
-    carries both strict simulation config and script orchestration values (such
-    as optional script output-path overrides).
+    carries both strict simulation config and script orchestration values.
     """
 
     parsed = load_yaml_mapping(yaml_path)
-    return SimConfig.model_validate(_extract_sim_config_payload(parsed))
+    payload = _extract_sim_config_payload(parsed)
+    payload = _apply_scintillator_catalog_defaults(payload)
+    return SimConfig.model_validate(payload)
 
 
 def write_yaml(
@@ -620,7 +901,7 @@ def write_yaml(
     Notes
     -----
     - Uses ``by_alias=True`` to preserve user-facing key aliases such as
-      ``Metadata``, ``OutputInfo``, and camelCase optical/scintillator keys.
+      ``Metadata``, ``RunEnvironment``, and camelCase optical/scintillator keys.
     - Uses ``sort_keys=False`` to retain a readable, model-order output layout.
     """
 
@@ -639,91 +920,146 @@ def write_yaml(
 
 
 def _working_directory(config: SimConfig) -> Path:
-    """Resolve ``Metadata.WorkingDirectory`` into absolute path form."""
+    """Resolve ``Metadata.RunEnvironment.WorkingDirectory`` into absolute form."""
 
-    return resolve_path(config.metadata.working_directory)
-
-
-def resolve_data_directory(config: SimConfig) -> Path:
-    """Resolve ``Metadata.OutputInfo.DataDirectory`` under working directory.
-
-    Relative ``DataDirectory`` values are interpreted relative to
-    ``Metadata.WorkingDirectory``.
-    """
-
-    return resolve_path(
-        config.metadata.output_info.data_directory,
-        base_directory=_working_directory(config),
-    )
-
-
-def resolve_log_directory(config: SimConfig) -> Path:
-    """Resolve ``Metadata.OutputInfo.LogDirectory`` under working directory.
-
-    Relative ``LogDirectory`` values are interpreted relative to
-    ``Metadata.WorkingDirectory``.
-    """
-
-    return resolve_path(
-        config.metadata.output_info.log_directory,
-        base_directory=_working_directory(config),
-    )
+    return resolve_path(config.metadata.run_environment.working_directory)
 
 
 def _run_root(config: SimConfig) -> Path:
-    """Resolve run root directory.
+    """Resolve run root directory as `<WorkingDirectory>/<SimulationRunID>`."""
 
-    Result is:
-    - ``<data-directory>/<SimulationRunID>/`` when run id is non-empty
-    - ``<data-directory>/`` when run id is blank
-    """
-
-    run_id = config.metadata.simulation_run_id.strip()
+    run_id = config.metadata.run_environment.simulation_run_id.strip()
     if not run_id:
-        return resolve_data_directory(config)
-    return (resolve_data_directory(config) / run_id).resolve()
+        return _working_directory(config)
+    return (_working_directory(config) / run_id).resolve()
 
 
-def resolve_output_stage_directory(config: SimConfig) -> Path:
-    """Resolve output stage directory used by simulation data writers.
+def resolve_run_environment_directory(
+    config: SimConfig,
+    target: RunEnvironmentTarget,
+) -> Path:
+    """Resolve a run-environment directory by semantic target token.
 
-    Returns ``<run-root>/simulatedPhotons/``.
+    Supported targets:
+    - ``data``: ``RunEnvironment.WorkingDirectory``
+    - ``run_root``: ``<WorkingDirectory>/<SimulationRunID>``
+    - ``macro``: ``<run_root>/<MacroDirectory>``
+    - ``log``: ``<run_root>/<LogDirectory>``
+    - ``simulated_photons``: ``<run_root>/<SimulatedPhotonsDirectory>``
+    - ``transported_photons``: ``<run_root>/<TransportedPhotonsDirectory>``
     """
 
-    return (_run_root(config) / SIMULATED_PHOTONS_STAGE_DIR).resolve()
+    if target == "data":
+        return _working_directory(config)
+    if target == "run_root":
+        return _run_root(config)
+
+    env = config.metadata.run_environment
+    target_directory: dict[str, str] = {
+        "macro": env.macro_directory,
+        "log": env.log_directory,
+        "simulated_photons": env.output_info.simulated_photons_dir,
+        "transported_photons": env.output_info.transported_photons_dir,
+    }
+    resolved = target_directory.get(target)
+    if resolved is None:
+        raise ValueError(
+            "Unsupported run-environment target. "
+            "Expected one of: data, run_root, macro, log, "
+            "simulated_photons, transported_photons."
+        )
+    return resolve_path(resolved, base_directory=_run_root(config))
 
 
-def resolve_transport_photons_stage_directory(config: SimConfig) -> Path:
-    """Resolve transport stage directory.
+def resolve_run_environment_paths(config: SimConfig) -> RunEnvironmentPaths:
+    """Resolve all canonical run-environment directories into absolute paths."""
 
-    Returns ``<run-root>/transportPhotons/``.
-    """
-
-    return (_run_root(config) / TRANSPORT_PHOTONS_STAGE_DIR).resolve()
-
-
-def resolve_macro_stage_directory(config: SimConfig) -> Path:
-    """Resolve macro stage directory.
-
-    Returns ``<run-root>/macros/``.
-    """
-
-    return (_run_root(config) / MACROS_STAGE_DIR).resolve()
-
-
-def resolve_default_macro_path(config: SimConfig) -> Path:
-    """Resolve default macro output path for ``write_macro(..., macro_path=None)``.
-
-    File naming policy:
-    - ``<SimulationRunID>.mac`` when run id is non-empty
-    - ``generated_from_config.mac`` otherwise
-    """
-
-    run_name = config.metadata.simulation_run_id.strip()
+    run_name = config.metadata.run_environment.simulation_run_id.strip()
     macro_filename = (
         f"{run_name}.mac" if run_name else DEFAULT_GENERATED_MACRO_FILENAME
     )
-    return (resolve_macro_stage_directory(config) / macro_filename).resolve()
+    macro_dir = resolve_run_environment_directory(config, "macro")
+
+    return RunEnvironmentPaths(
+        data=resolve_run_environment_directory(config, "data"),
+        run_root=resolve_run_environment_directory(config, "run_root"),
+        macro=macro_dir,
+        macro_file=(macro_dir / macro_filename).resolve(),
+        log=resolve_run_environment_directory(config, "log"),
+        simulated_photons=resolve_run_environment_directory(config, "simulated_photons"),
+        transported_photons=resolve_run_environment_directory(
+            config, "transported_photons"
+        ),
+    )
+
+
+def _directory_map_from_targets(
+    paths: RunEnvironmentPaths,
+    targets: tuple[RunEnvironmentTarget, ...],
+) -> dict[str, Path]:
+    """Build a label->path mapping for the requested run-environment targets."""
+
+    as_dict = paths.as_dict()
+    return {
+        f"RunEnvironment.{_RUN_ENVIRONMENT_TARGET_TO_ATTR[target]}": as_dict[target]
+        for target in targets
+    }
+
+
+def _validate_directory_map(
+    directories: dict[str, Path],
+    *,
+    create_directories: bool,
+) -> None:
+    """Validate or prepare a set of directories."""
+
+    assert_distinct_paths(directories)
+    for label, directory in directories.items():
+        ensure_directory(directory, create=create_directories, label=label)
+        assert_directory_writable(directory, label=label)
+
+
+def validate_run_environment(
+    config: SimConfig,
+    *,
+    targets: tuple[RunEnvironmentTarget, ...] = (
+        "data",
+        "run_root",
+        "macro",
+        "log",
+        "simulated_photons",
+        "transported_photons",
+    ),
+    create_directories: bool = False,
+) -> RunEnvironmentPaths:
+    """Validate resolved run-environment directories.
+
+    Parameters
+    ----------
+    config:
+        Validated simulation configuration.
+    targets:
+        Run-environment targets to validate.
+    create_directories:
+        When ``True``, missing directories are created before writability checks.
+        When ``False``, missing paths raise immediately.
+    """
+
+    paths = resolve_run_environment_paths(config)
+    directories = _directory_map_from_targets(paths, targets)
+    _validate_directory_map(directories, create_directories=create_directories)
+    if paths.macro_file.exists() and paths.macro_file.is_dir():
+        raise IsADirectoryError(
+            "RunEnvironment macro target resolves to an existing directory: "
+            f"{paths.macro_file}"
+        )
+    return paths
+
+
+def prepare_run_environment(config: SimConfig) -> RunEnvironmentPaths:
+    """Create and validate all run-environment directories."""
+
+    return validate_run_environment(config, create_directories=True)
 
 
 def _normalize_output_format_token(value: str) -> str:
@@ -744,20 +1080,20 @@ def output_commands(config: SimConfig) -> list[str]:
     """Build Geant4 ``/output/*`` command lines from metadata settings.
 
     Command mapping:
-    - ``OutputInfo.OutputFormat`` -> ``/output/format``
-    - resolved ``DataDirectory``  -> ``/output/path``
-    - fixed base filename         -> ``/output/filename``
-    - ``SimulationRunID``         -> ``/output/runname``
+    - ``RunEnvironment.OutputInfo.OutputFormat`` -> ``/output/format``
+    - ``RunEnvironment.WorkingDirectory``            -> ``/output/path``
+    - fixed base filename                          -> ``/output/filename``
+    - ``RunEnvironment.SimulationRunID``          -> ``/output/runname``
 
     The filename base is fixed so simulation artifacts remain consistently named
     while directory/run identifiers control grouping.
     """
 
     return [
-        f"/output/format {_normalize_output_format_token(config.metadata.output_info.output_format)}",
-        f"/output/path {resolve_data_directory(config)}",
+        f"/output/format {_normalize_output_format_token(config.metadata.run_environment.output_info.output_format)}",
+        f"/output/path {resolve_run_environment_directory(config, 'data')}",
         f"/output/filename {DEFAULT_OUTPUT_FILENAME_BASE}",
-        f"/output/runname {config.metadata.simulation_run_id}",
+        f"/output/runname {config.metadata.run_environment.simulation_run_id}",
     ]
 
 
@@ -788,6 +1124,12 @@ def _resolve_sensitive_detector_diameter_mm(config: SimConfig) -> float:
     )
 
 
+def _format_float_list(values: list[float]) -> str:
+    """Format list values for compact macro list payloads."""
+
+    return ",".join(f"{value:g}" for value in values)
+
+
 def geometry_commands(config: SimConfig) -> list[str]:
     """Build Geant4 geometry command list from hierarchical config.
 
@@ -807,6 +1149,11 @@ def geometry_commands(config: SimConfig) -> list[str]:
     scint = config.scintillator
     optical = config.optical
     detector = optical.sensitive_detector_config
+    if scint.properties is None:
+        raise ValueError(
+            "`scintillator.properties` is missing. "
+            "Load config via `from_yaml(...)` with `catalogId` or provide explicit properties."
+        )
 
     # Base scintillator commands are always emitted.
     commands = [
@@ -818,6 +1165,63 @@ def geometry_commands(config: SimConfig) -> list[str]:
         f"/scintillator/geom/posY {scint.position_mm.y_mm:g} mm",
         f"/scintillator/geom/posZ {scint.position_mm.z_mm:g} mm",
     ]
+
+    # Extended scintillator material/optical properties are emitted when present.
+    if scint.properties.density is not None:
+        commands.append(
+            f"/scintillator/properties/density {scint.properties.density:g} g/cm3"
+        )
+    if scint.properties.carbon_atoms is not None:
+        commands.append(
+            f"/scintillator/properties/carbonAtoms {scint.properties.carbon_atoms}"
+        )
+    if scint.properties.hydrogen_atoms is not None:
+        commands.append(
+            f"/scintillator/properties/hydrogenAtoms {scint.properties.hydrogen_atoms}"
+        )
+    commands.append(
+        "/scintillator/properties/photonEnergy "
+        f"{_format_float_list(scint.properties.photon_energy)} eV"
+    )
+    commands.append(
+        "/scintillator/properties/rIndex "
+        f"{_format_float_list(scint.properties.r_index)}"
+    )
+    if scint.properties.abs_length is not None:
+        commands.append(
+            "/scintillator/properties/absLength "
+            f"{_format_float_list(scint.properties.abs_length)} cm"
+        )
+    if scint.properties.scint_spectrum is not None:
+        commands.append(
+            "/scintillator/properties/scintSpectrum "
+            f"{_format_float_list(scint.properties.scint_spectrum)}"
+        )
+    if scint.properties.scint_yield is not None:
+        commands.append(
+            f"/scintillator/properties/scintYield {scint.properties.scint_yield:g}"
+        )
+    if scint.properties.resolution_scale is not None:
+        commands.append(
+            "/scintillator/properties/resolutionScale "
+            f"{scint.properties.resolution_scale:g}"
+        )
+    # Select profile based on source particle, with `default`/single-profile
+    # fallback handled by schema-level resolver.
+    _, selected_components = scint.properties.time_components.resolve_for_particle(
+        config.source.gps.particle
+    )
+    # Emit all 3 components explicitly (including zero-valued inactive entries)
+    # so macro snapshots are deterministic and complete.
+    for index, component in enumerate(selected_components, start=1):
+        commands.append(
+            "/scintillator/properties/timeConstant"
+            f"{index} {component.time_constant:g} ns"
+        )
+        commands.append(
+            "/scintillator/properties/yieldFraction"
+            f"{index} {component.yield_fraction:g}"
+        )
 
     # Circular detector shape implies an aperture mask command in this
     # simulation pipeline.
@@ -842,31 +1246,28 @@ def ensure_output_directories(config: SimConfig) -> Path:
     """Create and return the simulation output stage directory.
 
     Creates:
-    - output stage: `<data>/<run-id>/simulatedPhotons/`
-    - transport stage: `<data>/<run-id>/transportPhotons/`
-    - log directory from `Metadata.OutputInfo.LogDirectory`
+    - output stage from `RunEnvironment.OutputInfo.SimulatedPhotonsDirectory`
+    - transport stage from `RunEnvironment.OutputInfo.TransportedPhotonsDirectory`
+    - log directory from `RunEnvironment.LogDirectory`
     """
 
-    # Stage directories are created explicitly from Python so runtime C++ IO can
-    # assume parents already exist.
-    output_stage_dir = resolve_output_stage_directory(config)
-    output_stage_dir.mkdir(parents=True, exist_ok=True)
-
-    transport_stage_dir = resolve_transport_photons_stage_directory(config)
-    transport_stage_dir.mkdir(parents=True, exist_ok=True)
-
-    log_dir = resolve_log_directory(config)
-    log_dir.mkdir(parents=True, exist_ok=True)
-
-    return output_stage_dir
+    paths = validate_run_environment(
+        config,
+        targets=("data", "run_root", "log", "simulated_photons", "transported_photons"),
+        create_directories=True,
+    )
+    return paths.simulated_photons
 
 
 def ensure_macro_directories(config: SimConfig) -> Path:
     """Create and return the macros stage directory for this config."""
 
-    macro_stage_dir = resolve_macro_stage_directory(config)
-    macro_stage_dir.mkdir(parents=True, exist_ok=True)
-    return macro_stage_dir
+    paths = validate_run_environment(
+        config,
+        targets=("data", "run_root", "macro"),
+        create_directories=True,
+    )
+    return paths.macro
 
 
 def macro_commands(
@@ -919,7 +1320,6 @@ def macro_commands(
 
 def write_macro(
     config: SimConfig,
-    macro_path: str | Path | None = None,
     *,
     include_output: bool = True,
     include_run_initialize: bool = True,
@@ -932,28 +1332,30 @@ def write_macro(
     ----------
     config:
         Source validated simulation configuration.
-    macro_path:
-        Destination path. When ``None``, uses ``resolve_default_macro_path``.
     include_output:
         Include output configuration commands.
     include_run_initialize:
         Append ``/run/initialize`` at end of generated macro.
     create_output_directories:
-        Create output/log/macro directories before writing.
+        Create output/log/macro directories before writing. When ``False``,
+        required run-environment paths must already exist.
     overwrite:
         Guard against accidental overwrite when ``False``.
     """
 
-    path = resolve_default_macro_path(config) if macro_path is None else Path(macro_path)
+    if create_output_directories:
+        paths = prepare_run_environment(config)
+    else:
+        paths = validate_run_environment(
+            config,
+            targets=("data", "run_root", "macro"),
+            create_directories=False,
+        )
 
+    path = paths.macro_file
     if path.exists() and not overwrite:
         raise FileExistsError(f"Refusing to overwrite existing file: {path}")
 
-    if create_output_directories:
-        ensure_output_directories(config)
-        ensure_macro_directories(config)
-
-    path.parent.mkdir(parents=True, exist_ok=True)
     payload = "\n".join(
         macro_commands(
             config,

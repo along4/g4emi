@@ -1,0 +1,86 @@
+# Canon EF 50 mm f/1.0L YAML-driven example configuration.
+#
+# This file contains strict SimConfig fields consumed by ConfigIO.from_yaml.
+
+scintillator:
+  position_mm:
+    x_mm: 0.0
+    y_mm: 0.0
+    z_mm: 0.0
+  dimension_mm:
+    x_mm: 100.0
+    y_mm: 100.0
+    z_mm: 20.0
+  properties:
+    name: EJ200
+    photonEnergy: [2.8, 3.0, 3.2]
+    rIndex: [1.58, 1.59, 1.60]
+    nKEntries: 3
+    timeComponents:
+      default:
+        - timeConstant: 2.1
+          yieldFraction: 1.0
+        - timeConstant: 0.0
+          yieldFraction: 0.0
+        - timeConstant: 0.0
+          yieldFraction: 0.0
+
+source:
+  gps:
+    particle: neutron
+    position:
+      type: Plane
+      shape: Circle
+      centerMm:
+        x_mm: 0.0
+        y_mm: 0.0
+        z_mm: -100.0
+      radiusMm: 10.0
+    angular:
+      type: beam2d
+      rot1: {x: 1.0, y: 0.0, z: 0.0}
+      rot2: {x: 0.0, y: 1.0, z: 0.0}
+      direction: {x: 0.0, y: 0.0, z: 1.0}
+    energy:
+      type: Mono
+      monoMeV: 6.0
+
+optical:
+  lenses:
+    - name: CanonEF50mmf1.0L
+      primary: true
+      zmxFile: CanonEF50mmf1.0L.zmx
+  geometry:
+    entranceDiameter: 60.55
+    sensorMaxWidth: 36.0
+  sensitiveDetectorConfig:
+    position_mm:
+      x_mm: 0.0
+      y_mm: 0.0
+      z_mm: 210.05
+    shape: circle
+    diameterRule: min(entranceDiameter,sensorMaxWidth)
+
+simulation:
+  numberOfParticles: 10000
+  runtimeControls:
+    controlVerbose: 0
+    runVerbose: 0
+    eventVerbose: 0
+    trackingVerbose: 0
+    printProgress: 1000
+
+Metadata:
+  author: Alex Long
+  date: 2026-02-19
+  version: ScintPiX v0.1
+  description: Canon EF 50 mm f/1.0L simulation configuration.
+  RunEnvironment:
+    SimulationRunID: CanonEF50mmf1p0L_run
+    WorkingDirectory: data
+    MacroDirectory: macros
+    LogDirectory: logs
+    OutputInfo:
+      SimulatedPhotonsDirectory: simulatedPhotons
+      TransportedPhotonsDirectory: transportedPhotons
+      OutputFormat: hdf5

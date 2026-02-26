@@ -1,0 +1,56 @@
+id: EJ-276D
+name: EJ-276D
+description: >
+  Eljen EJ-276D plastic PSD scintillator entry sourced from SSLG4
+  (OrganicScintillatorLib::AddEJ276D). Optical curves follow the same
+  energy nodes and analytical profiles used there.
+
+composition:
+  density:
+    value: 1.0638431389
+    unit: g/cm3
+  atoms:
+    C: 4944
+    H: 4647
+
+optical:
+  curves:
+    rIndex:
+      path: curves/EJ-276D/rindex.csv
+      xUnit: eV
+      yUnit: unitless
+    absLength:
+      path: curves/EJ-276D/abs_length_cm.csv
+      xUnit: eV
+      yUnit: cm
+    scintSpectrum:
+      path: curves/EJ-276D/scint_spectrum.csv
+      xUnit: eV
+      yUnit: unitless
+  constants:
+    scintYield:
+      value: 8600.0
+      unit: 1/MeV
+    resolutionScale: 1.0
+    timeComponents:
+      default:
+        - timeConstant: {value: 13.0, unit: ns}
+          yieldFraction: 1.0
+        - timeConstant: {value: 59.0, unit: ns}
+          yieldFraction: 0.0
+        - timeConstant: {value: 460.0, unit: ns}
+          yieldFraction: 0.0
+      neutron:
+        - timeConstant: {value: 13.0, unit: ns}
+          yieldFraction: 1.0
+        - timeConstant: {value: 59.0, unit: ns}
+          yieldFraction: 0.0
+        - timeConstant: {value: 460.0, unit: ns}
+          yieldFraction: 0.0
+      gamma:
+        - timeConstant: {value: 13.0, unit: ns}
+          yieldFraction: 1.0
+        - timeConstant: {value: 35.0, unit: ns}
+          yieldFraction: 0.0
+        - timeConstant: {value: 270.0, unit: ns}
+          yieldFraction: 0.0

@@ -1,11 +1,12 @@
-# Canon EF 50 mm f/1.0L YAML-driven example configuration.
+# Scintillator catalog override example.
 #
-# This file intentionally contains:
-# 1. SimConfig fields (hierarchical structure consumed by ConfigIO.from_yaml).
-# 2. Script-level keys used by examples/CanonEF50mmf1p0L_example.py:
-#    - macro_output_path (optional; when omitted, ConfigIO default is used)
+# Purpose:
+# - Use catalogId=EJ200 as the baseline scintillator definition.
+# - Override only a subset of optical/material properties in-line.
+# - Let ConfigIO auto-populate the remaining required properties.
 
 scintillator:
+  catalogId: EJ200
   position_mm:
     x_mm: 0.0
     y_mm: 0.0
@@ -15,11 +16,19 @@ scintillator:
     y_mm: 100.0
     z_mm: 20.0
   properties:
-    name: EJ200
-    photonEnergy: [2.8, 3.0, 3.2]
-    rIndex: [1.58, 1.59, 1.60]
-    nKEntries: 3
-    timeConstant: 2.1
+    density: 1.05
+    absLength: [420.0, 420.0, 340.0, 260.0, 180.0]
+    scintSpectrum: [0.04, 0.30, 1.00, 0.52, 0.12]
+    timeComponents:
+      default:
+        - timeConstant: 2.4
+          yieldFraction: 1.0
+        - timeConstant: 0.0
+          yieldFraction: 0.0
+        - timeConstant: 0.0
+          yieldFraction: 0.0
+    scintYield: 9800.0
+    resolutionScale: 1.1
 
 source:
   gps:
@@ -58,22 +67,25 @@ optical:
     diameterRule: min(entranceDiameter,sensorMaxWidth)
 
 simulation:
-  numberOfParticles: 10000
+  numberOfParticles: 5000
   runtimeControls:
     controlVerbose: 0
     runVerbose: 0
     eventVerbose: 0
     trackingVerbose: 0
-    printProgress: 1000
+    printProgress: 500
 
 Metadata:
   author: Alex Long
-  date: 2026-02-19
+  date: 2026-02-24
   version: ScintPiX v0.1
-  description: Canon EF 50 mm f/1.0L simulation configuration.
-  WorkingDirectory: .
-  OutputInfo:
-    DataDirectory: data
-    LogDirectory: data/logs
-    OutputFormat: hdf5
-  SimulationRunID: CanonEF50mmf1p0L_run
+  description: Catalog-based EJ200 examples.
+  RunEnvironment:
+    WorkingDirectory: data
+    SimulationRunID: ScintCatalog_example
+    MacroDirectory: macros
+    LogDirectory: logs
+    OutputInfo:
+      SimulatedPhotonsDirectory: simulatedPhotons
+      TransportedPhotonsDirectory: transportedPhotons
+      OutputFormat: hdf5

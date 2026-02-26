@@ -26,6 +26,10 @@ compile_commands.json
 /data/**
 !/data/.gitkeep
 
+# Versioned scintillator catalog (static reference data, not output)
+!/scintillators/
+!/scintillators/**
+
 # Local scratch dirs (common spelling variants)
 /.scratch/
 

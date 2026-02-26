@@ -1,0 +1,44 @@
+id: CsI-Tl
+name: CsI(Tl)
+description: >
+  SSLG4-derived iodide scintillator entry from isc-2002 (CsITI).
+  Optical constants come from sslg4/macros/iscnt/isc-2002.mac.
+  SSLG4 does not define ABSLENGTH for this material; a large flat
+  placeholder (1e6 cm) is used to emulate no explicit absorption limit.
+
+composition:
+  density:
+    value: 4.51
+    unit: g/cm3
+  atoms:
+    Cs: 5110
+    I: 4880
+    Tl: 8
+
+optical:
+  curves:
+    rIndex:
+      path: curves/CsI-Tl/rindex.csv
+      xUnit: eV
+      yUnit: unitless
+    absLength:
+      path: curves/CsI-Tl/abs_length_cm.csv
+      xUnit: eV
+      yUnit: cm
+    scintSpectrum:
+      path: curves/CsI-Tl/scint_spectrum.csv
+      xUnit: eV
+      yUnit: unitless
+  constants:
+    scintYield:
+      value: 54000.0
+      unit: 1/MeV
+    resolutionScale: 1.0
+    timeComponents:
+      default:
+        - timeConstant: {value: 1000.0, unit: ns}
+          yieldFraction: 1.0
+        - timeConstant: {value: 0.0, unit: ns}
+          yieldFraction: 0.0
+        - timeConstant: {value: 0.0, unit: ns}
+          yieldFraction: 0.0

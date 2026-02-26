@@ -15,6 +15,8 @@ class ActionInitialization : public G4VUserActionInitialization {
 
   /// Construct per-thread action instances (generator, event, stepping, tracking).
   void Build() const override;
+  /// Construct master-only actions used before worker dispatch.
+  void BuildForMaster() const override;
 
  private:
   /// Detector access for stepping action configuration.

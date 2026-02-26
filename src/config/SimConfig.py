@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from datetime import date as DateType
 from datetime import datetime
+import math
+from pathlib import Path
 from pydantic import (
     AliasChoices,
     BaseModel,
@@ -63,20 +65,121 @@ class Size3Mm(StrictModel):
     z_mm: float = Field(gt=0)
 
 
+class ScintillationTimeComponent(StrictModel):
+    """Single scintillation decay component in nanoseconds."""
+
+    time_constant: float = Field(alias="timeConstant", ge=0)
+    yield_fraction: float = Field(alias="yieldFraction", ge=0)
+
+
+class ScintillationTimeComponentsByExcitation(StrictModel):
+    """Particle-keyed scintillation component profiles.
+
+    Supported optional profiles:
+    - ``default``: generic fallback profile
+    - ``neutron``: profile selected for neutron sources
+    - ``gamma``: profile selected for gamma sources
+    """
+
+    default: list[ScintillationTimeComponent] | None = None
+    neutron: list[ScintillationTimeComponent] | None = None
+    gamma: list[ScintillationTimeComponent] | None = None
+
+    @staticmethod
+    def _validate_profile(
+        profile_name: str,
+        components: list[ScintillationTimeComponent],
+    ) -> None:
+        if len(components) != 3:
+            raise ValueError(
+                f"`timeComponents.{profile_name}` must define exactly 3 components."
+            )
+        total = sum(component.yield_fraction for component in components)
+        if not math.isclose(total, 1.0, rel_tol=0.0, abs_tol=1.0e-9):
+            raise ValueError(
+                f"`timeComponents.{profile_name}` yield fractions must sum to ~1.0."
+            )
+        for index, component in enumerate(components, start=1):
+            if component.yield_fraction > 0.0 and component.time_constant <= 0.0:
+                raise ValueError(
+                    "Active time component must have positive `timeConstant` "
+                    f"(profile={profile_name}, component={index})."
+                )
+
+    @model_validator(mode="after")
+    def validate_profiles(self) -> "ScintillationTimeComponentsByExcitation":
+        """Require at least one profile and validate each present profile."""
+
+        profile_names = ("default", "neutron", "gamma")
+        present = False
+        for profile_name in profile_names:
+            components = getattr(self, profile_name)
+            if components is None:
+                continue
+            present = True
+            self._validate_profile(profile_name, components)
+        if not present:
+            raise ValueError(
+                "`timeComponents` must provide at least one profile: "
+                "`default`, `neutron`, or `gamma`."
+            )
+        return self
+
+    def resolve_for_particle(
+        self,
+        particle: str,
+    ) -> tuple[str, list[ScintillationTimeComponent]]:
+        """Select profile for a source particle with fallback handling."""
+
+        token = particle.strip().lower()
+        if token in {"neutron", "n"} and self.neutron is not None:
+            return "neutron", self.neutron
+        if token in {"gamma", "g"} and self.gamma is not None:
+            return "gamma", self.gamma
+        if self.default is not None:
+            return "default", self.default
+
+        available_profiles = [
+            profile_name
+            for profile_name in ("neutron", "gamma")
+            if getattr(self, profile_name) is not None
+        ]
+        if len(available_profiles) == 1:
+            profile_name = available_profiles[0]
+            components = getattr(self, profile_name)
+            assert components is not None
+            return profile_name, components
+
+        raise ValueError(
+            "Could not resolve scintillation `timeComponents` profile for "
+            f"particle {particle!r}. Provide a matching profile "
+            "(`neutron`/`gamma`) or `default`."
+        )
+
+
 class ScintillatorProperties(StrictModel):
     """Optical material table for scintillator definition.
 
-    Fields map directly to common GEANT4 material-property table concepts:
-    - `photonEnergy` and `rIndex` are paired lookup arrays
-    - `nKEntries` declares the expected table length
-    - `timeConstant` describes scintillation decay timing
+    Fields map directly to common GEANT4 material-property table concepts.
+    Core fields (`photonEnergy`, `rIndex`, `nKEntries`, `timeComponents`)
+    define mandatory optical behavior, while extended fields enable full
+    material and optical-table configuration through macros.
     """
 
     name: str
     photon_energy: list[float] = Field(alias="photonEnergy", min_length=1)
     r_index: list[float] = Field(alias="rIndex", min_length=1)
     n_k_entries: int = Field(alias="nKEntries", gt=0)
-    time_constant: float = Field(alias="timeConstant", gt=0)
+    time_components: ScintillationTimeComponentsByExcitation = Field(
+        alias="timeComponents"
+    )
+    abs_length: list[float] | None = Field(default=None, alias="absLength")
+    scint_spectrum: list[float] | None = Field(default=None, alias="scintSpectrum")
+    density: float | None = Field(default=None, gt=0)
+    carbon_atoms: int | None = Field(default=None, alias="carbonAtoms", gt=0)
+    hydrogen_atoms: int | None = Field(default=None, alias="hydrogenAtoms", gt=0)
+    scint_yield: float | None = Field(default=None, alias="scintYield", gt=0)
+    resolution_scale: float | None = Field(default=None, alias="resolutionScale", gt=0)
 
     @model_validator(mode="after")
     def validate_table_lengths(self) -> "ScintillatorProperties":
@@ -90,15 +193,33 @@ class ScintillatorProperties(StrictModel):
             raise ValueError("`photonEnergy` length must match `nKEntries`.")
         if len(self.r_index) != self.n_k_entries:
             raise ValueError("`rIndex` length must match `nKEntries`.")
+        if self.abs_length is not None and len(self.abs_length) != self.n_k_entries:
+            raise ValueError("`absLength` length must match `nKEntries`.")
+        if (
+            self.scint_spectrum is not None
+            and len(self.scint_spectrum) != self.n_k_entries
+        ):
+            raise ValueError("`scintSpectrum` length must match `nKEntries`.")
         return self
 
 
 class ScintillatorConfig(StrictModel):
     """Scintillator geometry + material properties block."""
 
+    catalog_id: str | None = Field(default=None, alias="catalogId", min_length=1)
     position_mm: Vec3Mm
     dimension_mm: Size3Mm
-    properties: ScintillatorProperties
+    properties: ScintillatorProperties | None = None
+
+    @model_validator(mode="after")
+    def require_properties_or_catalog(self) -> "ScintillatorConfig":
+        """Require either explicit properties or a catalog reference."""
+
+        if self.catalog_id is None and self.properties is None:
+            raise ValueError(
+                "`scintillator` must provide `properties` and/or `catalogId`."
+            )
+        return self
 
 
 class Vec3(StrictModel):
@@ -219,16 +340,72 @@ class OpticalConfig(StrictModel):
         return self
 
 
-class OutputInfo(StrictModel):
-    """Output block under metadata with YAML alias preservation.
+class RunEnvironmentOutputInfo(StrictModel):
+    """Output staging + format settings nested under `RunEnvironment`.
 
-    Aliases (`DataDirectory`, `LogDirectory`, `OutputFormat`) are kept to match
-    user-facing YAML conventions while Python uses snake_case attributes.
+    Directory values are interpreted relative to
+    `Metadata.RunEnvironment.WorkingDirectory` when given as relative paths.
     """
 
-    data_directory: str = Field(alias="DataDirectory", min_length=1)
-    log_directory: str = Field(alias="LogDirectory", min_length=1)
-    output_format: str = Field(alias="OutputFormat", min_length=1)
+    simulated_photons_dir: str = Field(
+        default="simulatedPhotons",
+        validation_alias=AliasChoices(
+            "SimulatedPhotonsDirectory",
+            "simulated_photons_dir",
+            "simulatedPhotonsDir",
+        ),
+        serialization_alias="SimulatedPhotonsDirectory",
+        min_length=1,
+    )
+    transported_photons_dir: str = Field(
+        default="transportedPhotons",
+        validation_alias=AliasChoices(
+            "TransportedPhotonsDirectory",
+            "transported_photons_dir",
+            "transportedPhotonsDir",
+        ),
+        serialization_alias="TransportedPhotonsDirectory",
+        min_length=1,
+    )
+    output_format: str = Field(alias="OutputFormat", default="hdf5", min_length=1)
+
+
+class RunEnvironmentConfig(StrictModel):
+    """Run directory layout and execution-path context.
+
+    Default layout policy:
+    - `SimulationRunID`: "example"
+    - `WorkingDirectory`: `data/`
+    - `MacroDirectory`: `macros/`
+    - `LogDirectory`: `logs/`
+    - `OutputInfo.SimulatedPhotonsDirectory`: `simulatedPhotons/`
+    - `OutputInfo.TransportedPhotonsDirectory`: `transportedPhotons/`
+    """
+
+    simulation_run_id: str = Field(alias="SimulationRunID", default="example", min_length=1)
+    working_directory: str | None = Field(default=None, alias="WorkingDirectory")
+    macro_directory: str | None = Field(default=None, alias="MacroDirectory")
+    log_directory: str | None = Field(default=None, alias="LogDirectory")
+    output_info: RunEnvironmentOutputInfo = Field(
+        alias="OutputInfo", default_factory=RunEnvironmentOutputInfo
+    )
+
+    @model_validator(mode="after")
+    def apply_layout_defaults(self) -> "RunEnvironmentConfig":
+        """Fill directory defaults for run environment.
+
+        WorkingDirectory defaults to `data`.
+        Run-specific directories are resolved later as
+        `<WorkingDirectory>/<SimulationRunID>/...`.
+        """
+
+        if self.working_directory is None or not self.working_directory.strip():
+            self.working_directory = "data"
+        if self.macro_directory is None or not self.macro_directory.strip():
+            self.macro_directory = "macros"
+        if self.log_directory is None or not self.log_directory.strip():
+            self.log_directory = "logs"
+        return self
 
 
 class MetadataConfig(StrictModel):
@@ -238,9 +415,11 @@ class MetadataConfig(StrictModel):
     date: str = Field(min_length=1)
     version: str = Field(min_length=1)
     description: str = Field(min_length=1)
-    working_directory: str = Field(alias="WorkingDirectory", min_length=1)
-    output_info: OutputInfo = Field(alias="OutputInfo")
-    simulation_run_id: str = Field(alias="SimulationRunID", min_length=1)
+    run_environment: RunEnvironmentConfig = Field(
+        validation_alias=AliasChoices("RunEnvironment", "run_environment"),
+        serialization_alias="RunEnvironment",
+        default_factory=RunEnvironmentConfig,
+    )
 
     @field_validator("date", mode="before")
     @classmethod
@@ -332,6 +511,15 @@ class SimConfig(StrictModel):
         serialization_alias="Metadata",
     )
 
+    @model_validator(mode="after")
+    def validate_scintillation_profile_selection(self) -> "SimConfig":
+        """Ensure configured source particle has a resolvable time profile."""
+
+        properties = self.scintillator.properties
+        if properties is not None:
+            properties.time_components.resolve_for_particle(self.source.gps.particle)
+        return self
+
 
 def default_sim_config() -> SimConfig:
     """Return a minimal valid configuration for bootstrapping/tests.
@@ -343,14 +531,28 @@ def default_sim_config() -> SimConfig:
     return SimConfig.model_validate(
         {
             "scintillator": {
+                "catalogId": "EJ200",
                 "position_mm": {"x_mm": 0.0, "y_mm": 0.0, "z_mm": 0.0},
                 "dimension_mm": {"x_mm": 50.0, "y_mm": 50.0, "z_mm": 10.0},
                 "properties": {
-                    "name": "EJ-200",
-                    "photonEnergy": [2.8, 3.0, 3.2],
-                    "rIndex": [1.58, 1.59, 1.60],
-                    "nKEntries": 3,
-                    "timeConstant": 2.1,
+                    "name": "EJ200",
+                    "photonEnergy": [2.00, 2.40, 2.76, 3.10, 3.50],
+                    "rIndex": [1.58, 1.58, 1.58, 1.58, 1.58],
+                    "absLength": [380.0, 380.0, 380.0, 300.0, 220.0],
+                    "scintSpectrum": [0.05, 0.35, 1.00, 0.45, 0.08],
+                    "nKEntries": 5,
+                    "timeComponents": {
+                        "default": [
+                            {"timeConstant": 2.1, "yieldFraction": 1.0},
+                            {"timeConstant": 0.0, "yieldFraction": 0.0},
+                            {"timeConstant": 0.0, "yieldFraction": 0.0},
+                        ]
+                    },
+                    "density": 1.023,
+                    "carbonAtoms": 9,
+                    "hydrogenAtoms": 10,
+                    "scintYield": 10000.0,
+                    "resolutionScale": 1.0,
                 },
             },
             "source": {
@@ -394,13 +596,17 @@ def default_sim_config() -> SimConfig:
                 "date": "YEAR-MONTH-DAY",
                 "version": "ScintPiX [VERSION]",
                 "description": "Simulation configuration for scintillator and optical system.",
-                "WorkingDirectory": "./",
-                "OutputInfo": {
-                    "DataDirectory": "output/",
-                    "LogDirectory": "logs/",
-                    "OutputFormat": "hdf5",
+                "RunEnvironment": {
+                    "SimulationRunID": "sim_001",
+                    "WorkingDirectory": "data",
+                    "MacroDirectory": "macros",
+                    "LogDirectory": "logs",
+                    "OutputInfo": {
+                        "SimulatedPhotonsDirectory": "simulatedPhotons",
+                        "TransportedPhotonsDirectory": "transportedPhotons",
+                        "OutputFormat": "hdf5",
+                    },
                 },
-                "SimulationRunID": "sim_001",
             },
         }
     )
