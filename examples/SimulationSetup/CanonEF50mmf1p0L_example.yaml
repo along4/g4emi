@@ -17,12 +17,13 @@ scintillator:
     rIndex: [1.58, 1.59, 1.60]
     nKEntries: 3
     timeComponents:
-      - timeConstant: 2.1
-        yieldFraction: 1.0
-      - timeConstant: 0.0
-        yieldFraction: 0.0
-      - timeConstant: 0.0
-        yieldFraction: 0.0
+      default:
+        - timeConstant: 2.1
+          yieldFraction: 1.0
+        - timeConstant: 0.0
+          yieldFraction: 0.0
+        - timeConstant: 0.0
+          yieldFraction: 0.0
 
 source:
   gps:
