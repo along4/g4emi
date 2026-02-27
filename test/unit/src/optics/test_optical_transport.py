@@ -1,0 +1,292 @@
+"""Unit tests for SimConfig-driven optical transport HDF5 generation."""
+
+from __future__ import annotations
+
+from pathlib import Path
+import sys
+import tempfile
+import unittest
+
+
+def _repo_root() -> Path:
+    """Resolve repository root by searching parent directories."""
+
+    current = Path(__file__).resolve()
+    for parent in current.parents:
+        if (parent / "src").is_dir() and (parent / "pixi.toml").is_file():
+            return parent
+    raise RuntimeError("Could not resolve repository root from test path.")
+
+
+sys.path.insert(0, str(_repo_root()))
+
+
+class _StubTracer:
+    """Deterministic tracer used to test transport writer behavior."""
+
+    engine_name = "stub-tracer"
+
+    def trace_to_sensor(
+        self,
+        *,
+        x_mm: float,
+        y_mm: float,
+        dir_x: float,
+        dir_y: float,
+        dir_z: float,
+        wavelength_nm: float | None,
+    ) -> tuple[float, float, float] | None:
+        if x_mm >= 0.0:
+            return (x_mm + 10.0, y_mm - 5.0, 42.0)
+        return None
+
+
+class OpticalTransportTests(unittest.TestCase):
+    """Validate transport output schema and SimConfig integration."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        try:
+            import h5py
+            import numpy as np
+
+            from src.config.SimConfig import SimConfig
+            from src.optics.OpticalTransport import (
+                resolve_transport_paths,
+                transport_from_sim_config,
+            )
+        except ModuleNotFoundError as exc:
+            missing = (getattr(exc, "name", "") or "").lower()
+            if missing in {"h5py", "numpy", "pydantic"}:
+                raise unittest.SkipTest(
+                    f"Missing dependency for optical-transport tests: {exc}. "
+                    "Run in the project environment (for example: pixi run test-python)."
+                ) from exc
+            raise
+
+        cls.h5py = h5py
+        cls.np = np
+        cls.SimConfig = SimConfig
+        cls.resolve_transport_paths = staticmethod(resolve_transport_paths)
+        cls.transport_from_sim_config = staticmethod(transport_from_sim_config)
+
+    def _build_config(self, working_directory: Path) -> object:
+        """Construct a minimal valid SimConfig payload for transport tests."""
+
+        return self.SimConfig.model_validate(
+            {
+                "scintillator": {
+                    "catalogId": "EJ200",
+                    "position_mm": {"x_mm": 0.0, "y_mm": 0.0, "z_mm": 0.0},
+                    "dimension_mm": {"x_mm": 50.0, "y_mm": 50.0, "z_mm": 10.0},
+                    "properties": {
+                        "name": "EJ200",
+                        "photonEnergy": [2.0, 2.4, 2.76],
+                        "rIndex": [1.58, 1.58, 1.58],
+                        "nKEntries": 3,
+                        "timeComponents": {
+                            "default": [
+                                {"timeConstant": 2.1, "yieldFraction": 1.0},
+                                {"timeConstant": 0.0, "yieldFraction": 0.0},
+                                {"timeConstant": 0.0, "yieldFraction": 0.0},
+                            ]
+                        },
+                    },
+                },
+                "source": {
+                    "gps": {
+                        "particle": "neutron",
+                        "position": {
+                            "type": "Plane",
+                            "shape": "Circle",
+                            "centerMm": {"x_mm": 0.0, "y_mm": 0.0, "z_mm": -20.0},
+                            "radiusMm": 1.0,
+                        },
+                        "angular": {
+                            "type": "beam2d",
+                            "rot1": {"x": 1.0, "y": 0.0, "z": 0.0},
+                            "rot2": {"x": 0.0, "y": 1.0, "z": 0.0},
+                            "direction": {"x": 0.0, "y": 0.0, "z": 1.0},
+                        },
+                        "energy": {"type": "Mono", "monoMeV": 2.45},
+                    }
+                },
+                "optical": {
+                    "lenses": [
+                        {
+                            "name": "CanonEF50mmf1.0L",
+                            "primary": True,
+                            "zmxFile": "CanonEF50mmf1.0L.zmx",
+                        }
+                    ],
+                    "geometry": {"entranceDiameter": 60.55, "sensorMaxWidth": 36.0},
+                    "sensitiveDetectorConfig": {
+                        "position_mm": {"x_mm": 0.0, "y_mm": 0.0, "z_mm": 210.05},
+                        "shape": "circle",
+                        "diameterRule": "min(entranceDiameter,sensorMaxWidth)",
+                    },
+                },
+                "Metadata": {
+                    "author": "Unit Test",
+                    "date": "2026-02-27",
+                    "version": "test",
+                    "description": "Optical transport test payload.",
+                    "RunEnvironment": {
+                        "SimulationRunID": "transport_unit_test",
+                        "WorkingDirectory": str(working_directory),
+                        "MacroDirectory": "macros",
+                        "LogDirectory": "logs",
+                        "OutputInfo": {
+                            "SimulatedPhotonsDirectory": "simulatedPhotons",
+                            "TransportedPhotonsDirectory": "transportedPhotons",
+                        },
+                    },
+                },
+            }
+        )
+
+    def _write_input_hdf5(self, path: Path) -> None:
+        """Write small deterministic input datasets for transport tests."""
+
+        path.parent.mkdir(parents=True, exist_ok=True)
+        primaries_dtype = self.np.dtype(
+            [
+                ("gun_call_id", self.np.int64),
+                ("primary_track_id", self.np.int32),
+                ("primary_species", "S16"),
+                ("primary_x_mm", self.np.float64),
+                ("primary_y_mm", self.np.float64),
+                ("primary_energy_MeV", self.np.float64),
+            ]
+        )
+        secondaries_dtype = self.np.dtype(
+            [
+                ("gun_call_id", self.np.int64),
+                ("primary_track_id", self.np.int32),
+                ("secondary_track_id", self.np.int32),
+                ("secondary_species", "S16"),
+                ("secondary_origin_x_mm", self.np.float64),
+                ("secondary_origin_y_mm", self.np.float64),
+                ("secondary_origin_z_mm", self.np.float64),
+                ("secondary_origin_energy_MeV", self.np.float64),
+            ]
+        )
+        photons_dtype = self.np.dtype(
+            [
+                ("gun_call_id", self.np.int64),
+                ("primary_track_id", self.np.int32),
+                ("secondary_track_id", self.np.int32),
+                ("photon_track_id", self.np.int32),
+                ("optical_interface_hit_x_mm", self.np.float64),
+                ("optical_interface_hit_y_mm", self.np.float64),
+                ("optical_interface_hit_dir_x", self.np.float64),
+                ("optical_interface_hit_dir_y", self.np.float64),
+                ("optical_interface_hit_dir_z", self.np.float64),
+                ("optical_interface_hit_energy_eV", self.np.float64),
+                ("optical_interface_hit_wavelength_nm", self.np.float64),
+            ]
+        )
+
+        primaries = self.np.array(
+            [(0, 1, b"n", 0.0, 0.0, 2.45)],
+            dtype=primaries_dtype,
+        )
+        secondaries = self.np.array(
+            [(0, 1, 10, b"proton", 0.1, 0.2, 0.3, 1.0)],
+            dtype=secondaries_dtype,
+        )
+        photons = self.np.array(
+            [
+                (0, 1, 10, 100, 1.5, 2.0, 0.0, 0.0, 1.0, 2.1, 500.0),
+                (0, 1, 10, 101, -4.0, 1.0, 0.0, 0.0, 1.0, 2.1, 500.0),
+            ],
+            dtype=photons_dtype,
+        )
+
+        with self.h5py.File(path, "w") as handle:
+            handle.create_dataset("primaries", data=primaries)
+            handle.create_dataset("secondaries", data=secondaries)
+            handle.create_dataset("photons", data=photons)
+
+    def test_resolve_transport_paths_uses_simconfig_layout(self) -> None:
+        """Default path resolution should use run-root stage directories."""
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = self._build_config(Path(tmp_dir))
+            resolved = self.resolve_transport_paths(config)
+
+            self.assertTrue(str(resolved.input_hdf5).endswith("photon_optical_interface_hits.h5"))
+            self.assertTrue(str(resolved.output_hdf5).endswith("photons_intensifier_hits.h5"))
+            self.assertIn("simulatedPhotons", str(resolved.input_hdf5))
+            self.assertIn("transportedPhotons", str(resolved.output_hdf5))
+
+    def test_transport_from_sim_config_writes_linked_secondary_hdf5(self) -> None:
+        """Transport should preserve linkage IDs and emit NaNs for misses."""
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = self._build_config(Path(tmp_dir))
+            resolved = self.resolve_transport_paths(config)
+            self._write_input_hdf5(resolved.input_hdf5)
+
+            summary = self.transport_from_sim_config(
+                config,
+                tracer=_StubTracer(),
+                overwrite=True,
+            )
+
+            self.assertEqual(summary.total_photons, 2)
+            self.assertEqual(summary.transported_photons, 1)
+            self.assertEqual(summary.missed_photons, 1)
+            self.assertEqual(summary.output_hdf5, resolved.output_hdf5)
+            self.assertEqual(summary.ray_engine, "stub-tracer")
+
+            with self.h5py.File(summary.output_hdf5, "r") as handle:
+                self.assertIn("primaries", handle)
+                self.assertIn("secondaries", handle)
+                self.assertIn("transported_photons", handle)
+
+                rows = handle["transported_photons"][:]
+                self.assertEqual(len(rows), 2)
+                self.assertListEqual(rows["source_photon_index"].tolist(), [0, 1])
+                self.assertListEqual(rows["photon_track_id"].tolist(), [100, 101])
+                self.assertNotIn("optical_interface_hit_x_mm", rows.dtype.names)
+                self.assertNotIn("optical_interface_hit_y_mm", rows.dtype.names)
+                self.assertNotIn("optical_interface_hit_dir_x", rows.dtype.names)
+                self.assertNotIn("optical_interface_hit_dir_y", rows.dtype.names)
+                self.assertNotIn("optical_interface_hit_dir_z", rows.dtype.names)
+                self.assertNotIn("optical_interface_hit_energy_eV", rows.dtype.names)
+                self.assertNotIn("optical_interface_hit_wavelength_nm", rows.dtype.names)
+
+                self.assertTrue(bool(rows["reached_intensifier"][0]))
+                self.assertFalse(bool(rows["reached_intensifier"][1]))
+                self.assertAlmostEqual(float(rows["intensifier_hit_x_mm"][0]), 11.5)
+                self.assertAlmostEqual(float(rows["intensifier_hit_y_mm"][0]), -3.0)
+                self.assertAlmostEqual(float(rows["intensifier_hit_z_mm"][0]), 42.0)
+                self.assertTrue(self.np.isnan(float(rows["intensifier_hit_x_mm"][1])))
+                self.assertTrue(self.np.isnan(float(rows["intensifier_hit_y_mm"][1])))
+                self.assertTrue(self.np.isnan(float(rows["intensifier_hit_z_mm"][1])))
+
+                self.assertEqual(handle.attrs["transport_engine"], "stub-tracer")
+                self.assertIn("source_hdf5", handle.attrs)
+                self.assertIn("lens_zmx_path", handle.attrs)
+                self.assertIn("generated_utc", handle.attrs)
+
+    def test_transport_rejects_same_input_and_output_paths(self) -> None:
+        """Input and output paths must be distinct to avoid accidental clobber."""
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = self._build_config(Path(tmp_dir))
+            resolved = self.resolve_transport_paths(config)
+            self._write_input_hdf5(resolved.input_hdf5)
+
+            with self.assertRaises(ValueError):
+                self.transport_from_sim_config(
+                    config,
+                    input_hdf5_path=resolved.input_hdf5,
+                    output_hdf5_path=resolved.input_hdf5,
+                    tracer=_StubTracer(),
+                )
+
+
+if __name__ == "__main__":
+    unittest.main()
