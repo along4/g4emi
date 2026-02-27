@@ -106,6 +106,30 @@ Then run the macro path printed by the script (default location):
 pixi run g4emi data/ScintCatalog_example/macros/ScintCatalog_example.mac
 ```
 
+### 2.5 Lightweight HDF5 analyzer example
+
+This repo is simulation-first. Users are encouraged to implement analysis code
+tailored to their own workflows.
+
+A lightweight demonstration analyzer is provided in:
+
+```text
+analysis/hfdf5Analyzer.py
+```
+
+Design notes and intent are documented in:
+
+```text
+analysis/README.md
+```
+
+A runnable example is available in:
+
+```bash
+pixi run python examples/analysisLite/hdf5_lite_analyzer_example.py \
+  data/CanonEF50mmf1p0L_run/simulatedPhotons/photon_optical_interface_hits.h5
+```
+
 ## 3. Simulation Output Structures
 
 ### 3.1 Output directory structure
