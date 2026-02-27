@@ -297,11 +297,13 @@ G4VPhysicalVolume* DetectorConstruction::Construct() {
   const auto opticalInterfaceCenterX = std::isnan(opticalInterfacePosX) ? defaultOpticalInterfaceX : opticalInterfacePosX;
   const auto opticalInterfaceCenterY = std::isnan(opticalInterfacePosY) ? defaultOpticalInterfaceY : opticalInterfacePosY;
   const auto opticalInterfaceCenterZ = std::isnan(opticalInterfacePosZ) ? defaultOpticalInterfaceZ : opticalInterfacePosZ;
+  const auto effectiveMaskRadius = maskEnabled ? maskRadius : 0.0 * mm;
 
   G4cout << "[Geom] Scint(mm)=(" << scintPosX / mm << "," << scintPosY / mm
          << "," << scintPosZ / mm << ") OpticalInterface(mm)=(" << opticalInterfaceCenterX / mm
          << "," << opticalInterfaceCenterY / mm << "," << opticalInterfaceCenterZ / mm
-         << ") MaskR(mm)=" << maskRadius / mm << G4endl;
+         << ") MaskEnabled=" << (maskEnabled ? "true" : "false")
+         << " MaskR(mm)=" << effectiveMaskRadius / mm << G4endl;
 
   // Keep world automatically large enough even when volumes are shifted.
   // We size from required half-extents with a 4x safety factor.
