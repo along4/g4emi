@@ -268,6 +268,27 @@ class MacroCommandGenerationTests(unittest.TestCase):
                 ["/run/initialize", "/vis/open OGL", "/vis/drawVolume"],
             )
 
+    def test_append_macro_line_rejects_embedded_newlines(self) -> None:
+        """append_macro_line should reject payloads containing embedded newlines."""
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            macro_path = tmp_path / "append_test.mac"
+            macro_path.write_text("/run/initialize\n", encoding="utf-8")
+
+            with self.assertRaises(ValueError):
+                self._append_macro_line(
+                    macro_path, "/vis/open OGL\n/vis/drawVolume"
+                )
+
+            with self.assertRaises(ValueError):
+                self._append_macro_line(
+                    macro_path, "/vis/open OGL\r/vis/drawVolume"
+                )
+
+            written_lines = macro_path.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(written_lines, ["/run/initialize"])
+
     def test_from_macro_round_trip_with_template(self) -> None:
         """from_macro should reconstruct geometry/output commands with a template."""
 

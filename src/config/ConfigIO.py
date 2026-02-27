@@ -1307,7 +1307,8 @@ def append_macro_line(macro_file: str | Path, string_to_append: str) -> None:
     macro_file:
         Macro file path to append into. Parent directory must already exist.
     string_to_append:
-        Line content to append. A trailing newline is always normalized.
+        Line content to append. A trailing newline is normalized, but embedded
+        newline characters are rejected.
     """
 
     path = Path(macro_file)
@@ -1318,6 +1319,12 @@ def append_macro_line(macro_file: str | Path, string_to_append: str) -> None:
             f"Macro parent directory does not exist: {path.parent}"
         )
 
-    normalized = string_to_append.rstrip("\n")
+    normalized = string_to_append.rstrip("\r\n")
+    if "\n" in normalized or "\r" in normalized:
+        raise ValueError(
+            "append_macro_line expects a single line; newline characters are "
+            "not allowed in `string_to_append`."
+        )
+
     with path.open("a", encoding="utf-8") as handle:
         handle.write(normalized + "\n")
