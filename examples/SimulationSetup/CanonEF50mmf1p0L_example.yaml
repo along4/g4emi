@@ -61,6 +61,9 @@ optical:
       z_mm: 210.05
     shape: circle
     diameterRule: min(entranceDiameter,sensorMaxWidth)
+  transportAssumptions:
+    objectPlane: scintillator_back_face
+    opticalInterfaceRepresents: lens_entrance_plane
 
 simulation:
   numberOfParticles: 10000
