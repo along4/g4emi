@@ -130,6 +130,36 @@ pixi run python examples/analysisLite/hdf5_lite_analyzer_example.py \
   data/CanonEF50mmf1p0L_run/simulatedPhotons/photon_optical_interface_hits.h5
 ```
 
+### 2.6 Optical transport to lens back plane (SimConfig-driven)
+
+After generating simulation output (`/photons` optical-interface hits), run:
+
+```bash
+pixi run python examples/SimulationSetup/optical_transport_example.py \
+  examples/SimulationSetup/CanonEF50mmf1p0L_example.yaml
+```
+
+By default this reads:
+
+```text
+<run_root>/simulatedPhotons/photon_optical_interface_hits.h5
+```
+
+and writes:
+
+```text
+<run_root>/transportedPhotons/photons_intensifier_hits.h5
+```
+
+The output file contains:
+- copied `/primaries` and `/secondaries` datasets for linkage to source tracks
+- `/transported_photons` dataset with source track IDs and transported sensor
+  coordinates (`intensifier_hit_*_mm`)
+
+If a photon misses the lens/sensor in ray tracing, its
+`intensifier_hit_*_mm` values are written as `NaN` and
+`reached_intensifier` is `False`.
+
 ## 3. Simulation Output Structures
 
 ### 3.1 Output directory structure
