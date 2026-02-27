@@ -114,7 +114,7 @@ tailored to their own workflows.
 A lightweight demonstration analyzer is provided in:
 
 ```text
-analysis/hfdf5Analyzer.py
+analysis/hdf5Analyzer.py
 ```
 
 Design notes and intent are documented in:

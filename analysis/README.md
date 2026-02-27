@@ -7,7 +7,7 @@ Users are expected to build their own analysis pipelines for their specific
 science and workflow needs.
 
 To make onboarding easier, this folder includes a lightweight demonstration
-module: `hfdf5Analyzer.py`.
+module: `hdf5Analyzer.py`.
 
 ## Why this exists
 
