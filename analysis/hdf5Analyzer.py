@@ -99,13 +99,22 @@ def _shared_xy_range(
     y_values.append(np.asarray(photons["photon_origin_y_mm"], dtype=float))
 
     exit_x_field, exit_y_field = _photon_exit_field_names(photons)
-    x_values.append(np.asarray(photons[exit_x_field], dtype=float))
-    y_values.append(np.asarray(photons[exit_y_field], dtype=float))
+    exit_x = np.asarray(photons[exit_x_field], dtype=float)
+    exit_y = np.asarray(photons[exit_y_field], dtype=float)
+    # Missing scintillator exits are encoded as NaN; exclude them from range
+    # calculation so finite origin/hit coordinates still define valid bounds.
+    finite_exit_mask = np.isfinite(exit_x) & np.isfinite(exit_y)
+    x_values.append(exit_x[finite_exit_mask])
+    y_values.append(exit_y[finite_exit_mask])
 
     x_all = np.concatenate([values for values in x_values if values.size > 0])
     y_all = np.concatenate([values for values in y_values if values.size > 0])
+    x_all = x_all[np.isfinite(x_all)]
+    y_all = y_all[np.isfinite(y_all)]
     if x_all.size == 0 or y_all.size == 0:
-        raise ValueError("Unable to compute shared range because no XY points were found.")
+        raise ValueError(
+            "Unable to compute shared range because no finite XY points were found."
+        )
 
     return ((float(np.min(x_all)), float(np.max(x_all))), (float(np.min(y_all)), float(np.max(y_all))))
 
@@ -246,6 +255,9 @@ def photon_exit_to_image(
 
     x_mm = np.asarray(photons[x_field], dtype=float)
     y_mm = np.asarray(photons[y_field], dtype=float)
+    finite_exit_mask = np.isfinite(x_mm) & np.isfinite(y_mm)
+    x_mm = x_mm[finite_exit_mask]
+    y_mm = y_mm[finite_exit_mask]
     xy_range = _shared_xy_range(hdf5_path, neutron_labels) if shared_range else None
     hist, x_edges, y_edges = _histogram_image(x_mm, y_mm, bins, xy_range=xy_range)
 
