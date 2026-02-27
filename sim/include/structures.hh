@@ -71,6 +71,8 @@ struct PhotonInfo {
   double photonOriginZmm = 0.0;
 
   /// Position (mm) where the photon last exited the scintillator volume.
+  /// If no scintillator-exit crossing was recorded for this photon, the writer
+  /// sets all three `photonScintExit*` components to NaN to indicate "no exit".
   double photonScintExitXmm = 0.0;
   double photonScintExitYmm = 0.0;
   double photonScintExitZmm = 0.0;
