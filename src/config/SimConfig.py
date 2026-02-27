@@ -16,6 +16,7 @@ from datetime import date as DateType
 from datetime import datetime
 import math
 from pathlib import Path
+from typing import Literal
 from pydantic import (
     AliasChoices,
     BaseModel,
@@ -317,6 +318,30 @@ class SensitiveDetectorConfig(StrictModel):
     diameter_rule: str = Field(alias="diameterRule", min_length=1)
 
 
+class OpticalTransportAssumptionsConfig(StrictModel):
+    """Physical mapping assumptions used by downstream optical transport.
+
+    Definitions:
+    - `objectPlane`: origin object plane for lens focus assumptions.
+    - `opticalInterfaceRepresents`: physical meaning of Geant4 optical-interface
+      hit plane used as ray-tracing input.
+    """
+
+    object_plane: Literal["scintillator_back_face"] = Field(
+        default="scintillator_back_face",
+        validation_alias=AliasChoices("objectPlane", "object_plane"),
+        serialization_alias="objectPlane",
+    )
+    optical_interface_represents: Literal["lens_entrance_plane"] = Field(
+        default="lens_entrance_plane",
+        validation_alias=AliasChoices(
+            "opticalInterfaceRepresents",
+            "optical_interface_represents",
+        ),
+        serialization_alias="opticalInterfaceRepresents",
+    )
+
+
 class OpticalConfig(StrictModel):
     """Optical subsystem definition.
 
@@ -330,6 +355,10 @@ class OpticalConfig(StrictModel):
     geometry: OpticalGeometry
     sensitive_detector_config: SensitiveDetectorConfig = Field(
         alias="sensitiveDetectorConfig"
+    )
+    transport_assumptions: OpticalTransportAssumptionsConfig = Field(
+        default_factory=OpticalTransportAssumptionsConfig,
+        alias="transportAssumptions",
     )
 
     @model_validator(mode="after")
@@ -591,6 +620,10 @@ def default_sim_config() -> SimConfig:
                     "position_mm": {"x_mm": 0.0, "y_mm": 0.0, "z_mm": 25.0},
                     "shape": "circle",
                     "diameterRule": "min(entranceDiameter,sensorMaxWidth)",
+                },
+                "transportAssumptions": {
+                    "objectPlane": "scintillator_back_face",
+                    "opticalInterfaceRepresents": "lens_entrance_plane",
                 },
             },
             "simulation": {
