@@ -14,6 +14,7 @@ import sys
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
 from analysis.hdf5Analyzer import (  # noqa: E402
+    intensifier_photons_to_image,
     neutron_hits_to_image,
     optical_interface_photons_to_image,
     photon_exit_to_image,
@@ -36,16 +37,47 @@ def _parse_args() -> argparse.Namespace:
         "--output-dir",
         type=Path,
         default=None,
-        help="Directory for output PNGs (default: analysis/outputs).",
+        help=(
+            "Directory for output PNGs "
+            "(default: <run_root>/plots when inferable, else <input_dir>/plots)."
+        ),
+    )
+    parser.add_argument(
+        "--transport-hdf5-path",
+        type=Path,
+        default=None,
+        help=(
+            "Optional transport HDF5 path containing /transported_photons. "
+            "If omitted, tries sibling path "
+            "data/<run>/transportedPhotons/photons_intensifier_hits.h5."
+        ),
     )
     return parser.parse_args()
+
+
+def _infer_transport_hdf5_path(sim_hdf5_path: Path) -> Path | None:
+    """Infer sibling transport HDF5 path from simulated-photons input path."""
+
+    if sim_hdf5_path.parent.name != "simulatedPhotons":
+        return None
+    run_root = sim_hdf5_path.parent.parent
+    candidate = run_root / "transportedPhotons" / "photons_intensifier_hits.h5"
+    return candidate if candidate.exists() else None
+
+
+def _default_output_dir_from_input(hdf5_path: Path) -> Path:
+    """Infer default analyzer output directory as run-root `plots/`."""
+
+    stage_dir_names = {"simulatedPhotons", "transportedPhotons"}
+    if hdf5_path.parent.name in stage_dir_names:
+        return hdf5_path.parent.parent / "plots"
+    return hdf5_path.parent / "plots"
 
 
 def main() -> None:
     """Generate four analyzer images from a sample HDF5 file."""
 
     args = _parse_args()
-    repo_root = Path(__file__).resolve().parents[2]
     hdf5_path = args.hdf5_path.expanduser().resolve()
     if not hdf5_path.exists():
         raise FileNotFoundError(f"Input HDF5 file not found: {hdf5_path}")
@@ -53,7 +85,7 @@ def main() -> None:
     output_dir = (
         args.output_dir.expanduser().resolve()
         if args.output_dir is not None
-        else repo_root / "analysis" / "outputs"
+        else _default_output_dir_from_input(hdf5_path).resolve()
     )
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -61,11 +93,25 @@ def main() -> None:
     origins_png = output_dir / "photon_origins.png"
     exit_png = output_dir / "photon_exit.png"
     interface_png = output_dir / "optical_interface_photons.png"
+    intensifier_png = output_dir / "photons_intensifier_hits.png"
+
+    transport_hdf5_path = (
+        args.transport_hdf5_path.expanduser().resolve()
+        if args.transport_hdf5_path is not None
+        else _infer_transport_hdf5_path(hdf5_path)
+    )
 
     neutron_hits_to_image(hdf5_path, output_path=neutron_png)
     photon_origins_to_image(hdf5_path, output_path=origins_png)
     photon_exit_to_image(hdf5_path, output_path=exit_png)
     optical_interface_photons_to_image(hdf5_path, output_path=interface_png)
+    if transport_hdf5_path is not None and transport_hdf5_path.exists():
+        intensifier_photons_to_image(
+            transport_hdf5_path,
+            output_path=intensifier_png,
+        )
+    else:
+        intensifier_png = None
 
     print(f"Input HDF5: {hdf5_path}")
     print("Wrote images:")
@@ -73,6 +119,14 @@ def main() -> None:
     print(f"  - {origins_png}")
     print(f"  - {exit_png}")
     print(f"  - {interface_png}")
+    if intensifier_png is not None:
+        print(f"  - {intensifier_png}")
+        print(f"Transport HDF5: {transport_hdf5_path}")
+    else:
+        print(
+            "  - (skipped) photons_intensifier_hits.png "
+            "[transport HDF5 not found]"
+        )
 
 
 if __name__ == "__main__":
