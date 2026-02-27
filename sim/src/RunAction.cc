@@ -10,16 +10,6 @@
 #include <string>
 
 namespace {
-bool WritesCsv(Config::OutputFormat mode) {
-  return mode == Config::OutputFormat::kCsv ||
-         mode == Config::OutputFormat::kBoth;
-}
-
-bool WritesHdf5(Config::OutputFormat mode) {
-  return mode == Config::OutputFormat::kHdf5 ||
-         mode == Config::OutputFormat::kBoth;
-}
-
 bool ParentDirectoryExists(const std::string& outputFilePath) {
   const std::filesystem::path parent =
       std::filesystem::path(outputFilePath).parent_path();
@@ -39,21 +29,11 @@ void RunAction::BeginOfRunAction(const G4Run* /*run*/) {
     return;
   }
 
-  const Config::OutputFormat mode = fConfig->GetOutputFormat();
   std::string missingTargets;
 
-  if (WritesCsv(mode)) {
-    const std::string csvPath = fConfig->GetCsvFilePath();
-    if (!ParentDirectoryExists(csvPath)) {
-      missingTargets += "  - CSV target: " + csvPath + "\n";
-    }
-  }
-
-  if (WritesHdf5(mode)) {
-    const std::string hdf5Path = fConfig->GetHdf5FilePath();
-    if (!ParentDirectoryExists(hdf5Path)) {
-      missingTargets += "  - HDF5 target: " + hdf5Path + "\n";
-    }
+  const std::string hdf5Path = fConfig->GetHdf5FilePath();
+  if (!ParentDirectoryExists(hdf5Path)) {
+    missingTargets += "  - HDF5 target: " + hdf5Path + "\n";
   }
 
   if (missingTargets.empty()) {

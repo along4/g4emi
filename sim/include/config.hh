@@ -11,24 +11,9 @@
 /// Thread-safe runtime configuration shared across geometry/actions/messenger.
 class Config {
  public:
-  /// Supported output serialization modes.
-  enum class OutputFormat { kCsv, kHdf5, kBoth };
-
-  /// Initialize defaults (geometry, material, output mode/paths).
+  /// Initialize defaults (geometry, material, and output paths).
   Config();
   ~Config() = default;
-
-  /// Get current output mode.
-  OutputFormat GetOutputFormat() const;
-  /// Parse and set output mode from text token (csv/hdf5/both).
-  bool SetOutputFormat(const std::string& value);
-  /// Set output mode directly.
-  void SetOutputFormat(OutputFormat value);
-
-  /// Parse output-mode text token into enum.
-  static bool ParseOutputFormat(std::string value, OutputFormat* out);
-  /// Convert output-mode enum to canonical string token.
-  static const char* OutputFormatToString(OutputFormat value);
 
   /// Scintillator X length.
   G4double GetScintX() const;
@@ -43,8 +28,8 @@ class Config {
   G4double GetScintPosY() const;
   /// Scintillator center Z position in world coordinates.
   G4double GetScintPosZ() const;
-  /// Circular aperture radius at scintillator +Z face (0 disables aperture).
-  G4double GetApertureRadius() const;
+  /// Circular mask pass-through radius at scintillator +Z face (0 disables mask).
+  G4double GetMaskRadius() const;
 
   /// Optical-interface X length (0 means inherit scintillator X).
   G4double GetOpticalInterfaceX() const;
@@ -76,8 +61,8 @@ class Config {
   void SetScintPosY(G4double value);
   /// Set scintillator center Z position in world coordinates.
   void SetScintPosZ(G4double value);
-  /// Set circular aperture radius at scintillator +Z face (0 disables aperture).
-  void SetApertureRadius(G4double value);
+  /// Set circular mask pass-through radius at scintillator +Z face (0 disables mask).
+  void SetMaskRadius(G4double value);
 
   /// Set optical-interface X length.
   void SetOpticalInterfaceX(G4double value);
@@ -187,17 +172,12 @@ class Config {
   /// `data/<runName>/simulatedPhotons/`.
   void SetOutputRunName(const std::string& value);
 
-  /// Get CSV output file path derived from output settings.
-  std::string GetCsvFilePath() const;
   /// Get HDF5 output file path derived from output settings.
   std::string GetHdf5FilePath() const;
 
  private:
   /// Guards all mutable config fields for cross-thread read/write safety.
   mutable std::mutex fMutex;
-
-  /// Selected output format.
-  OutputFormat fOutputFormat = OutputFormat::kCsv;
 
   /// Scintillator dimensions in Geant4 internal units.
   G4double fScintX = 0.0;
@@ -208,8 +188,8 @@ class Config {
   G4double fScintPosX = 0.0;
   G4double fScintPosY = 0.0;
   G4double fScintPosZ = 0.0;
-  /// Circular pass-through radius for aperture at scintillator +Z face.
-  G4double fApertureRadius = 0.0;
+  /// Circular pass-through radius for mask at scintillator +Z face.
+  G4double fMaskRadius = 0.0;
 
   /// Optical-interface dimensions in Geant4 internal units.
   /// `fOpticalInterfaceX`/`fOpticalInterfaceY` may be zero to indicate "inherit scintillator size".

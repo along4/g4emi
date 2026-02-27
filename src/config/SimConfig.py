@@ -209,6 +209,12 @@ class ScintillatorConfig(StrictModel):
     catalog_id: str | None = Field(default=None, alias="catalogId", min_length=1)
     position_mm: Vec3Mm
     dimension_mm: Size3Mm
+    mask_radius_mm: float = Field(
+        default=0.0,
+        validation_alias=AliasChoices("maskRadius", "maskRadiusMm", "mask_radius_mm"),
+        serialization_alias="maskRadius",
+        ge=0,
+    )
     properties: ScintillatorProperties | None = None
 
     @model_validator(mode="after")
@@ -341,7 +347,7 @@ class OpticalConfig(StrictModel):
 
 
 class RunEnvironmentOutputInfo(StrictModel):
-    """Output staging + format settings nested under `RunEnvironment`.
+    """Output staging settings nested under `RunEnvironment`.
 
     Directory values are interpreted relative to
     `Metadata.RunEnvironment.WorkingDirectory` when given as relative paths.
@@ -367,7 +373,6 @@ class RunEnvironmentOutputInfo(StrictModel):
         serialization_alias="TransportedPhotonsDirectory",
         min_length=1,
     )
-    output_format: str = Field(alias="OutputFormat", default="hdf5", min_length=1)
 
 
 class RunEnvironmentConfig(StrictModel):
@@ -604,7 +609,6 @@ def default_sim_config() -> SimConfig:
                     "OutputInfo": {
                         "SimulatedPhotonsDirectory": "simulatedPhotons",
                         "TransportedPhotonsDirectory": "transportedPhotons",
-                        "OutputFormat": "hdf5",
                     },
                 },
             },

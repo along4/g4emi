@@ -14,7 +14,7 @@
  *
  * Design intent:
  * - Event/stepping/tracking code produces semantic row containers.
- * - This module owns all file-format concerns (CSV schema text and HDF5 layout).
+ * - This module owns the HDF5 schema layout and persistent writes.
  * - HDF5 resources are cached process-wide to avoid re-opening datasets on every
  *   event write.
  *
@@ -301,6 +301,15 @@ bool EnsureReady(const std::string& hdf5Path, std::string* errorMessage) {
   H5Tinsert(s.photonType, "photon_origin_z_mm",
             HOFFSET(detail::Hdf5PhotonNativeRow, photon_origin_z_mm),
             H5T_NATIVE_DOUBLE);
+  H5Tinsert(s.photonType, "photon_scint_exit_x_mm",
+            HOFFSET(detail::Hdf5PhotonNativeRow, photon_scint_exit_x_mm),
+            H5T_NATIVE_DOUBLE);
+  H5Tinsert(s.photonType, "photon_scint_exit_y_mm",
+            HOFFSET(detail::Hdf5PhotonNativeRow, photon_scint_exit_y_mm),
+            H5T_NATIVE_DOUBLE);
+  H5Tinsert(s.photonType, "photon_scint_exit_z_mm",
+            HOFFSET(detail::Hdf5PhotonNativeRow, photon_scint_exit_z_mm),
+            H5T_NATIVE_DOUBLE);
   H5Tinsert(s.photonType, "optical_interface_hit_x_mm",
             HOFFSET(detail::Hdf5PhotonNativeRow, optical_interface_hit_x_mm),
             H5T_NATIVE_DOUBLE);
@@ -417,6 +426,9 @@ std::vector<detail::Hdf5PhotonNativeRow> ToNative(
     native.photon_origin_x_mm = row.photonOriginXmm;
     native.photon_origin_y_mm = row.photonOriginYmm;
     native.photon_origin_z_mm = row.photonOriginZmm;
+    native.photon_scint_exit_x_mm = row.photonScintExitXmm;
+    native.photon_scint_exit_y_mm = row.photonScintExitYmm;
+    native.photon_scint_exit_z_mm = row.photonScintExitZmm;
     native.optical_interface_hit_x_mm = row.opticalInterfaceHitXmm;
     native.optical_interface_hit_y_mm = row.opticalInterfaceHitYmm;
     native.optical_interface_hit_dir_x = row.opticalInterfaceHitDirX;
@@ -457,13 +469,13 @@ std::string NormalizeRunName(const std::string& value) {
 /**
  * Strip a known output extension from a base file name/path.
  *
- * Recognized extensions are `.csv`, `.h5`, and `.hdf5` (case-insensitive).
+ * Recognized extensions are `.h5` and `.hdf5` (case-insensitive).
  */
 std::string StripKnownOutputExtension(const std::string& value) {
   const std::filesystem::path path(value);
   const std::string ext = Utils::ToLower(path.extension().string());
 
-  if (ext != ".csv" && ext != ".h5" && ext != ".hdf5") {
+  if (ext != ".h5" && ext != ".hdf5") {
     return value;
   }
 
@@ -550,56 +562,6 @@ std::string ComposeOutputPath(const std::string& base,
   runDir = AppendSimulatedPhotonsDir(runDir);
 
   return (runDir / baseLeaf).string() + extension;
-}
-
-/**
- * Append photon-hit rows to CSV output.
- *
- * The function writes the CSV header when the target file is new or empty,
- * then appends one line per row using the canonical project column ordering.
- */
-bool AppendCsv(const std::string& csvPath,
-               const std::vector<CsvPhotonHitInfo>& rows,
-               std::string* errorMessage) {
-  if (!EnsureParentDirectory(csvPath)) {
-    if (errorMessage) {
-      *errorMessage = "Output directory does not exist for " + csvPath;
-    }
-    return false;
-  }
-
-  bool writeHeader = false;
-  {
-    std::ifstream in(csvPath);
-    writeHeader = !in.good() || (in.peek() == std::ifstream::traits_type::eof());
-  }
-
-  std::ofstream out(csvPath, std::ios::app);
-  if (!out) {
-    if (errorMessage) {
-      *errorMessage = "Failed to open " + csvPath + " for writing.";
-    }
-    return false;
-  }
-
-  if (writeHeader) {
-    out << "event_id,primary_id,secondary_id,photon_id,prim_spec,prim_x,prim_y,sec_spec,"
-           "sec_origin_x,sec_origin_y,sec_origin_z,sec_origin_eng,scin_orig_x,"
-           "scin_orig_y,scin_orig_z,scin_face_x,scin_face_y\n";
-  }
-
-  for (const auto& row : rows) {
-    out << row.eventId << "," << row.primaryId << "," << row.secondaryId << ","
-        << row.photonId << "," << row.primarySpecies << "," << row.primaryXmm << ","
-        << row.primaryYmm << "," << row.secondarySpecies << ","
-        << row.secondaryOriginXmm << "," << row.secondaryOriginYmm << ","
-        << row.secondaryOriginZmm << "," << row.secondaryOriginEnergyMeV << ","
-        << row.scintOriginXmm << "," << row.scintOriginYmm << ","
-        << row.scintOriginZmm << "," << row.opticalInterfaceHitXmm << ","
-        << row.opticalInterfaceHitYmm << "\n";
-  }
-
-  return true;
 }
 
 /**

@@ -32,6 +32,7 @@ class MacroCommandGenerationTests(unittest.TestCase):
 
         try:
             from src.config.ConfigIO import (
+                append_macro_line,
                 from_macro,
                 from_yaml,
                 macro_commands,
@@ -56,6 +57,7 @@ class MacroCommandGenerationTests(unittest.TestCase):
 
         cls._from_macro = staticmethod(from_macro)
         cls._from_yaml = staticmethod(from_yaml)
+        cls._append_macro_line = staticmethod(append_macro_line)
         cls._macro_commands = staticmethod(macro_commands)
         cls._resolve_run_environment_directory = staticmethod(
             resolve_run_environment_directory
@@ -91,6 +93,7 @@ class MacroCommandGenerationTests(unittest.TestCase):
                     x_mm: 100.0
                     y_mm: 100.0
                     z_mm: 20.0
+                  maskRadius: 18.0
                   properties:
                     name: EJ200
                     photonEnergy: [2.8, 3.0, 3.2]
@@ -154,7 +157,6 @@ class MacroCommandGenerationTests(unittest.TestCase):
                     OutputInfo:
                       SimulatedPhotonsDirectory: simulatedPhotons
                       TransportedPhotonsDirectory: transportedPhotons
-                      OutputFormat: hdf5
                 """
             ).strip()
         ]
@@ -187,7 +189,6 @@ class MacroCommandGenerationTests(unittest.TestCase):
             commands = self._macro_commands(config)
 
             expected = [
-                "/output/format hdf5",
                 f"/output/path {self._resolve_run_environment_directory(config, 'data')}",
                 "/output/filename photon_optical_interface_hits",
                 "/output/runname unit_macro_test",
@@ -206,7 +207,7 @@ class MacroCommandGenerationTests(unittest.TestCase):
                 "/scintillator/properties/yieldFraction2 0",
                 "/scintillator/properties/timeConstant3 0 ns",
                 "/scintillator/properties/yieldFraction3 0",
-                "/scintillator/geom/apertureRadius 18 mm",
+                "/scintillator/geom/maskRadius 18 mm",
                 "/optical_interface/geom/sizeX 60.55 mm",
                 "/optical_interface/geom/sizeY 60.55 mm",
                 "/optical_interface/geom/thickness 0.1 mm",
@@ -250,6 +251,44 @@ class MacroCommandGenerationTests(unittest.TestCase):
             written_lines = macro_path.read_text(encoding="utf-8").splitlines()
             self.assertEqual(written_lines, expected)
 
+    def test_append_macro_line_appends_single_line(self) -> None:
+        """append_macro_line should append one normalized line per call."""
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            macro_path = tmp_path / "append_test.mac"
+            macro_path.write_text("/run/initialize\n", encoding="utf-8")
+
+            self._append_macro_line(macro_path, "/vis/open OGL")
+            self._append_macro_line(macro_path, "/vis/drawVolume\n")
+
+            written_lines = macro_path.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(
+                written_lines,
+                ["/run/initialize", "/vis/open OGL", "/vis/drawVolume"],
+            )
+
+    def test_append_macro_line_rejects_embedded_newlines(self) -> None:
+        """append_macro_line should reject payloads containing embedded newlines."""
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            macro_path = tmp_path / "append_test.mac"
+            macro_path.write_text("/run/initialize\n", encoding="utf-8")
+
+            with self.assertRaises(ValueError):
+                self._append_macro_line(
+                    macro_path, "/vis/open OGL\n/vis/drawVolume"
+                )
+
+            with self.assertRaises(ValueError):
+                self._append_macro_line(
+                    macro_path, "/vis/open OGL\r/vis/drawVolume"
+                )
+
+            written_lines = macro_path.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(written_lines, ["/run/initialize"])
+
     def test_from_macro_round_trip_with_template(self) -> None:
         """from_macro should reconstruct geometry/output commands with a template."""
 
@@ -273,18 +312,17 @@ class MacroCommandGenerationTests(unittest.TestCase):
             reconstructed = self._macro_commands(imported)
             self.assertEqual(reconstructed, expected)
 
-    def test_from_macro_without_aperture_disables_aperture_command(self) -> None:
-        """Missing aperture command should map to non-circular detector shape."""
+    def test_from_macro_without_mask_command_disables_mask_command(self) -> None:
+        """Missing mask command should keep maskRadius at disabled default."""
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
-            macro_path = tmp_path / "no_aperture.mac"
+            macro_path = tmp_path / "no_mask.mac"
             macro_path.write_text(
                 "\n".join(
                     [
-                        "/output/format hdf5",
                         "/output/path data",
-                        "/output/runname no_aperture_case",
+                        "/output/runname no_mask_case",
                         "/scintillator/geom/material EJ200",
                         "/scintillator/geom/scintX 100 mm",
                         "/scintillator/geom/scintY 100 mm",
@@ -309,15 +347,16 @@ class MacroCommandGenerationTests(unittest.TestCase):
             commands = self._macro_commands(imported)
 
             self.assertNotIn(
-                "/scintillator/geom/apertureRadius 18 mm",
+                "/scintillator/geom/maskRadius 18 mm",
                 commands,
             )
             self.assertFalse(
                 any(
-                    line.startswith("/scintillator/geom/apertureRadius")
+                    line.startswith("/scintillator/geom/maskRadius")
                     for line in commands
                 )
             )
+            self.assertEqual(imported.scintillator.mask_radius_mm, 0.0)
             self.assertFalse(
                 any(line.startswith("/run/beamOn") for line in commands)
             )
@@ -382,7 +421,6 @@ class MacroCommandGenerationTests(unittest.TestCase):
                         "/tracking/verbose 4",
                         "/run/printProgress 50",
                         "/tracking/storeTrajectory 1",
-                        "/output/format hdf5",
                         "/output/path data",
                         "/output/runname runtime_import",
                         "/scintillator/geom/material EJ200",
@@ -416,6 +454,27 @@ class MacroCommandGenerationTests(unittest.TestCase):
             self.assertEqual(runtime.tracking_verbose, 4)
             self.assertEqual(runtime.print_progress, 50)
             self.assertTrue(runtime.store_trajectory)
+
+    def test_from_macro_rejects_legacy_output_format_command(self) -> None:
+        """Legacy output-format macro command should fail with clean-break policy."""
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            macro_path = tmp_path / "legacy_output_format.mac"
+            macro_path.write_text(
+                "\n".join(
+                    [
+                        "/output/format hdf5",
+                        "/output/path data",
+                        "/output/runname legacy_output_format",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(ValueError):
+                self._from_macro(macro_path)
 
     def test_from_yaml_hydrates_scintillator_properties_from_catalog_id(self) -> None:
         """`scintillator.catalogId` should backfill missing properties from catalog."""
@@ -486,7 +545,6 @@ class MacroCommandGenerationTests(unittest.TestCase):
                         OutputInfo:
                           SimulatedPhotonsDirectory: simulatedPhotons
                           TransportedPhotonsDirectory: transportedPhotons
-                          OutputFormat: hdf5
                     """
                 ).strip()
                 + "\n",
@@ -605,7 +663,6 @@ class MacroCommandGenerationTests(unittest.TestCase):
                         OutputInfo:
                           SimulatedPhotonsDirectory: simulatedPhotons
                           TransportedPhotonsDirectory: transportedPhotons
-                          OutputFormat: hdf5
                     """
                 ).strip()
                 + "\n",
@@ -629,7 +686,6 @@ class MacroCommandGenerationTests(unittest.TestCase):
             macro_path.write_text(
                 "\n".join(
                     [
-                        "/output/format hdf5",
                         "/output/path data",
                         "/output/runname prop_import",
                         "/scintillator/geom/material EJ200",
@@ -782,7 +838,6 @@ class MacroCommandGenerationTests(unittest.TestCase):
                         OutputInfo:
                           SimulatedPhotonsDirectory: simulatedPhotons
                           TransportedPhotonsDirectory: transportedPhotons
-                          OutputFormat: hdf5
                     """
                 ).strip()
                 + "\n",
@@ -863,7 +918,6 @@ class MacroCommandGenerationTests(unittest.TestCase):
                         OutputInfo:
                           SimulatedPhotonsDirectory: simulatedPhotons
                           TransportedPhotonsDirectory: transportedPhotons
-                          OutputFormat: hdf5
                     """
                 ).strip()
                 + "\n",

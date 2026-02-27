@@ -238,7 +238,6 @@ def _default_import_template(macro_path: Path) -> SimConfig:
     run_environment["log_directory"] = "logs"
     output_info["simulated_photons_dir"] = SIMULATED_PHOTONS_STAGE_DIR
     output_info["transported_photons_dir"] = TRANSPORT_PHOTONS_STAGE_DIR
-    output_info["output_format"] = "hdf5"
 
     # Macro files may omit `/run/beamOn` and runtime-control preamble commands.
     # Keep simulation block unset by default so import does not invent them.
@@ -319,7 +318,6 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
 
     metadata = payload["metadata"]
     run_environment = metadata["run_environment"]
-    output_info = run_environment["output_info"]
     scintillator = payload["scintillator"]
     scint_properties = scintillator.get("properties")
     if not isinstance(scint_properties, dict):
@@ -348,7 +346,7 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
     entrance_diameter_mm: float | None = None
     size_x_mm: float | None = None
     size_y_mm: float | None = None
-    aperture_radius_mm: float | None = None
+    mask_radius_mm: float | None = None
     parsed_thickness_mm: float | None = None
     parsed_output_path: str | None = None
     parsed_output_runname: str | None = None
@@ -365,9 +363,11 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
 
         command = tokens[0]
 
-        if command == "/output/format" and len(tokens) >= 2:
-            output_info["output_format"] = tokens[1].strip().lower()
-            continue
+        if command == "/output/format":
+            raise ValueError(
+                "Legacy command '/output/format' is no longer supported. "
+                "HDF5 output is always enabled."
+            )
         if command == "/output/path" and len(tokens) >= 2:
             parsed_output_path = tokens[1]
             continue
@@ -525,8 +525,8 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
         if command == "/scintillator/geom/posZ":
             scintillator["position_mm"]["z_mm"] = _parse_length_tokens(tokens, command)
             continue
-        if command == "/scintillator/geom/apertureRadius":
-            aperture_radius_mm = _parse_length_tokens(tokens, command)
+        if command == "/scintillator/geom/maskRadius":
+            mask_radius_mm = _parse_length_tokens(tokens, command)
             continue
         if command == "/scintillator/properties/density":
             scint_properties["density"] = _parse_density_to_g_cm3(tokens, command)
@@ -664,28 +664,8 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
     if entrance_diameter_mm is not None:
         geometry["entrance_diameter"] = entrance_diameter_mm
 
-    # Aperture command is represented indirectly in SimConfig through
-    # detector shape + diameter rule. Choose a rule that reproduces parsed
-    # aperture radius exactly.
-    if aperture_radius_mm is not None:
-        desired_diameter_mm = 2.0 * aperture_radius_mm
-        geometry.setdefault("sensor_max_width", desired_diameter_mm)
-        detector["shape"] = "circle"
-        if entrance_diameter_mm is None:
-            geometry["entrance_diameter"] = desired_diameter_mm
-            geometry["sensor_max_width"] = desired_diameter_mm
-            detector["diameter_rule"] = "min(entranceDiameter,sensorMaxWidth)"
-        elif entrance_diameter_mm + 1.0e-9 >= desired_diameter_mm:
-            geometry["sensor_max_width"] = desired_diameter_mm
-            detector["diameter_rule"] = "min(entranceDiameter,sensorMaxWidth)"
-        else:
-            geometry["sensor_max_width"] = desired_diameter_mm
-            detector["diameter_rule"] = "sensorMaxWidth"
-    else:
-        detector["shape"] = "none"
-        detector["diameter_rule"] = "entranceDiameter"
-        if entrance_diameter_mm is not None:
-            geometry["sensor_max_width"] = entrance_diameter_mm
+    if mask_radius_mm is not None:
+        scintillator["mask_radius_mm"] = mask_radius_mm
 
     # Ensure required GPS fields remain valid if a macro omits specific commands.
     position.setdefault("type", "Plane")
@@ -1062,26 +1042,11 @@ def prepare_run_environment(config: SimConfig) -> RunEnvironmentPaths:
     return validate_run_environment(config, create_directories=True)
 
 
-def _normalize_output_format_token(value: str) -> str:
-    """Normalize output format token to Geant4 command-compatible text.
-
-    Currently this only maps ``h5`` to ``hdf5`` and lowercases all values.
-    Validation of allowed final values is delegated to runtime Geant4 command
-    handling and/or higher-level config conventions.
-    """
-
-    token = value.strip().lower()
-    if token == "h5":
-        return "hdf5"
-    return token
-
-
 def output_commands(config: SimConfig) -> list[str]:
     """Build Geant4 ``/output/*`` command lines from metadata settings.
 
     Command mapping:
-    - ``RunEnvironment.OutputInfo.OutputFormat`` -> ``/output/format``
-    - ``RunEnvironment.WorkingDirectory``            -> ``/output/path``
+    - ``RunEnvironment.WorkingDirectory``          -> ``/output/path``
     - fixed base filename                          -> ``/output/filename``
     - ``RunEnvironment.SimulationRunID``          -> ``/output/runname``
 
@@ -1090,38 +1055,10 @@ def output_commands(config: SimConfig) -> list[str]:
     """
 
     return [
-        f"/output/format {_normalize_output_format_token(config.metadata.run_environment.output_info.output_format)}",
         f"/output/path {resolve_run_environment_directory(config, 'data')}",
         f"/output/filename {DEFAULT_OUTPUT_FILENAME_BASE}",
         f"/output/runname {config.metadata.run_environment.simulation_run_id}",
     ]
-
-
-def _resolve_sensitive_detector_diameter_mm(config: SimConfig) -> float:
-    """Resolve sensitive-detector diameter from configured rule expression.
-
-    Supported rules intentionally mirror a constrained expression set rather
-    than a general expression evaluator:
-    - ``min(entranceDiameter,sensorMaxWidth)``
-    - ``entranceDiameter``
-    - ``sensorMaxWidth``
-    """
-
-    geometry = config.optical.geometry
-    rule = config.optical.sensitive_detector_config.diameter_rule.replace(" ", "")
-
-    if rule == "min(entranceDiameter,sensorMaxWidth)":
-        return min(geometry.entrance_diameter, geometry.sensor_max_width)
-    if rule == "entranceDiameter":
-        return geometry.entrance_diameter
-    if rule == "sensorMaxWidth":
-        return geometry.sensor_max_width
-
-    raise ValueError(
-        "Unsupported `optical.sensitiveDetectorConfig.diameterRule`: "
-        f"{config.optical.sensitive_detector_config.diameter_rule!r}. "
-        "Supported rules: min(entranceDiameter,sensorMaxWidth), entranceDiameter, sensorMaxWidth."
-    )
 
 
 def _format_float_list(values: list[float]) -> str:
@@ -1137,8 +1074,7 @@ def geometry_commands(config: SimConfig) -> list[str]:
     -------------------------
     - Scintillator dimensions/position map directly from ``scintillator`` block.
     - Scintillator material uses ``scintillator.properties.name``.
-    - Aperture command is emitted only for circular detector shape.
-      Aperture radius is half of the resolved detector diameter rule.
+    - Scintillator mask command is emitted when ``scintillator.maskRadius > 0``.
     - Optical-interface XY uses ``optical.geometry.entranceDiameter``.
     - Optical-interface Z thickness uses project default
       ``DEFAULT_OPTICAL_INTERFACE_THICKNESS_MM``.
@@ -1223,11 +1159,8 @@ def geometry_commands(config: SimConfig) -> list[str]:
             f"{index} {component.yield_fraction:g}"
         )
 
-    # Circular detector shape implies an aperture mask command in this
-    # simulation pipeline.
-    if detector.shape.strip().lower() == "circle":
-        aperture_radius_mm = 0.5 * _resolve_sensitive_detector_diameter_mm(config)
-        commands.append(f"/scintillator/geom/apertureRadius {aperture_radius_mm:g} mm")
+    if scint.mask_radius_mm > 0.0:
+        commands.append(f"/scintillator/geom/maskRadius {scint.mask_radius_mm:g} mm")
 
     commands.extend(
         [
@@ -1364,3 +1297,34 @@ def write_macro(
         )
     )
     path.write_text(payload + "\n", encoding="utf-8")
+
+
+def append_macro_line(macro_file: str | Path, string_to_append: str) -> None:
+    """Append one command/comment line to an existing macro file.
+
+    Parameters
+    ----------
+    macro_file:
+        Macro file path to append into. Parent directory must already exist.
+    string_to_append:
+        Line content to append. A trailing newline is normalized, but embedded
+        newline characters are rejected.
+    """
+
+    path = Path(macro_file)
+    if path.exists() and path.is_dir():
+        raise IsADirectoryError(f"Macro target is a directory, not a file: {path}")
+    if not path.parent.exists():
+        raise FileNotFoundError(
+            f"Macro parent directory does not exist: {path.parent}"
+        )
+
+    normalized = string_to_append.rstrip("\r\n")
+    if "\n" in normalized or "\r" in normalized:
+        raise ValueError(
+            "append_macro_line expects a single line; newline characters are "
+            "not allowed in `string_to_append`."
+        )
+
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(normalized + "\n")

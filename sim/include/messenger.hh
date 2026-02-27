@@ -46,7 +46,7 @@ class Messenger : public G4UImessenger {
   G4UIcmdWithADoubleAndUnit* fGeomScintPosXCmd = nullptr;
   G4UIcmdWithADoubleAndUnit* fGeomScintPosYCmd = nullptr;
   G4UIcmdWithADoubleAndUnit* fGeomScintPosZCmd = nullptr;
-  G4UIcmdWithADoubleAndUnit* fGeomApertureRadiusCmd = nullptr;
+  G4UIcmdWithADoubleAndUnit* fGeomMaskRadiusCmd = nullptr;
   G4UIcmdWithADoubleAndUnit* fScintDensityCmd = nullptr;
   G4UIcmdWithAnInteger* fScintCarbonAtomsCmd = nullptr;
   G4UIcmdWithAnInteger* fScintHydrogenAtomsCmd = nullptr;
@@ -72,7 +72,6 @@ class Messenger : public G4UImessenger {
   G4UIcmdWithADoubleAndUnit* fOpticalInterfacePosZCmd = nullptr;
 
   /// Output configuration commands.
-  G4UIcmdWithAString* fOutputFormatCmd = nullptr;
   G4UIcmdWithAString* fOutputPathCmd = nullptr;
   G4UIcmdWithAString* fOutputFilenameCmd = nullptr;
   G4UIcmdWithAString* fOutputRunNameCmd = nullptr;

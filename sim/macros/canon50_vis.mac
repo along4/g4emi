@@ -12,7 +12,7 @@
 /scintillator/geom/posX 0 cm
 /scintillator/geom/posY 0 cm
 /scintillator/geom/posZ 0 cm
-/scintillator/geom/apertureRadius 30.275 mm
+/scintillator/geom/maskRadius 30.275 mm
 
 /optical_interface/geom/sizeX 60.550 mm
 /optical_interface/geom/sizeY 60.550 mm

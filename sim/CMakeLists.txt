@@ -6,6 +6,7 @@ include(${Geant4_USE_FILE})
 if(DEFINED ENV{CONDA_PREFIX})
   list(PREPEND CMAKE_PREFIX_PATH "$ENV{CONDA_PREFIX}")
   set(HDF5_ROOT "$ENV{CONDA_PREFIX}")
+  set(HDF5_NO_FIND_PACKAGE_CONFIG_FILE TRUE)
 endif()
 
 find_package(HDF5 COMPONENTS C HL REQUIRED)
@@ -43,8 +44,10 @@ set_target_properties(g4emi PROPERTIES
 )
 
 if(DEFINED ENV{CONDA_PREFIX})
+  # Conda/Pixi toolchains already inject an rpath via linker flags.
+  # Skip CMake's build-tree rpath to avoid duplicate -rpath warnings.
   set_target_properties(g4emi PROPERTIES
-    BUILD_RPATH "$ENV{CONDA_PREFIX}/lib"
+    SKIP_BUILD_RPATH TRUE
     INSTALL_RPATH "$ENV{CONDA_PREFIX}/lib"
     INSTALL_RPATH_USE_LINK_PATH FALSE
   )

@@ -13,6 +13,7 @@
 #include "G4ios.hh"
 
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -25,7 +26,7 @@
  * - Collect cross-step/cross-track context (track origins and photon ancestry).
  * - Accumulate per-photon optical-interface-hit records.
  * - Transform collected data into IO row containers at end-of-event.
- * - Delegate all file writing to SimIO (CSV/HDF5) under one write lock.
+ * - Delegate HDF5 writing to SimIO under one write lock.
  */
 namespace {
 /**
@@ -33,7 +34,7 @@ namespace {
  *
  * Why global:
  * - EventAction instances are thread-local in Geant4 MT mode.
- * - Output files (CSV/HDF5) are shared resources.
+ * - Output files are shared resources.
  * - We need one cross-thread lock to avoid interleaved writes.
  */
 G4Mutex gOutputMutex = G4MUTEX_INITIALIZER;
@@ -56,21 +57,6 @@ std::string ToSpeciesLabel(const G4String& particleName) {
   return particleName;
 }
 
-/**
- * Return true when output mode requires CSV emission.
- */
-bool WritesCsv(Config::OutputFormat mode) {
-  return mode == Config::OutputFormat::kCsv ||
-         mode == Config::OutputFormat::kBoth;
-}
-
-/**
- * Return true when output mode requires HDF5 emission.
- */
-bool WritesHdf5(Config::OutputFormat mode) {
-  return mode == Config::OutputFormat::kHdf5 ||
-         mode == Config::OutputFormat::kBoth;
-}
 }  // namespace
 
 G4ThreadLocal EventAction* EventAction::fgInstance = nullptr;
@@ -111,6 +97,7 @@ void EventAction::BeginOfEventAction(const G4Event* event) {
   fTrackInfo.clear();
   fPhotonCreationInfo.clear();
   fPendingPhotonOrigin.clear();
+  fPhotonScintillatorExit.clear();
   fPhotonHits.clear();
 
   if (!event) {
@@ -139,10 +126,8 @@ void EventAction::BeginOfEventAction(const G4Event* event) {
  *
  * Workflow:
  * 1. Emit lightweight progress every 1000 simulated events.
- * 2. Build row containers for enabled output mode(s).
- *    - CSV rows keep the legacy flat optical-interface-hit schema.
- *    - HDF5 photon rows include optical-interface crossing ray metadata
- *      (direction, polarization, energy, wavelength).
+ * 2. Build HDF5 row containers including optical-interface crossing ray
+ *    metadata (direction, polarization, energy, wavelength).
  * 3. Serialize rows through SimIO under a shared file-write mutex.
  */
 void EventAction::EndOfEventAction(const G4Event* event) {
@@ -152,153 +137,116 @@ void EventAction::EndOfEventAction(const G4Event* event) {
     G4cout << "Simulated " << simulatedCount << " events" << G4endl;
   }
 
-  auto outputMode = Config::OutputFormat::kCsv;
-  if (fConfig) {
-    outputMode = fConfig->GetOutputFormat();
-  }
-
   if (!event) {
     return;
   }
 
   const auto eventID64 = static_cast<std::int64_t>(event->GetEventID());
-  const std::string csvPath =
-      fConfig ? fConfig->GetCsvFilePath() : "photon_optical_interface_hits.csv";
   const std::string hdf5Path =
       fConfig ? fConfig->GetHdf5FilePath() : "photon_optical_interface_hits.h5";
-
-  // Build flat CSV rows (one row per detected photon hit).
-  std::vector<SimIO::CsvPhotonHitInfo> csvRows;
-  if (WritesCsv(outputMode)) {
-    csvRows.reserve(fPhotonHits.size());
-    for (const auto& hit : fPhotonHits) {
-      SimIO::CsvPhotonHitInfo row;
-      row.eventId = eventID64;
-      row.primaryId = static_cast<std::int32_t>(hit.primaryID);
-      row.secondaryId = static_cast<std::int32_t>(hit.secondaryID);
-      row.photonId = static_cast<std::int32_t>(hit.photonID);
-      row.primarySpecies = hit.primarySpecies;
-      row.primaryXmm = hit.primaryX / mm;
-      row.primaryYmm = hit.primaryY / mm;
-      row.secondarySpecies = hit.secondarySpecies;
-      row.secondaryOriginXmm = hit.secondaryOriginPosition.x() / mm;
-      row.secondaryOriginYmm = hit.secondaryOriginPosition.y() / mm;
-      row.secondaryOriginZmm = hit.secondaryOriginPosition.z() / mm;
-      row.secondaryOriginEnergyMeV = hit.secondaryOriginEnergy / MeV;
-      row.scintOriginXmm = hit.scintOriginPosition.x() / mm;
-      row.scintOriginYmm = hit.scintOriginPosition.y() / mm;
-      row.scintOriginZmm = hit.scintOriginPosition.z() / mm;
-      row.opticalInterfaceHitXmm = hit.opticalInterfaceHitPosition.x() / mm;
-      row.opticalInterfaceHitYmm = hit.opticalInterfaceHitPosition.y() / mm;
-      csvRows.push_back(row);
-    }
-  }
 
   std::vector<SimIO::PrimaryInfo> primaryRows;
   std::vector<SimIO::SecondaryInfo> secondaryRows;
   std::vector<SimIO::PhotonInfo> photonRows;
-  if (WritesHdf5(outputMode)) {
-    // Primaries: deduplicate by primary track ID.
-    std::unordered_set<G4int> seenPrimary;
-    for (const auto& hit : fPhotonHits) {
-      if (hit.primaryID < 0 || !seenPrimary.insert(hit.primaryID).second) {
-        continue;
-      }
-
-      SimIO::PrimaryInfo row;
-      row.gunCallId = eventID64;
-      row.primaryTrackId = static_cast<std::int32_t>(hit.primaryID);
-      row.primarySpecies = hit.primarySpecies;
-      row.primaryXmm = hit.primaryX / mm;
-      row.primaryYmm = hit.primaryY / mm;
-      row.primaryEnergyMeV = fPrimaryEnergy / MeV;
-      if (const auto* info = FindTrackInfo(hit.primaryID)) {
-        row.primaryEnergyMeV = info->originEnergy / MeV;
-      }
-      primaryRows.push_back(row);
+  // Primaries: deduplicate by primary track ID.
+  std::unordered_set<G4int> seenPrimary;
+  for (const auto& hit : fPhotonHits) {
+    if (hit.primaryID < 0 || !seenPrimary.insert(hit.primaryID).second) {
+      continue;
     }
 
-    // Ensure each event has at least one primary row even when no photon carries
-    // a resolved primary ID (e.g., empty-hit events or unresolved ancestry).
-    if (primaryRows.empty()) {
-      SimIO::PrimaryInfo row;
-      row.gunCallId = eventID64;
-      row.primaryTrackId = 1;
-      row.primarySpecies = fPrimarySpecies;
-      row.primaryXmm = fPrimaryPosition.x() / mm;
-      row.primaryYmm = fPrimaryPosition.y() / mm;
-      row.primaryEnergyMeV = fPrimaryEnergy / MeV;
-      primaryRows.push_back(row);
+    SimIO::PrimaryInfo row;
+    row.gunCallId = eventID64;
+    row.primaryTrackId = static_cast<std::int32_t>(hit.primaryID);
+    row.primarySpecies = hit.primarySpecies;
+    row.primaryXmm = hit.primaryX / mm;
+    row.primaryYmm = hit.primaryY / mm;
+    row.primaryEnergyMeV = fPrimaryEnergy / MeV;
+    if (const auto* info = FindTrackInfo(hit.primaryID)) {
+      row.primaryEnergyMeV = info->originEnergy / MeV;
+    }
+    primaryRows.push_back(row);
+  }
+
+  // Ensure each event has at least one primary row even when no photon carries
+  // a resolved primary ID (e.g., empty-hit events or unresolved ancestry).
+  if (primaryRows.empty()) {
+    SimIO::PrimaryInfo row;
+    row.gunCallId = eventID64;
+    row.primaryTrackId = 1;
+    row.primarySpecies = fPrimarySpecies;
+    row.primaryXmm = fPrimaryPosition.x() / mm;
+    row.primaryYmm = fPrimaryPosition.y() / mm;
+    row.primaryEnergyMeV = fPrimaryEnergy / MeV;
+    primaryRows.push_back(row);
+  }
+
+  // Secondaries: deduplicate by secondary track ID.
+  std::unordered_set<G4int> seenSecondary;
+  for (const auto& hit : fPhotonHits) {
+    if (hit.secondaryID < 0 || !seenSecondary.insert(hit.secondaryID).second) {
+      continue;
     }
 
-    // Secondaries: deduplicate by secondary track ID.
-    std::unordered_set<G4int> seenSecondary;
-    for (const auto& hit : fPhotonHits) {
-      if (hit.secondaryID < 0 || !seenSecondary.insert(hit.secondaryID).second) {
-        continue;
-      }
+    SimIO::SecondaryInfo row;
+    row.gunCallId = eventID64;
+    row.primaryTrackId = static_cast<std::int32_t>(hit.primaryID);
+    row.secondaryTrackId = static_cast<std::int32_t>(hit.secondaryID);
+    row.secondarySpecies = hit.secondarySpecies;
+    row.secondaryOriginXmm = hit.secondaryOriginPosition.x() / mm;
+    row.secondaryOriginYmm = hit.secondaryOriginPosition.y() / mm;
+    row.secondaryOriginZmm = hit.secondaryOriginPosition.z() / mm;
+    row.secondaryOriginEnergyMeV = hit.secondaryOriginEnergy / MeV;
+    secondaryRows.push_back(row);
+  }
 
-      SimIO::SecondaryInfo row;
-      row.gunCallId = eventID64;
-      row.primaryTrackId = static_cast<std::int32_t>(hit.primaryID);
-      row.secondaryTrackId = static_cast<std::int32_t>(hit.secondaryID);
-      row.secondarySpecies = hit.secondarySpecies;
-      row.secondaryOriginXmm = hit.secondaryOriginPosition.x() / mm;
-      row.secondaryOriginYmm = hit.secondaryOriginPosition.y() / mm;
-      row.secondaryOriginZmm = hit.secondaryOriginPosition.z() / mm;
-      row.secondaryOriginEnergyMeV = hit.secondaryOriginEnergy / MeV;
-      secondaryRows.push_back(row);
-    }
-
-    // Photons: one output row per detected optical photon hit.
-    // Capture both scintillation-origin location and optical-interface crossing ray state.
-    // Unit conversions:
-    // - positions -> mm
-    // - energy -> eV
-    // - wavelength -> nm
-    photonRows.reserve(fPhotonHits.size());
-    for (const auto& hit : fPhotonHits) {
-      SimIO::PhotonInfo row;
-      row.gunCallId = eventID64;
-      row.primaryTrackId = static_cast<std::int32_t>(hit.primaryID);
-      row.secondaryTrackId = static_cast<std::int32_t>(hit.secondaryID);
-      row.photonTrackId = static_cast<std::int32_t>(hit.photonID);
-      row.photonOriginXmm = hit.scintOriginPosition.x() / mm;
-      row.photonOriginYmm = hit.scintOriginPosition.y() / mm;
-      row.photonOriginZmm = hit.scintOriginPosition.z() / mm;
-      row.opticalInterfaceHitXmm = hit.opticalInterfaceHitPosition.x() / mm;
-      row.opticalInterfaceHitYmm = hit.opticalInterfaceHitPosition.y() / mm;
-      row.opticalInterfaceHitDirX = hit.opticalInterfaceHitDirection.x();
-      row.opticalInterfaceHitDirY = hit.opticalInterfaceHitDirection.y();
-      row.opticalInterfaceHitDirZ = hit.opticalInterfaceHitDirection.z();
-      row.opticalInterfaceHitPolX = hit.opticalInterfaceHitPolarization.x();
-      row.opticalInterfaceHitPolY = hit.opticalInterfaceHitPolarization.y();
-      row.opticalInterfaceHitPolZ = hit.opticalInterfaceHitPolarization.z();
-      row.opticalInterfaceHitEnergyEV = hit.opticalInterfaceHitEnergy / eV;
-      row.opticalInterfaceHitWavelengthNm = hit.opticalInterfaceHitWavelength / nm;
-      photonRows.push_back(row);
-    }
+  // Photons: one output row per detected optical photon hit.
+  // Capture both scintillation-origin location and optical-interface crossing ray state.
+  // Unit conversions:
+  // - positions -> mm
+  // - energy -> eV
+  // - wavelength -> nm
+  photonRows.reserve(fPhotonHits.size());
+  for (const auto& hit : fPhotonHits) {
+    SimIO::PhotonInfo row;
+    row.gunCallId = eventID64;
+    row.primaryTrackId = static_cast<std::int32_t>(hit.primaryID);
+    row.secondaryTrackId = static_cast<std::int32_t>(hit.secondaryID);
+    row.photonTrackId = static_cast<std::int32_t>(hit.photonID);
+    row.photonOriginXmm = hit.scintOriginPosition.x() / mm;
+    row.photonOriginYmm = hit.scintOriginPosition.y() / mm;
+    row.photonOriginZmm = hit.scintOriginPosition.z() / mm;
+    row.opticalInterfaceHitXmm = hit.opticalInterfaceHitPosition.x() / mm;
+    row.opticalInterfaceHitYmm = hit.opticalInterfaceHitPosition.y() / mm;
+    row.opticalInterfaceHitDirX = hit.opticalInterfaceHitDirection.x();
+    row.opticalInterfaceHitDirY = hit.opticalInterfaceHitDirection.y();
+    row.opticalInterfaceHitDirZ = hit.opticalInterfaceHitDirection.z();
+    row.photonScintExitXmm =
+        hit.hasPhotonScintExitPosition ? hit.photonScintExitPosition.x() / mm
+                                       : std::numeric_limits<double>::quiet_NaN();
+    row.photonScintExitYmm =
+        hit.hasPhotonScintExitPosition ? hit.photonScintExitPosition.y() / mm
+                                       : std::numeric_limits<double>::quiet_NaN();
+    row.photonScintExitZmm =
+        hit.hasPhotonScintExitPosition ? hit.photonScintExitPosition.z() / mm
+                                       : std::numeric_limits<double>::quiet_NaN();
+    row.opticalInterfaceHitPolX = hit.opticalInterfaceHitPolarization.x();
+    row.opticalInterfaceHitPolY = hit.opticalInterfaceHitPolarization.y();
+    row.opticalInterfaceHitPolZ = hit.opticalInterfaceHitPolarization.z();
+    row.opticalInterfaceHitEnergyEV = hit.opticalInterfaceHitEnergy / eV;
+    row.opticalInterfaceHitWavelengthNm = hit.opticalInterfaceHitWavelength / nm;
+    photonRows.push_back(row);
   }
 
   // Serialize with one process-global lock because files are shared across
   // worker threads.
   G4AutoLock lock(&gOutputMutex);
-  if (WritesCsv(outputMode)) {
-    std::string error;
-    if (!SimIO::AppendCsv(csvPath, csvRows, &error)) {
-      G4cout << (error.empty() ? "Failed writing CSV output." : error) << G4endl;
-    }
-  }
-
-  if (WritesHdf5(outputMode)) {
-    std::string error;
-    if (!SimIO::AppendHdf5(hdf5Path, primaryRows, secondaryRows, photonRows,
-                           &error)) {
-      if (error.empty()) {
-        G4cout << "Failed writing HDF5 output to " << hdf5Path << G4endl;
-      } else {
-        G4cout << error << G4endl;
-      }
+  std::string error;
+  if (!SimIO::AppendHdf5(hdf5Path, primaryRows, secondaryRows, photonRows, &error)) {
+    if (error.empty()) {
+      G4cout << "Failed writing HDF5 output to " << hdf5Path << G4endl;
+    } else {
+      G4cout << error << G4endl;
     }
   }
 }
@@ -368,6 +316,30 @@ bool EventAction::ConsumePendingPhotonOrigin(const G4Track* photonTrack,
     *origin = it->second;
   }
   fPendingPhotonOrigin.erase(it);
+  return true;
+}
+
+/**
+ * Store/update the most recent scintillator-exit boundary crossing for a photon.
+ */
+void EventAction::RecordPhotonScintillatorExit(
+    G4int photonTrackID, const G4ThreeVector& position) {
+  fPhotonScintillatorExit[photonTrackID] = position;
+}
+
+/**
+ * Consume and erase a scintillator-exit boundary crossing for a photon.
+ */
+bool EventAction::ConsumePhotonScintillatorExit(G4int photonTrackID,
+                                                G4ThreeVector* position) {
+  const auto it = fPhotonScintillatorExit.find(photonTrackID);
+  if (it == fPhotonScintillatorExit.end()) {
+    return false;
+  }
+  if (position) {
+    *position = it->second;
+  }
+  fPhotonScintillatorExit.erase(it);
   return true;
 }
 

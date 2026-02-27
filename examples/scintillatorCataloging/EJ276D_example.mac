@@ -3,7 +3,6 @@
 /event/verbose 0
 /tracking/verbose 0
 /run/printProgress 500
-/output/format hdf5
 /output/path data
 /output/filename photon_optical_interface_hits
 /output/runname EJ276D_time_components_example
@@ -29,7 +28,7 @@
 /scintillator/properties/yieldFraction2 0
 /scintillator/properties/timeConstant3 460 ns
 /scintillator/properties/yieldFraction3 0
-/scintillator/geom/apertureRadius 18 mm
+/scintillator/geom/maskRadius 18 mm
 /optical_interface/geom/sizeX 60.55 mm
 /optical_interface/geom/sizeY 60.55 mm
 /optical_interface/geom/thickness 0.1 mm

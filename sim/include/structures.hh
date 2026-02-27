@@ -70,6 +70,13 @@ struct PhotonInfo {
   double photonOriginYmm = 0.0;
   double photonOriginZmm = 0.0;
 
+  /// Position (mm) where the photon last exited the scintillator volume.
+  /// If no scintillator-exit crossing was recorded for this photon, the writer
+  /// sets all three `photonScintExit*` components to NaN to indicate "no exit".
+  double photonScintExitXmm = 0.0;
+  double photonScintExitYmm = 0.0;
+  double photonScintExitZmm = 0.0;
+
   /// Optical-interface entry-point coordinates in mm at the pre-step boundary crossing.
   double opticalInterfaceHitXmm = 0.0;
   double opticalInterfaceHitYmm = 0.0;
@@ -88,36 +95,6 @@ struct PhotonInfo {
   double opticalInterfaceHitEnergyEV = -1.0;
   /// Photon wavelength at optical-interface crossing in nm.
   double opticalInterfaceHitWavelengthNm = -1.0;
-};
-
-/**
- * Flat CSV row container for one detected optical photon hit.
- *
- * This mirrors the CSV schema used by the project so the EventAction module
- * can provide semantic data and the SimIO module can handle formatting/writing.
- */
-struct CsvPhotonHitInfo {
-  std::int64_t eventId = -1;
-  std::int32_t primaryId = -1;
-  std::int32_t secondaryId = -1;
-  std::int32_t photonId = -1;
-
-  std::string primarySpecies = "unknown";
-  double primaryXmm = 0.0;
-  double primaryYmm = 0.0;
-
-  std::string secondarySpecies = "unknown";
-  double secondaryOriginXmm = 0.0;
-  double secondaryOriginYmm = 0.0;
-  double secondaryOriginZmm = 0.0;
-  double secondaryOriginEnergyMeV = 0.0;
-
-  double scintOriginXmm = 0.0;
-  double scintOriginYmm = 0.0;
-  double scintOriginZmm = 0.0;
-
-  double opticalInterfaceHitXmm = 0.0;
-  double opticalInterfaceHitYmm = 0.0;
 };
 
 namespace detail {
@@ -173,6 +150,9 @@ struct Hdf5PhotonNativeRow {
   double photon_origin_x_mm;
   double photon_origin_y_mm;
   double photon_origin_z_mm;
+  double photon_scint_exit_x_mm;
+  double photon_scint_exit_y_mm;
+  double photon_scint_exit_z_mm;
   double optical_interface_hit_x_mm;
   double optical_interface_hit_y_mm;
   double optical_interface_hit_dir_x;

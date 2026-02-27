@@ -13,6 +13,7 @@ ninja = ">=1.12,<2"
 cxx-compiler = ">=1.9,<2"
 geant4 = { version = "==11.3.2", build = "*_0" }
 hdf5 = ">=1.14,<2"
+h5py = ">=3.10,<4"
 jupyterlab = ">=4,<5"
 matplotlib = ">=3.8,<4"
 pandas = ">=2.2,<3"
