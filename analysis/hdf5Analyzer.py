@@ -313,9 +313,56 @@ def optical_interface_photons_to_image(
     )
 
 
+def intensifier_photons_to_image(
+    hdf5_path: str | Path,
+    bins: int | Sequence[int] = (256, 256),
+    *,
+    require_reached_intensifier: bool = True,
+    cmap: str = "viridis",
+    log_scale: bool = True,
+    output_path: str | Path | None = None,
+    show: bool = False,
+) -> tuple[Figure, Axes]:
+    """Plot transported intensifier-plane photon hits (`/transported_photons`)."""
+
+    transported = _read_structured_dataset(hdf5_path, "transported_photons")
+    required = {"intensifier_hit_x_mm", "intensifier_hit_y_mm"}
+    if not required.issubset(set(transported.dtype.names or ())):
+        raise KeyError(
+            "/transported_photons is missing required fields: "
+            f"{sorted(required)}"
+        )
+
+    mask = np.ones(len(transported), dtype=bool)
+    if (
+        require_reached_intensifier
+        and "reached_intensifier" in (transported.dtype.names or ())
+    ):
+        mask &= np.asarray(transported["reached_intensifier"], dtype=bool)
+
+    x_mm = np.asarray(transported["intensifier_hit_x_mm"][mask], dtype=float)
+    y_mm = np.asarray(transported["intensifier_hit_y_mm"][mask], dtype=float)
+    finite_mask = np.isfinite(x_mm) & np.isfinite(y_mm)
+    x_mm = x_mm[finite_mask]
+    y_mm = y_mm[finite_mask]
+    hist, x_edges, y_edges = _histogram_image(x_mm, y_mm, bins)
+
+    return _plot_histogram(
+        hist,
+        x_edges,
+        y_edges,
+        title="Intensifier Photon Hits",
+        cmap=cmap,
+        log_scale=log_scale,
+        output_path=output_path,
+        show=show,
+    )
+
+
 __all__ = [
     "neutron_hits_to_image",
     "photon_origins_to_image",
     "photon_exit_to_image",
     "optical_interface_photons_to_image",
+    "intensifier_photons_to_image",
 ]

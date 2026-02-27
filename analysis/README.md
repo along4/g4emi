@@ -21,6 +21,7 @@ module: `hdf5Analyzer.py`.
 - `photon_origins_to_image(...)`
 - `photon_exit_to_image(...)`
 - `optical_interface_photons_to_image(...)`
+- `intensifier_photons_to_image(...)`
 
 These functions create 2D histogram images (`x` vs `y`) from the relevant
 HDF5 datasets.
@@ -42,4 +43,14 @@ pixi run python examples/analysisLite/hdf5_lite_analyzer_example.py \
 ```
 
 The script uses an existing simulation output HDF5 file and writes PNGs to
-`analysis/outputs/`.
+`<run_root>/plots/` by default (for example:
+`data/CanonEF50mmf1p0L_run/plots/`).
+
+If a sibling transport file exists at:
+
+`data/<run>/transportedPhotons/photons_intensifier_hits.h5`
+
+the script also writes `photons_intensifier_hits.png`.
+You can also pass an explicit transport file via:
+
+`--transport-hdf5-path <path/to/photons_intensifier_hits.h5>`
