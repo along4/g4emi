@@ -135,7 +135,7 @@ pixi run python examples/analysisLite/hdf5_lite_analyzer_example.py \
 After generating simulation output (`/photons` optical-interface hits), run:
 
 ```bash
-pixi run python examples/SimulationSetup/optical_transport_example.py \
+pixi run python examples/photonTransportation/optical_transport_example.py \
   examples/SimulationSetup/CanonEF50mmf1p0L_example.yaml
 ```
 
