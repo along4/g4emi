@@ -462,7 +462,13 @@ def _primary_lens_model(config: SimConfig) -> tuple[LensModel, Path | None]:
 
     primary_lens = next(lens for lens in config.optical.lenses if lens.primary)
     if primary_lens.zmx_file is None:
-        raise ValueError("Primary lens is missing `zmxFile` after config hydration.")
+        raise ValueError(
+            "Primary lens is missing a resolved `zmxFile` path. "
+            "When specifying a lens via `catalogId`, the `SimConfig` must be "
+            "hydrated (for example by loading it with `ConfigIO.from_yaml(...)` "
+            "or by calling `transport_from_yaml(...)`) so that `catalogId` is "
+            "resolved to `zmxFile` before calling `transport_from_sim_config`."
+        )
     lens_path = resolve_lens_path(primary_lens.zmx_file)
     smx_path = resolve_smx_path(primary_lens.smx_file, zmx_path=lens_path)
     return LensModel.from_zmx(lens_path, name=primary_lens.name), smx_path
