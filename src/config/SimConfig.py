@@ -288,14 +288,34 @@ class SourceConfig(StrictModel):
 class LensConfig(StrictModel):
     """Individual optical lens descriptor.
 
-    `zmxFile` references the optical model source while `primary` indicates
-    which lens entry should be treated as the principal lens for downstream
-    assumptions.
+    A lens can be specified either directly with `zmxFile` (and optional
+    `smxFile`) or via `catalogId` resolved from `lenses/catalog.yaml`.
+    `primary` indicates which lens entry should be treated as the principal
+    lens for downstream assumptions.
     """
 
-    name: str
+    name: str | None = None
     primary: bool
-    zmx_file: str = Field(alias="zmxFile")
+    catalog_id: str | None = Field(default=None, alias="catalogId", min_length=1)
+    zmx_file: str | None = Field(default=None, alias="zmxFile", min_length=1)
+    smx_file: str | None = Field(default=None, alias="smxFile", min_length=1)
+
+    @model_validator(mode="after")
+    def validate_lens_reference(self) -> "LensConfig":
+        """Require lens reference and fill a fallback display name."""
+
+        if self.catalog_id is None and self.zmx_file is None:
+            raise ValueError(
+                "Each optical lens must provide `catalogId` and/or `zmxFile`."
+            )
+        if self.name is None or not self.name.strip():
+            if self.catalog_id is not None:
+                self.name = self.catalog_id
+            elif self.zmx_file is not None:
+                self.name = Path(self.zmx_file).stem
+            else:
+                self.name = "Lens"
+        return self
 
 
 class OpticalGeometry(StrictModel):
