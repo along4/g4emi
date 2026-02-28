@@ -483,58 +483,69 @@ def _transport_rows(
     with h5py.File(input_hdf5_path, "r") as handle:
         if "photons" not in handle:
             raise KeyError(f"Dataset 'photons' not found in {input_hdf5_path}")
-        photons = handle["photons"][:]
+        photons_ds = handle["photons"]
+        photon_field_names = photons_ds.dtype.names or ()
+        _require_photon_fields(photon_field_names, _REQUIRED_PHOTON_FIELDS)
 
-    _require_photon_fields(photons.dtype.names or (), _REQUIRED_PHOTON_FIELDS)
+        n_photons = len(photons_ds)
+        out = np.zeros(n_photons, dtype=_TRANSPORT_DTYPE)
+        out["source_photon_index"] = np.arange(n_photons, dtype=np.int64)
+        out["intensifier_hit_x_mm"] = np.nan
+        out["intensifier_hit_y_mm"] = np.nan
+        out["intensifier_hit_z_mm"] = np.nan
+        out["reached_intensifier"] = False
 
-    out = np.zeros(len(photons), dtype=_TRANSPORT_DTYPE)
-    out["source_photon_index"] = np.arange(len(photons), dtype=np.int64)
-    out["gun_call_id"] = np.asarray(photons["gun_call_id"], dtype=np.int64)
-    out["primary_track_id"] = np.asarray(photons["primary_track_id"], dtype=np.int32)
-    out["secondary_track_id"] = np.asarray(photons["secondary_track_id"], dtype=np.int32)
-    out["photon_track_id"] = np.asarray(photons["photon_track_id"], dtype=np.int32)
-    out["intensifier_hit_x_mm"] = np.nan
-    out["intensifier_hit_y_mm"] = np.nan
-    out["intensifier_hit_z_mm"] = np.nan
-    out["reached_intensifier"] = False
+        transported_count = 0
 
-    transported_count = 0
-    for index, photon in enumerate(photons):
-        x_mm = float(photon["optical_interface_hit_x_mm"])
-        y_mm = float(photon["optical_interface_hit_y_mm"])
-        dir_x = float(photon["optical_interface_hit_dir_x"])
-        dir_y = float(photon["optical_interface_hit_dir_y"])
-        dir_z = float(photon["optical_interface_hit_dir_z"])
-        wvl_nm = (
-            float(photon["optical_interface_hit_wavelength_nm"])
-            if "optical_interface_hit_wavelength_nm" in (photons.dtype.names or ())
-            else None
-        )
+        # Process photons in chunks to avoid loading the entire dataset into memory.
+        chunk_size = 10000
+        for start in range(0, n_photons, chunk_size):
+            stop = min(start + chunk_size, n_photons)
+            photons_chunk = photons_ds[start:stop]
 
-        if not np.isfinite(x_mm) or not np.isfinite(y_mm):
-            continue
+            for offset, photon in enumerate(photons_chunk):
+                index = start + offset
 
-        hit = tracer.trace_to_sensor(
-            x_mm=x_mm,
-            y_mm=y_mm,
-            dir_x=dir_x,
-            dir_y=dir_y,
-            dir_z=dir_z,
-            wavelength_nm=wvl_nm,
-        )
-        if hit is None:
-            continue
+                # Copy identifying fields with appropriate dtypes.
+                out["gun_call_id"][index] = np.int64(photon["gun_call_id"])
+                out["primary_track_id"][index] = np.int32(photon["primary_track_id"])
+                out["secondary_track_id"][index] = np.int32(photon["secondary_track_id"])
+                out["photon_track_id"][index] = np.int32(photon["photon_track_id"])
 
-        sensor_x, sensor_y, sensor_z = hit
-        if not all(np.isfinite(v) for v in (sensor_x, sensor_y, sensor_z)):
-            continue
+                x_mm = float(photon["optical_interface_hit_x_mm"])
+                y_mm = float(photon["optical_interface_hit_y_mm"])
+                dir_x = float(photon["optical_interface_hit_dir_x"])
+                dir_y = float(photon["optical_interface_hit_dir_y"])
+                dir_z = float(photon["optical_interface_hit_dir_z"])
+                wvl_nm = (
+                    float(photon["optical_interface_hit_wavelength_nm"])
+                    if "optical_interface_hit_wavelength_nm" in photon_field_names
+                    else None
+                )
 
-        out["intensifier_hit_x_mm"][index] = float(sensor_x)
-        out["intensifier_hit_y_mm"][index] = float(sensor_y)
-        out["intensifier_hit_z_mm"][index] = float(sensor_z)
-        out["reached_intensifier"][index] = True
-        transported_count += 1
+                if not np.isfinite(x_mm) or not np.isfinite(y_mm):
+                    continue
 
+                hit = tracer.trace_to_sensor(
+                    x_mm=x_mm,
+                    y_mm=y_mm,
+                    dir_x=dir_x,
+                    dir_y=dir_y,
+                    dir_z=dir_z,
+                    wavelength_nm=wvl_nm,
+                )
+                if hit is None:
+                    continue
+
+                sensor_x, sensor_y, sensor_z = hit
+                if not all(np.isfinite(v) for v in (sensor_x, sensor_y, sensor_z)):
+                    continue
+
+                out["intensifier_hit_x_mm"][index] = float(sensor_x)
+                out["intensifier_hit_y_mm"][index] = float(sensor_y)
+                out["intensifier_hit_z_mm"][index] = float(sensor_z)
+                out["reached_intensifier"][index] = True
+                transported_count += 1
     return out, transported_count
 
 
