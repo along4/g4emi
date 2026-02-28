@@ -853,10 +853,10 @@ def _catalog_lens_payload(catalog_id: str) -> dict[str, Any]:
     loaded = load_lens(catalog_id)
     payload: dict[str, Any] = {
         "name": loaded.name,
-        "zmxFile": loaded.zmx_path.name,
+        "zmxFile": str(loaded.zmx_path),
     }
     if loaded.smx_path is not None:
-        payload["smxFile"] = loaded.smx_path.name
+        payload["smxFile"] = str(loaded.smx_path)
     return payload
 
 
