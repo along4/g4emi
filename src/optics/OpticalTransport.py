@@ -11,7 +11,9 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import logging
 from pathlib import Path
+import shutil
 import sys
+import tempfile
 from typing import Protocol
 
 try:
@@ -31,7 +33,7 @@ try:
         validate_run_environment,
     )
     from src.config.SimConfig import SimConfig
-    from src.optics.LensModels import LensModel, resolve_lens_path
+    from src.optics.LensModels import LensModel, resolve_lens_path, resolve_smx_path
 except ModuleNotFoundError:
     # Support direct execution when repository root is not on sys.path.
     sys.path.append(str(Path(__file__).resolve().parents[2]))
@@ -42,7 +44,7 @@ except ModuleNotFoundError:
         validate_run_environment,
     )
     from src.config.SimConfig import SimConfig
-    from src.optics.LensModels import LensModel, resolve_lens_path
+    from src.optics.LensModels import LensModel, resolve_lens_path, resolve_smx_path
 
 
 DEFAULT_TRANSPORT_OUTPUT_FILENAME = "photons_intensifier_hits.h5"
@@ -109,6 +111,7 @@ class TransportSummary:
     output_hdf5: Path
     lens_name: str
     lens_zmx_path: Path
+    lens_smx_path: Path | None
     ray_engine: str
     total_photons: int
     transported_photons: int
@@ -124,6 +127,7 @@ class RayOpticsLensTracer:
         self,
         lens_zmx_path: str | Path,
         *,
+        lens_smx_path: str | Path | None = None,
         interface_represents_lens_entrance: bool = True,
         zmx_log_directory: str | Path | None = None,
     ) -> None:
@@ -139,8 +143,16 @@ class RayOpticsLensTracer:
         self._configure_zmxread_logger(zmx_log_directory)
         self._trace = trace
         self.lens_zmx_path = Path(lens_zmx_path).resolve()
+        self.lens_smx_path = (
+            Path(lens_smx_path).resolve() if lens_smx_path is not None else None
+        )
+        self._temp_lens_dir: tempfile.TemporaryDirectory[str] | None = None
+        zmx_for_read = self._prepare_lens_pair_for_rayoptics(
+            self.lens_zmx_path,
+            self.lens_smx_path,
+        )
         # rayoptics expects a pathlib.Path-like object here on newer releases.
-        loaded = zmxread.read_lens_file(self.lens_zmx_path, info=False)
+        loaded = zmxread.read_lens_file(zmx_for_read, info=False)
         # API compatibility:
         # - some versions return OpticalModel
         # - others return (OpticalModel, info)
@@ -180,6 +192,29 @@ class RayOpticsLensTracer:
         target_logger.addHandler(file_handler)
         target_logger.setLevel(logging.INFO)
         target_logger.propagate = False
+
+    def _prepare_lens_pair_for_rayoptics(
+        self,
+        zmx_path: Path,
+        smx_path: Path | None,
+    ) -> Path:
+        """Stage `.zmx`/`.smx` into one directory for rayoptics sidecar loading."""
+
+        if smx_path is None:
+            return zmx_path
+
+        sibling_smx = zmx_path.with_suffix(".smx")
+        if sibling_smx.exists() and sibling_smx.resolve() == smx_path.resolve():
+            return zmx_path
+
+        temp_dir = tempfile.TemporaryDirectory(prefix="rayoptics_lens_")
+        self._temp_lens_dir = temp_dir
+        temp_path = Path(temp_dir.name)
+        staged_zmx = temp_path / zmx_path.name
+        staged_smx = staged_zmx.with_suffix(".smx")
+        shutil.copy2(zmx_path, staged_zmx)
+        shutil.copy2(smx_path, staged_smx)
+        return staged_zmx
 
     @staticmethod
     def _extract_seq_model(opt_model: object) -> object:
@@ -371,12 +406,13 @@ def transport_from_sim_config(
     if output_path.exists() and not overwrite:
         raise FileExistsError(f"Refusing to overwrite existing file: {output_path}")
 
-    lens = _primary_lens_model(config)
+    lens, smx_path = _primary_lens_model(config)
     tracer_impl = (
         tracer
         if tracer is not None
         else RayOpticsLensTracer(
             lens.zmx_path,
+            lens_smx_path=smx_path,
             interface_represents_lens_entrance=(
                 assumptions.optical_interface_represents == "lens_entrance_plane"
             ),
@@ -396,6 +432,8 @@ def transport_from_sim_config(
         dst.attrs["run_id"] = config.metadata.run_environment.simulation_run_id
         dst.attrs["lens_name"] = lens.name
         dst.attrs["lens_zmx_path"] = str(lens.zmx_path)
+        if smx_path is not None:
+            dst.attrs["lens_smx_path"] = str(smx_path)
         dst.attrs["object_plane"] = assumptions.object_plane
         dst.attrs["optical_interface_represents"] = (
             assumptions.optical_interface_represents
@@ -411,6 +449,7 @@ def transport_from_sim_config(
         output_hdf5=output_path,
         lens_name=lens.name,
         lens_zmx_path=lens.zmx_path,
+        lens_smx_path=smx_path,
         ray_engine=getattr(tracer_impl, "engine_name", tracer_impl.__class__.__name__),
         total_photons=total,
         transported_photons=transported_count,
@@ -418,12 +457,15 @@ def transport_from_sim_config(
     )
 
 
-def _primary_lens_model(config: SimConfig) -> LensModel:
-    """Resolve and parse the primary lens from `config.optical.lenses`."""
+def _primary_lens_model(config: SimConfig) -> tuple[LensModel, Path | None]:
+    """Resolve and parse primary lens model + optional `.smx` sidecar path."""
 
     primary_lens = next(lens for lens in config.optical.lenses if lens.primary)
+    if primary_lens.zmx_file is None:
+        raise ValueError("Primary lens is missing `zmxFile` after config hydration.")
     lens_path = resolve_lens_path(primary_lens.zmx_file)
-    return LensModel.from_zmx(lens_path, name=primary_lens.name)
+    smx_path = resolve_smx_path(primary_lens.smx_file, zmx_path=lens_path)
+    return LensModel.from_zmx(lens_path, name=primary_lens.name), smx_path
 
 
 def _transport_rows(
