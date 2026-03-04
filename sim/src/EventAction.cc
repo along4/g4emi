@@ -94,6 +94,7 @@ void EventAction::BeginOfEventAction(const G4Event* event) {
   fPrimarySpecies = "unknown";
   fPrimaryPosition = G4ThreeVector();
   fPrimaryEnergy = -1.0;
+  fPrimaryT0Time = 0.0;
   fTrackInfo.clear();
   fPhotonCreationInfo.clear();
   fPendingPhotonOrigin.clear();
@@ -110,6 +111,7 @@ void EventAction::BeginOfEventAction(const G4Event* event) {
   }
 
   fPrimaryPosition = primaryVertex->GetPosition();
+  fPrimaryT0Time = primaryVertex->GetT0();
   const auto* primaryParticle = primaryVertex->GetPrimary();
   if (!primaryParticle) {
     return;
@@ -127,7 +129,7 @@ void EventAction::BeginOfEventAction(const G4Event* event) {
  * Workflow:
  * 1. Emit lightweight progress every 1000 simulated events.
  * 2. Build HDF5 row containers including optical-interface crossing ray
- *    metadata (direction, polarization, energy, wavelength).
+ *    metadata (time, direction, polarization, energy, wavelength).
  * 3. Serialize rows through SimIO under a shared file-write mutex.
  */
 void EventAction::EndOfEventAction(const G4Event* event) {
@@ -162,6 +164,7 @@ void EventAction::EndOfEventAction(const G4Event* event) {
     row.primaryXmm = hit.primaryX / mm;
     row.primaryYmm = hit.primaryY / mm;
     row.primaryEnergyMeV = fPrimaryEnergy / MeV;
+    row.primaryT0TimeNs = fPrimaryT0Time / ns;
     if (const auto* info = FindTrackInfo(hit.primaryID)) {
       row.primaryEnergyMeV = info->originEnergy / MeV;
     }
@@ -178,6 +181,7 @@ void EventAction::EndOfEventAction(const G4Event* event) {
     row.primaryXmm = fPrimaryPosition.x() / mm;
     row.primaryYmm = fPrimaryPosition.y() / mm;
     row.primaryEnergyMeV = fPrimaryEnergy / MeV;
+    row.primaryT0TimeNs = fPrimaryT0Time / ns;
     primaryRows.push_back(row);
   }
 
@@ -204,6 +208,7 @@ void EventAction::EndOfEventAction(const G4Event* event) {
   // Capture both scintillation-origin location and optical-interface crossing ray state.
   // Unit conversions:
   // - positions -> mm
+  // - times -> ns
   // - energy -> eV
   // - wavelength -> nm
   photonRows.reserve(fPhotonHits.size());
@@ -218,6 +223,7 @@ void EventAction::EndOfEventAction(const G4Event* event) {
     row.photonOriginZmm = hit.scintOriginPosition.z() / mm;
     row.opticalInterfaceHitXmm = hit.opticalInterfaceHitPosition.x() / mm;
     row.opticalInterfaceHitYmm = hit.opticalInterfaceHitPosition.y() / mm;
+    row.opticalInterfaceHitTimeNs = hit.opticalInterfaceHitTime / ns;
     row.opticalInterfaceHitDirX = hit.opticalInterfaceHitDirection.x();
     row.opticalInterfaceHitDirY = hit.opticalInterfaceHitDirection.y();
     row.opticalInterfaceHitDirZ = hit.opticalInterfaceHitDirection.z();
@@ -233,6 +239,7 @@ void EventAction::EndOfEventAction(const G4Event* event) {
     row.opticalInterfaceHitPolX = hit.opticalInterfaceHitPolarization.x();
     row.opticalInterfaceHitPolY = hit.opticalInterfaceHitPolarization.y();
     row.opticalInterfaceHitPolZ = hit.opticalInterfaceHitPolarization.z();
+    row.photonCreationTimeNs = hit.photonCreationTime / ns;
     row.opticalInterfaceHitEnergyEV = hit.opticalInterfaceHitEnergy / eV;
     row.opticalInterfaceHitWavelengthNm = hit.opticalInterfaceHitWavelength / nm;
     photonRows.push_back(row);

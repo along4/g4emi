@@ -27,7 +27,8 @@ PhotonOpticalInterfaceSD::PhotonOpticalInterfaceSD(const G4String& name) : G4VSe
  * - Accept only optical-photon tracks; all other particles are ignored.
  * - Build one EventAction::PhotonHitRecord per accepted photon crossing.
  * - Capture optical-interface-entry ray state from the pre-step point:
- *   position, momentum direction, polarization, and total energy.
+ *   position, time, momentum direction, polarization, and total energy.
+ * - Capture optical-photon creation global time for scintillation timing analyses.
  * - Derive wavelength from energy (`lambda = h*c/E`) and store both.
  * - Prefer rich ancestry metadata precomputed in TrackingAction
  *   (FindPhotonCreationInfo).
@@ -71,8 +72,10 @@ G4bool PhotonOpticalInterfaceSD::ProcessHits(G4Step* step, G4TouchableHistory*) 
   // We capture full ray state here for downstream optical propagation.
   const auto* preStep = step->GetPreStepPoint();
   hit.opticalInterfaceHitPosition = preStep->GetPosition();
+  hit.opticalInterfaceHitTime = preStep->GetGlobalTime();
   hit.opticalInterfaceHitDirection = preStep->GetMomentumDirection();
   hit.opticalInterfaceHitPolarization = preStep->GetPolarization();
+  hit.photonCreationTime = preStep->GetGlobalTime() - preStep->GetLocalTime();
   hit.opticalInterfaceHitEnergy = preStep->GetTotalEnergy();
 
   // Convert energy to wavelength using Geant4 physical constants.

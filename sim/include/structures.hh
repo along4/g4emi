@@ -21,6 +21,7 @@ namespace SimStructures {
  * - `primarySpecies`: compact species label (`n`, `p`, `g`, etc.).
  * - `primaryXmm`, `primaryYmm`: primary origin position in mm.
  * - `primaryEnergyMeV`: primary origin kinetic energy in MeV.
+ * - `primaryT0TimeNs`: primary start time (T0 anchor) in ns.
  */
 struct PrimaryInfo {
   std::int64_t gunCallId = -1;
@@ -29,6 +30,7 @@ struct PrimaryInfo {
   double primaryXmm = 0.0;
   double primaryYmm = 0.0;
   double primaryEnergyMeV = 0.0;
+  double primaryT0TimeNs = 0.0;
 };
 
 /**
@@ -80,6 +82,8 @@ struct PhotonInfo {
   /// Optical-interface entry-point coordinates in mm at the pre-step boundary crossing.
   double opticalInterfaceHitXmm = 0.0;
   double opticalInterfaceHitYmm = 0.0;
+  /// Optical-interface crossing time in ns (Geant4 global time basis).
+  double opticalInterfaceHitTimeNs = 0.0;
 
   /// Unit momentum-direction components at optical-interface crossing.
   double opticalInterfaceHitDirX = 0.0;
@@ -91,6 +95,8 @@ struct PhotonInfo {
   double opticalInterfaceHitPolY = 0.0;
   double opticalInterfaceHitPolZ = 0.0;
 
+  /// Optical-photon creation time in ns (Geant4 global time basis).
+  double photonCreationTimeNs = 0.0;
   /// Total photon energy at optical-interface crossing in eV.
   double opticalInterfaceHitEnergyEV = -1.0;
   /// Photon wavelength at optical-interface crossing in nm.
@@ -120,6 +126,7 @@ struct Hdf5PrimaryNativeRow {
   double primary_x_mm;
   double primary_y_mm;
   double primary_energy_MeV;
+  double primary_t0_time_ns;
 };
 
 /**
@@ -155,12 +162,14 @@ struct Hdf5PhotonNativeRow {
   double photon_scint_exit_z_mm;
   double optical_interface_hit_x_mm;
   double optical_interface_hit_y_mm;
+  double optical_interface_hit_time_ns;
   double optical_interface_hit_dir_x;
   double optical_interface_hit_dir_y;
   double optical_interface_hit_dir_z;
   double optical_interface_hit_pol_x;
   double optical_interface_hit_pol_y;
   double optical_interface_hit_pol_z;
+  double photon_creation_time_ns;
   double optical_interface_hit_energy_eV;
   double optical_interface_hit_wavelength_nm;
 };

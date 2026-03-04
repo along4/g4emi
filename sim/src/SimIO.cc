@@ -256,6 +256,9 @@ bool EnsureReady(const std::string& hdf5Path, std::string* errorMessage) {
   H5Tinsert(s.primaryType, "primary_energy_MeV",
             HOFFSET(detail::Hdf5PrimaryNativeRow, primary_energy_MeV),
             H5T_NATIVE_DOUBLE);
+  H5Tinsert(s.primaryType, "primary_t0_time_ns",
+            HOFFSET(detail::Hdf5PrimaryNativeRow, primary_t0_time_ns),
+            H5T_NATIVE_DOUBLE);
 
   s.secondaryType = H5Tcreate(H5T_COMPOUND, sizeof(detail::Hdf5SecondaryNativeRow));
   H5Tinsert(s.secondaryType, "gun_call_id",
@@ -316,6 +319,9 @@ bool EnsureReady(const std::string& hdf5Path, std::string* errorMessage) {
   H5Tinsert(s.photonType, "optical_interface_hit_y_mm",
             HOFFSET(detail::Hdf5PhotonNativeRow, optical_interface_hit_y_mm),
             H5T_NATIVE_DOUBLE);
+  H5Tinsert(s.photonType, "optical_interface_hit_time_ns",
+            HOFFSET(detail::Hdf5PhotonNativeRow, optical_interface_hit_time_ns),
+            H5T_NATIVE_DOUBLE);
 
   // Optical-interface crossing optical state used for downstream lens/ray propagation.
   H5Tinsert(s.photonType, "optical_interface_hit_dir_x",
@@ -335,6 +341,9 @@ bool EnsureReady(const std::string& hdf5Path, std::string* errorMessage) {
             H5T_NATIVE_DOUBLE);
   H5Tinsert(s.photonType, "optical_interface_hit_pol_z",
             HOFFSET(detail::Hdf5PhotonNativeRow, optical_interface_hit_pol_z),
+            H5T_NATIVE_DOUBLE);
+  H5Tinsert(s.photonType, "photon_creation_time_ns",
+            HOFFSET(detail::Hdf5PhotonNativeRow, photon_creation_time_ns),
             H5T_NATIVE_DOUBLE);
   H5Tinsert(s.photonType, "optical_interface_hit_energy_eV",
             HOFFSET(detail::Hdf5PhotonNativeRow, optical_interface_hit_energy_eV),
@@ -379,6 +388,7 @@ std::vector<detail::Hdf5PrimaryNativeRow> ToNative(
     native.primary_x_mm = row.primaryXmm;
     native.primary_y_mm = row.primaryYmm;
     native.primary_energy_MeV = row.primaryEnergyMeV;
+    native.primary_t0_time_ns = row.primaryT0TimeNs;
     out.push_back(native);
   }
   return out;
@@ -411,7 +421,7 @@ std::vector<detail::Hdf5SecondaryNativeRow> ToNative(
  *
  * This maps one semantic PhotonInfo row into the exact `/photons` binary
  * layout, including optical-interface crossing position, direction, polarization,
- * and spectrally relevant fields (energy and wavelength).
+ * timing, and spectrally relevant fields (energy and wavelength).
  */
 std::vector<detail::Hdf5PhotonNativeRow> ToNative(
     const std::vector<PhotonInfo>& rows) {
@@ -431,12 +441,14 @@ std::vector<detail::Hdf5PhotonNativeRow> ToNative(
     native.photon_scint_exit_z_mm = row.photonScintExitZmm;
     native.optical_interface_hit_x_mm = row.opticalInterfaceHitXmm;
     native.optical_interface_hit_y_mm = row.opticalInterfaceHitYmm;
+    native.optical_interface_hit_time_ns = row.opticalInterfaceHitTimeNs;
     native.optical_interface_hit_dir_x = row.opticalInterfaceHitDirX;
     native.optical_interface_hit_dir_y = row.opticalInterfaceHitDirY;
     native.optical_interface_hit_dir_z = row.opticalInterfaceHitDirZ;
     native.optical_interface_hit_pol_x = row.opticalInterfaceHitPolX;
     native.optical_interface_hit_pol_y = row.opticalInterfaceHitPolY;
     native.optical_interface_hit_pol_z = row.opticalInterfaceHitPolZ;
+    native.photon_creation_time_ns = row.photonCreationTimeNs;
     native.optical_interface_hit_energy_eV = row.opticalInterfaceHitEnergyEV;
     native.optical_interface_hit_wavelength_nm = row.opticalInterfaceHitWavelengthNm;
     out.push_back(native);
@@ -571,7 +583,7 @@ std::string ComposeOutputPath(const std::string& base,
  * - /primaries   <- primaryRows
  * - /secondaries <- secondaryRows
  * - /photons     <- photonRows (includes optical-interface crossing direction,
- *                   polarization, energy, wavelength)
+ *                   polarization, timing, energy, wavelength)
  */
 bool AppendHdf5(const std::string& hdf5Path,
                 const std::vector<PrimaryInfo>& primaryRows,

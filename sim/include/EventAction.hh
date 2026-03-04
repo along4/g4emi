@@ -60,10 +60,14 @@ class EventAction : public G4UserEventAction {
 
     /// Optical-interface crossing position (world frame) at pre-step boundary entry.
     G4ThreeVector opticalInterfaceHitPosition;
+    /// Global time at optical-interface crossing (Geant4 internal time units).
+    G4double opticalInterfaceHitTime = -1.0;
     /// Unit momentum-direction vector (dx,dy,dz) at optical-interface crossing.
     G4ThreeVector opticalInterfaceHitDirection;
     /// Polarization vector at optical-interface crossing (world frame components).
     G4ThreeVector opticalInterfaceHitPolarization;
+    /// Optical-photon creation global time (Geant4 internal time units).
+    G4double photonCreationTime = -1.0;
     /// Photon total energy at optical-interface crossing (Geant4 internal energy units).
     G4double opticalInterfaceHitEnergy = -1.0;
     /// Photon wavelength at optical-interface crossing (Geant4 length units).
@@ -114,6 +118,8 @@ class EventAction : public G4UserEventAction {
   const G4ThreeVector& GetPrimaryPosition() const { return fPrimaryPosition; }
   /// Event primary kinetic energy at source.
   G4double GetPrimaryEnergy() const { return fPrimaryEnergy; }
+  /// Event primary start time (Geant4 internal time units).
+  G4double GetPrimaryT0Time() const { return fPrimaryT0Time; }
 
  private:
   /// Thread-local singleton pointer used by SD/tracking helpers.
@@ -129,6 +135,8 @@ class EventAction : public G4UserEventAction {
   G4ThreeVector fPrimaryPosition;
   /// Primary source kinetic energy for current event.
   G4double fPrimaryEnergy = -1.0;
+  /// Primary source start time for current event.
+  G4double fPrimaryT0Time = 0.0;
   /// Track ID -> track metadata lookup.
   std::unordered_map<G4int, TrackInfo> fTrackInfo;
   /// Photon track ID -> photon creation metadata lookup.
