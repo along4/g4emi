@@ -66,6 +66,8 @@ struct PhotonInfo {
   std::int32_t secondaryTrackId = -1;
   /// Geant4 optical-photon track ID (event-local).
   std::int32_t photonTrackId = -1;
+  /// Optical-photon creation time in ns (Geant4 global time basis).
+  double photonCreationTimeNs = 0.0;
 
   /// Photon creation-point position in the scintillator frame, expressed in mm.
   double photonOriginXmm = 0.0;
@@ -95,8 +97,6 @@ struct PhotonInfo {
   double opticalInterfaceHitPolY = 0.0;
   double opticalInterfaceHitPolZ = 0.0;
 
-  /// Optical-photon creation time in ns (Geant4 global time basis).
-  double photonCreationTimeNs = 0.0;
   /// Total photon energy at optical-interface crossing in eV.
   double opticalInterfaceHitEnergyEV = -1.0;
   /// Photon wavelength at optical-interface crossing in nm.
@@ -154,6 +154,7 @@ struct Hdf5PhotonNativeRow {
   std::int32_t primary_track_id;
   std::int32_t secondary_track_id;
   std::int32_t photon_track_id;
+  double photon_creation_time_ns;
   double photon_origin_x_mm;
   double photon_origin_y_mm;
   double photon_origin_z_mm;
@@ -169,7 +170,6 @@ struct Hdf5PhotonNativeRow {
   double optical_interface_hit_pol_x;
   double optical_interface_hit_pol_y;
   double optical_interface_hit_pol_z;
-  double photon_creation_time_ns;
   double optical_interface_hit_energy_eV;
   double optical_interface_hit_wavelength_nm;
 };

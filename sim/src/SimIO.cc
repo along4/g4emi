@@ -295,6 +295,9 @@ bool EnsureReady(const std::string& hdf5Path, std::string* errorMessage) {
             H5T_NATIVE_INT32);
   H5Tinsert(s.photonType, "photon_track_id",
             HOFFSET(detail::Hdf5PhotonNativeRow, photon_track_id), H5T_NATIVE_INT32);
+  H5Tinsert(s.photonType, "photon_creation_time_ns",
+            HOFFSET(detail::Hdf5PhotonNativeRow, photon_creation_time_ns),
+            H5T_NATIVE_DOUBLE);
   H5Tinsert(s.photonType, "photon_origin_x_mm",
             HOFFSET(detail::Hdf5PhotonNativeRow, photon_origin_x_mm),
             H5T_NATIVE_DOUBLE);
@@ -341,9 +344,6 @@ bool EnsureReady(const std::string& hdf5Path, std::string* errorMessage) {
             H5T_NATIVE_DOUBLE);
   H5Tinsert(s.photonType, "optical_interface_hit_pol_z",
             HOFFSET(detail::Hdf5PhotonNativeRow, optical_interface_hit_pol_z),
-            H5T_NATIVE_DOUBLE);
-  H5Tinsert(s.photonType, "photon_creation_time_ns",
-            HOFFSET(detail::Hdf5PhotonNativeRow, photon_creation_time_ns),
             H5T_NATIVE_DOUBLE);
   H5Tinsert(s.photonType, "optical_interface_hit_energy_eV",
             HOFFSET(detail::Hdf5PhotonNativeRow, optical_interface_hit_energy_eV),
@@ -433,6 +433,7 @@ std::vector<detail::Hdf5PhotonNativeRow> ToNative(
     native.primary_track_id = row.primaryTrackId;
     native.secondary_track_id = row.secondaryTrackId;
     native.photon_track_id = row.photonTrackId;
+    native.photon_creation_time_ns = row.photonCreationTimeNs;
     native.photon_origin_x_mm = row.photonOriginXmm;
     native.photon_origin_y_mm = row.photonOriginYmm;
     native.photon_origin_z_mm = row.photonOriginZmm;
@@ -448,7 +449,6 @@ std::vector<detail::Hdf5PhotonNativeRow> ToNative(
     native.optical_interface_hit_pol_x = row.opticalInterfaceHitPolX;
     native.optical_interface_hit_pol_y = row.opticalInterfaceHitPolY;
     native.optical_interface_hit_pol_z = row.opticalInterfaceHitPolZ;
-    native.photon_creation_time_ns = row.photonCreationTimeNs;
     native.optical_interface_hit_energy_eV = row.opticalInterfaceHitEnergyEV;
     native.optical_interface_hit_wavelength_nm = row.opticalInterfaceHitWavelengthNm;
     out.push_back(native);
