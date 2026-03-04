@@ -36,7 +36,7 @@ from typing import Any, Literal
 
 try:
     from src.config.SimConfig import SimConfig, default_sim_config
-    from src.config.LensCatalogIO import load_lens
+    from src.config.LensCatalogIO import load_lens, load_lens_definition
     from src.config.ScintillatorCatalogIO import load_scintillator
     from src.config.utilsConfig import (
         _DENSITY_UNIT_TO_G_CM3,
@@ -61,7 +61,7 @@ except ModuleNotFoundError:
     # Support imports when repository root is not already on sys.path.
     sys.path.append(str(Path(__file__).resolve().parents[2]))
     from src.config.SimConfig import SimConfig, default_sim_config
-    from src.config.LensCatalogIO import load_lens
+    from src.config.LensCatalogIO import load_lens, load_lens_definition
     from src.config.ScintillatorCatalogIO import load_scintillator
     from src.config.utilsConfig import (
         _DENSITY_UNIT_TO_G_CM3,
@@ -850,10 +850,11 @@ def _apply_scintillator_catalog_defaults(payload: dict[str, Any]) -> dict[str, A
 def _catalog_lens_payload(catalog_id: str) -> dict[str, Any]:
     """Resolve baseline `optical.lenses[*]` payload from lens catalog id."""
 
+    entry = load_lens_definition(catalog_id)
     loaded = load_lens(catalog_id)
     payload: dict[str, Any] = {
-        "name": loaded.name,
-        "zmxFile": str(loaded.zmx_path),
+        "name": entry.name,
+        "zmxFile": entry.zmx_file,
     }
     if loaded.smx_path is not None:
         payload["smxFile"] = str(loaded.smx_path)

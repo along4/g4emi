@@ -7,6 +7,7 @@ import sys
 import tempfile
 import textwrap
 import unittest
+from unittest.mock import patch
 
 
 def _repo_root() -> Path:
@@ -131,7 +132,33 @@ class LensCatalogTests(unittest.TestCase):
             self.assertEqual(lens.catalog_id, "CanonEF50mmf1.0L")
             self.assertEqual(lens.name, "CanonEF50mmf1.0L")
             self.assertEqual(lens.zmx_file, "CanonEF50mmf1.0L.zmx")
-            self.assertEqual(lens.smx_file, "CanonEF50mmf1.0L.smx")
+            assert lens.smx_file is not None
+            self.assertTrue(
+                lens.smx_file.endswith("lenses/smxFiles/CanonEF50mmf1.0L.smx")
+            )
+
+    def test_catalog_lens_payload_preserves_catalog_path_tokens(self) -> None:
+        """Catalog hydration should preserve full resolved smx path."""
+
+        from src.config.ConfigIO import _catalog_lens_payload
+
+        class _Entry:
+            name = "CustomLens"
+            zmx_file = "vendor/zmxFiles/CustomLens.zmx"
+            smx_file = "vendor/smxFiles/CustomLens.smx"
+
+        class _Loaded:
+            smx_path = Path("/tmp/vendor/smxFiles/CustomLens.smx")
+
+        with (
+            patch("src.config.ConfigIO.load_lens_definition", return_value=_Entry()),
+            patch("src.config.ConfigIO.load_lens", return_value=_Loaded()),
+        ):
+            payload = _catalog_lens_payload("CustomLens")
+
+        self.assertEqual(payload["name"], "CustomLens")
+        self.assertEqual(payload["zmxFile"], "vendor/zmxFiles/CustomLens.zmx")
+        self.assertEqual(payload["smxFile"], "/tmp/vendor/smxFiles/CustomLens.smx")
 
 
 if __name__ == "__main__":
