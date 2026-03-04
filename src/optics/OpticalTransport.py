@@ -558,7 +558,9 @@ def _copy_dataset_if_present(
 
     if dataset_name not in source:
         return
-    destination.create_dataset(dataset_name, data=source[dataset_name][:])
+    # Use HDF5's native copy to avoid loading the entire dataset into memory
+    # and to preserve dataset creation properties (e.g. chunking/compression).
+    source.copy(dataset_name, destination)
 
 
 def _require_photon_fields(
