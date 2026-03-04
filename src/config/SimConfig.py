@@ -16,6 +16,7 @@ from datetime import date as DateType
 from datetime import datetime
 import math
 from pathlib import Path
+from typing import Literal
 from pydantic import (
     AliasChoices,
     BaseModel,
@@ -287,14 +288,34 @@ class SourceConfig(StrictModel):
 class LensConfig(StrictModel):
     """Individual optical lens descriptor.
 
-    `zmxFile` references the optical model source while `primary` indicates
-    which lens entry should be treated as the principal lens for downstream
-    assumptions.
+    A lens can be specified either directly with `zmxFile` (and optional
+    `smxFile`) or via `catalogId` resolved from `lenses/catalog.yaml`.
+    `primary` indicates which lens entry should be treated as the principal
+    lens for downstream assumptions.
     """
 
-    name: str
+    name: str | None = None
     primary: bool
-    zmx_file: str = Field(alias="zmxFile")
+    catalog_id: str | None = Field(default=None, alias="catalogId", min_length=1)
+    zmx_file: str | None = Field(default=None, alias="zmxFile", min_length=1)
+    smx_file: str | None = Field(default=None, alias="smxFile", min_length=1)
+
+    @model_validator(mode="after")
+    def validate_lens_reference(self) -> "LensConfig":
+        """Require lens reference and fill a fallback display name."""
+
+        if self.catalog_id is None and self.zmx_file is None:
+            raise ValueError(
+                "Each optical lens must provide `catalogId` and/or `zmxFile`."
+            )
+        if self.name is None or not self.name.strip():
+            if self.catalog_id is not None:
+                self.name = self.catalog_id
+            elif self.zmx_file is not None:
+                self.name = Path(self.zmx_file).stem
+            else:
+                self.name = "Lens"
+        return self
 
 
 class OpticalGeometry(StrictModel):
@@ -317,6 +338,30 @@ class SensitiveDetectorConfig(StrictModel):
     diameter_rule: str = Field(alias="diameterRule", min_length=1)
 
 
+class OpticalTransportAssumptionsConfig(StrictModel):
+    """Physical mapping assumptions used by downstream optical transport.
+
+    Definitions:
+    - `objectPlane`: origin object plane for lens focus assumptions.
+    - `opticalInterfaceRepresents`: physical meaning of Geant4 optical-interface
+      hit plane used as ray-tracing input.
+    """
+
+    object_plane: Literal["scintillator_back_face"] = Field(
+        default="scintillator_back_face",
+        validation_alias=AliasChoices("objectPlane", "object_plane"),
+        serialization_alias="objectPlane",
+    )
+    optical_interface_represents: Literal["lens_entrance_plane"] = Field(
+        default="lens_entrance_plane",
+        validation_alias=AliasChoices(
+            "opticalInterfaceRepresents",
+            "optical_interface_represents",
+        ),
+        serialization_alias="opticalInterfaceRepresents",
+    )
+
+
 class OpticalConfig(StrictModel):
     """Optical subsystem definition.
 
@@ -330,6 +375,10 @@ class OpticalConfig(StrictModel):
     geometry: OpticalGeometry
     sensitive_detector_config: SensitiveDetectorConfig = Field(
         alias="sensitiveDetectorConfig"
+    )
+    transport_assumptions: OpticalTransportAssumptionsConfig = Field(
+        default_factory=OpticalTransportAssumptionsConfig,
+        alias="transportAssumptions",
     )
 
     @model_validator(mode="after")
@@ -351,6 +400,16 @@ class RunEnvironmentOutputInfo(StrictModel):
 
     Directory values are interpreted relative to
     `Metadata.RunEnvironment.WorkingDirectory` when given as relative paths.
+
+    Transport chunking controls apply to optical-transport HDF5 writing:
+    - `transport_chunk_rows`:
+      - integer: explicit rows per HDF5 chunk and per in-memory work batch.
+      - `"auto"`: derive rows from `transport_chunk_target_mib`.
+    - `transport_chunk_target_mib`:
+      - target memory budget (MiB) for one transport processing batch when
+        `transport_chunk_rows` is `"auto"`.
+      - the transport module estimates rows using
+        `(input_row_bytes + output_row_bytes)` and clamps to valid bounds.
     """
 
     simulated_photons_dir: str = Field(
@@ -373,6 +432,64 @@ class RunEnvironmentOutputInfo(StrictModel):
         serialization_alias="TransportedPhotonsDirectory",
         min_length=1,
     )
+    transport_chunk_rows: int | Literal["auto"] = Field(
+        default="auto",
+        validation_alias=AliasChoices(
+            "TransportChunkRows",
+            "transport_chunk_rows",
+            "transportChunkRows",
+        ),
+        serialization_alias="TransportChunkRows",
+    )
+    transport_chunk_target_mib: float = Field(
+        default=32.0,
+        validation_alias=AliasChoices(
+            "TransportChunkTargetMiB",
+            "transport_chunk_target_mib",
+            "transportChunkTargetMiB",
+        ),
+        serialization_alias="TransportChunkTargetMiB",
+        gt=0.0,
+    )
+
+    @field_validator("transport_chunk_rows", mode="before")
+    @classmethod
+    def normalize_transport_chunk_rows(
+        cls,
+        value: object,
+    ) -> int | Literal["auto"]:
+        """Normalize `TransportChunkRows` input into `int` or `"auto"`.
+
+        Accepted inputs:
+        - `None` or empty string -> `"auto"`
+        - case-insensitive `"auto"` string -> `"auto"`
+        - positive integer (or numeric string) -> integer row count
+
+        Rejected inputs:
+        - zero/negative values
+        - non-numeric strings other than `"auto"`
+        - non-string/non-integer object types
+        """
+
+        if value is None:
+            return "auto"
+        if isinstance(value, str):
+            token = value.strip()
+            if token == "":
+                return "auto"
+            if token.lower() == "auto":
+                return "auto"
+            try:
+                value = int(token)
+            except ValueError as exc:
+                raise ValueError(
+                    "`TransportChunkRows` must be a positive integer or 'auto'."
+                ) from exc
+        if isinstance(value, int):
+            if value <= 0:
+                raise ValueError("`TransportChunkRows` must be > 0 when specified.")
+            return value
+        raise ValueError("`TransportChunkRows` must be a positive integer or 'auto'.")
 
 
 class RunEnvironmentConfig(StrictModel):
@@ -385,6 +502,8 @@ class RunEnvironmentConfig(StrictModel):
     - `LogDirectory`: `logs/`
     - `OutputInfo.SimulatedPhotonsDirectory`: `simulatedPhotons/`
     - `OutputInfo.TransportedPhotonsDirectory`: `transportedPhotons/`
+    - `OutputInfo.TransportChunkRows`: `auto`
+    - `OutputInfo.TransportChunkTargetMiB`: `32`
     """
 
     simulation_run_id: str = Field(alias="SimulationRunID", default="example", min_length=1)
@@ -592,6 +711,10 @@ def default_sim_config() -> SimConfig:
                     "shape": "circle",
                     "diameterRule": "min(entranceDiameter,sensorMaxWidth)",
                 },
+                "transportAssumptions": {
+                    "objectPlane": "scintillator_back_face",
+                    "opticalInterfaceRepresents": "lens_entrance_plane",
+                },
             },
             "simulation": {
                 "numberOfParticles": 10000,
@@ -609,6 +732,8 @@ def default_sim_config() -> SimConfig:
                     "OutputInfo": {
                         "SimulatedPhotonsDirectory": "simulatedPhotons",
                         "TransportedPhotonsDirectory": "transportedPhotons",
+                        "TransportChunkRows": "auto",
+                        "TransportChunkTargetMiB": 32.0,
                     },
                 },
             },

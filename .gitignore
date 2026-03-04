@@ -21,6 +21,7 @@ compile_commands.json
 *.dat
 *.csv
 *.h5
+*.log
 
 # Data directory contents (keep placeholder only)
 /data/**

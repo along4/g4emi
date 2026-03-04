@@ -277,7 +277,13 @@ class LensModel(BaseModel):
 def _default_zmx_dir() -> Path:
     """Return default repository location for bundled Zemax files."""
 
-    return Path(__file__).resolve().parent / "zmxFiles"
+    return Path(__file__).resolve().parents[2] / "lenses" / "zmxFiles"
+
+
+def _default_smx_dir() -> Path:
+    """Return default repository location for bundled `.smx` replacement files."""
+
+    return Path(__file__).resolve().parents[2] / "lenses" / "smxFiles"
 
 
 def resolve_lens_path(lens_ref: str | Path) -> Path:
@@ -286,13 +292,13 @@ def resolve_lens_path(lens_ref: str | Path) -> Path:
     Resolution order:
     1. Exact user-provided filesystem path.
     2. Known aliases (`canon50`, `nikkor80-200`, etc.).
-    3. File under default zmx directory.
+    3. File under default lens `zmxFiles` directory.
     4. File stem under default directory with `.zmx` suffix added.
 
     Accepted lens_ref forms:
     - absolute or relative path
     - alias token
-    - filename or stem for file in `src/optics/zmxFiles`
+    - filename or stem for file in `lenses/zmxFiles`
     """
 
     if isinstance(lens_ref, Path):
@@ -325,6 +331,43 @@ def resolve_lens_path(lens_ref: str | Path) -> Path:
             return with_ext.resolve()
 
     raise FileNotFoundError(f"Unable to resolve lens reference: {lens_ref}")
+
+
+def resolve_smx_path(
+    smx_ref: str | Path | None,
+    *,
+    zmx_path: str | Path | None = None,
+) -> Path | None:
+    """Resolve an `.smx` path token, or infer it from an associated `.zmx` file."""
+
+    if smx_ref is None:
+        if zmx_path is None:
+            return None
+        zmx = Path(zmx_path).resolve()
+        same_dir = zmx.with_suffix(".smx")
+        if same_dir.exists():
+            return same_dir
+        default = (_default_smx_dir() / f"{zmx.stem}.smx").resolve()
+        if default.exists():
+            return default
+        return None
+
+    candidate = Path(smx_ref)
+    if candidate.exists():
+        return candidate.resolve()
+
+    for base_dir in (_default_smx_dir(), _default_zmx_dir()):
+        in_dir = base_dir / candidate
+        if in_dir.exists():
+            return in_dir.resolve()
+
+    if candidate.suffix.lower() != ".smx":
+        for base_dir in (_default_smx_dir(), _default_zmx_dir()):
+            with_ext = base_dir / f"{candidate.name}.smx"
+            if with_ext.exists():
+                return with_ext.resolve()
+
+    raise FileNotFoundError(f"Unable to resolve smx reference: {smx_ref}")
 
 
 def load_lens_models(lenses: list[str | Path]) -> list[LensModel]:

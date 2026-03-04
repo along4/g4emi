@@ -36,6 +36,7 @@ from typing import Any, Literal
 
 try:
     from src.config.SimConfig import SimConfig, default_sim_config
+    from src.config.LensCatalogIO import load_lens, load_lens_definition
     from src.config.ScintillatorCatalogIO import load_scintillator
     from src.config.utilsConfig import (
         _DENSITY_UNIT_TO_G_CM3,
@@ -60,6 +61,7 @@ except ModuleNotFoundError:
     # Support imports when repository root is not already on sys.path.
     sys.path.append(str(Path(__file__).resolve().parents[2]))
     from src.config.SimConfig import SimConfig, default_sim_config
+    from src.config.LensCatalogIO import load_lens, load_lens_definition
     from src.config.ScintillatorCatalogIO import load_scintillator
     from src.config.utilsConfig import (
         _DENSITY_UNIT_TO_G_CM3,
@@ -845,6 +847,52 @@ def _apply_scintillator_catalog_defaults(payload: dict[str, Any]) -> dict[str, A
     return payload
 
 
+def _catalog_lens_payload(catalog_id: str) -> dict[str, Any]:
+    """Resolve baseline `optical.lenses[*]` payload from lens catalog id."""
+
+    entry = load_lens_definition(catalog_id)
+    loaded = load_lens(catalog_id)
+    payload: dict[str, Any] = {
+        "name": entry.name,
+        "zmxFile": entry.zmx_file,
+    }
+    if loaded.smx_path is not None:
+        payload["smxFile"] = str(loaded.smx_path)
+    return payload
+
+
+def _apply_lens_catalog_defaults(payload: dict[str, Any]) -> dict[str, Any]:
+    """Hydrate `optical.lenses[*]` entries from lens catalog defaults."""
+
+    optical = payload.get("optical")
+    if not isinstance(optical, dict):
+        return payload
+
+    raw_lenses = optical.get("lenses")
+    if raw_lenses is None:
+        return payload
+    if not isinstance(raw_lenses, list):
+        raise ValueError("`optical.lenses` must be a list.")
+
+    for index, lens in enumerate(raw_lenses, start=1):
+        if not isinstance(lens, dict):
+            raise ValueError(f"`optical.lenses[{index}]` must be a mapping/object.")
+
+        catalog_id = lens.get("catalogId", lens.get("catalog_id"))
+        if catalog_id is None:
+            continue
+        if not isinstance(catalog_id, str) or not catalog_id.strip():
+            raise ValueError(
+                f"`optical.lenses[{index}].catalogId` must be a non-empty string."
+            )
+
+        catalog_lens = _catalog_lens_payload(catalog_id.strip())
+        for key, value in catalog_lens.items():
+            lens.setdefault(key, value)
+
+    return payload
+
+
 def from_yaml(yaml_path: str | Path) -> SimConfig:
     """Load and validate a :class:`SimConfig` from YAML file.
 
@@ -858,6 +906,7 @@ def from_yaml(yaml_path: str | Path) -> SimConfig:
     parsed = load_yaml_mapping(yaml_path)
     payload = _extract_sim_config_payload(parsed)
     payload = _apply_scintillator_catalog_defaults(payload)
+    payload = _apply_lens_catalog_defaults(payload)
     return SimConfig.model_validate(payload)
 
 

@@ -1,0 +1,13 @@
+version: 1
+default: CanonEF50mmf1.0L
+lenses:
+  CanonEF50mmf1.0L:
+    name: CanonEF50mmf1.0L
+    description: Canon EF 50 mm f/1.0L sequential prescription.
+    zmxFile: CanonEF50mmf1.0L.zmx
+    smxFile: CanonEF50mmf1.0L.smx
+  Nikkor80-200mmf2.8D:
+    name: Nikkor80-200mmf2.8D
+    description: Nikkor 80-200 mm f/2.8D sequential prescription.
+    zmxFile: Nikkor80-200mmf2.8D.zmx
+    smxFile: Nikkor80-200mmf2.8D.smx

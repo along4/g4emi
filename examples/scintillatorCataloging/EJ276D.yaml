@@ -40,9 +40,8 @@ source:
 
 optical:
   lenses:
-    - name: CanonEF50mmf1.0L
+    - catalogId: CanonEF50mmf1.0L
       primary: true
-      zmxFile: CanonEF50mmf1.0L.zmx
   geometry:
     entranceDiameter: 60.55
     sensorMaxWidth: 36.0
