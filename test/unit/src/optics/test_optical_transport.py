@@ -70,80 +70,92 @@ class OpticalTransportTests(unittest.TestCase):
         cls.resolve_transport_paths = staticmethod(resolve_transport_paths)
         cls.transport_from_sim_config = staticmethod(transport_from_sim_config)
 
-    def _build_config(self, working_directory: Path) -> object:
+    def _build_config(
+        self,
+        working_directory: Path,
+        *,
+        transport_chunk_rows: int | str | None = None,
+        transport_chunk_target_mib: float | None = None,
+    ) -> object:
         """Construct a minimal valid SimConfig payload for transport tests."""
 
-        return self.SimConfig.model_validate(
-            {
-                "scintillator": {
-                    "catalogId": "EJ200",
-                    "position_mm": {"x_mm": 0.0, "y_mm": 0.0, "z_mm": 0.0},
-                    "dimension_mm": {"x_mm": 50.0, "y_mm": 50.0, "z_mm": 10.0},
-                    "properties": {
-                        "name": "EJ200",
-                        "photonEnergy": [2.0, 2.4, 2.76],
-                        "rIndex": [1.58, 1.58, 1.58],
-                        "nKEntries": 3,
-                        "timeComponents": {
-                            "default": [
-                                {"timeConstant": 2.1, "yieldFraction": 1.0},
-                                {"timeConstant": 0.0, "yieldFraction": 0.0},
-                                {"timeConstant": 0.0, "yieldFraction": 0.0},
-                            ]
-                        },
+        output_info: dict[str, object] = {
+            "SimulatedPhotonsDirectory": "simulatedPhotons",
+            "TransportedPhotonsDirectory": "transportedPhotons",
+        }
+        if transport_chunk_rows is not None:
+            output_info["TransportChunkRows"] = transport_chunk_rows
+        if transport_chunk_target_mib is not None:
+            output_info["TransportChunkTargetMiB"] = transport_chunk_target_mib
+
+        payload: dict[str, object] = {
+            "scintillator": {
+                "catalogId": "EJ200",
+                "position_mm": {"x_mm": 0.0, "y_mm": 0.0, "z_mm": 0.0},
+                "dimension_mm": {"x_mm": 50.0, "y_mm": 50.0, "z_mm": 10.0},
+                "properties": {
+                    "name": "EJ200",
+                    "photonEnergy": [2.0, 2.4, 2.76],
+                    "rIndex": [1.58, 1.58, 1.58],
+                    "nKEntries": 3,
+                    "timeComponents": {
+                        "default": [
+                            {"timeConstant": 2.1, "yieldFraction": 1.0},
+                            {"timeConstant": 0.0, "yieldFraction": 0.0},
+                            {"timeConstant": 0.0, "yieldFraction": 0.0},
+                        ]
                     },
                 },
-                "source": {
-                    "gps": {
-                        "particle": "neutron",
-                        "position": {
-                            "type": "Plane",
-                            "shape": "Circle",
-                            "centerMm": {"x_mm": 0.0, "y_mm": 0.0, "z_mm": -20.0},
-                            "radiusMm": 1.0,
-                        },
-                        "angular": {
-                            "type": "beam2d",
-                            "rot1": {"x": 1.0, "y": 0.0, "z": 0.0},
-                            "rot2": {"x": 0.0, "y": 1.0, "z": 0.0},
-                            "direction": {"x": 0.0, "y": 0.0, "z": 1.0},
-                        },
-                        "energy": {"type": "Mono", "monoMeV": 2.45},
+            },
+            "source": {
+                "gps": {
+                    "particle": "neutron",
+                    "position": {
+                        "type": "Plane",
+                        "shape": "Circle",
+                        "centerMm": {"x_mm": 0.0, "y_mm": 0.0, "z_mm": -20.0},
+                        "radiusMm": 1.0,
+                    },
+                    "angular": {
+                        "type": "beam2d",
+                        "rot1": {"x": 1.0, "y": 0.0, "z": 0.0},
+                        "rot2": {"x": 0.0, "y": 1.0, "z": 0.0},
+                        "direction": {"x": 0.0, "y": 0.0, "z": 1.0},
+                    },
+                    "energy": {"type": "Mono", "monoMeV": 2.45},
+                }
+            },
+            "optical": {
+                "lenses": [
+                    {
+                        "name": "CanonEF50mmf1.0L",
+                        "primary": True,
+                        "zmxFile": "CanonEF50mmf1.0L.zmx",
                     }
+                ],
+                "geometry": {"entranceDiameter": 60.55, "sensorMaxWidth": 36.0},
+                "sensitiveDetectorConfig": {
+                    "position_mm": {"x_mm": 0.0, "y_mm": 0.0, "z_mm": 210.05},
+                    "shape": "circle",
+                    "diameterRule": "min(entranceDiameter,sensorMaxWidth)",
                 },
-                "optical": {
-                    "lenses": [
-                        {
-                            "name": "CanonEF50mmf1.0L",
-                            "primary": True,
-                            "zmxFile": "CanonEF50mmf1.0L.zmx",
-                        }
-                    ],
-                    "geometry": {"entranceDiameter": 60.55, "sensorMaxWidth": 36.0},
-                    "sensitiveDetectorConfig": {
-                        "position_mm": {"x_mm": 0.0, "y_mm": 0.0, "z_mm": 210.05},
-                        "shape": "circle",
-                        "diameterRule": "min(entranceDiameter,sensorMaxWidth)",
-                    },
+            },
+            "Metadata": {
+                "author": "Unit Test",
+                "date": "2026-02-27",
+                "version": "test",
+                "description": "Optical transport test payload.",
+                "RunEnvironment": {
+                    "SimulationRunID": "transport_unit_test",
+                    "WorkingDirectory": str(working_directory),
+                    "MacroDirectory": "macros",
+                    "LogDirectory": "logs",
+                    "OutputInfo": output_info,
                 },
-                "Metadata": {
-                    "author": "Unit Test",
-                    "date": "2026-02-27",
-                    "version": "test",
-                    "description": "Optical transport test payload.",
-                    "RunEnvironment": {
-                        "SimulationRunID": "transport_unit_test",
-                        "WorkingDirectory": str(working_directory),
-                        "MacroDirectory": "macros",
-                        "LogDirectory": "logs",
-                        "OutputInfo": {
-                            "SimulatedPhotonsDirectory": "simulatedPhotons",
-                            "TransportedPhotonsDirectory": "transportedPhotons",
-                        },
-                    },
-                },
-            }
-        )
+            },
+        }
+
+        return self.SimConfig.model_validate(payload)
 
     def _write_input_hdf5(self, path: Path) -> None:
         """Write small deterministic input datasets for transport tests."""
@@ -286,6 +298,25 @@ class OpticalTransportTests(unittest.TestCase):
                     output_hdf5_path=resolved.input_hdf5,
                     tracer=_StubTracer(),
                 )
+
+    def test_transport_uses_configured_chunk_rows(self) -> None:
+        """Configured `TransportChunkRows` should drive HDF5 dataset chunking."""
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = self._build_config(Path(tmp_dir), transport_chunk_rows=1)
+            resolved = self.resolve_transport_paths(config)
+            self._write_input_hdf5(resolved.input_hdf5)
+
+            summary = self.transport_from_sim_config(
+                config,
+                tracer=_StubTracer(),
+                overwrite=True,
+            )
+
+            with self.h5py.File(summary.output_hdf5, "r") as handle:
+                rows = handle["transported_photons"]
+                self.assertEqual(rows.chunks, (1,))
+                self.assertEqual(int(handle.attrs["transport_chunk_rows"]), 1)
 
 
 if __name__ == "__main__":

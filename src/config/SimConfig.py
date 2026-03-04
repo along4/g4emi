@@ -400,6 +400,16 @@ class RunEnvironmentOutputInfo(StrictModel):
 
     Directory values are interpreted relative to
     `Metadata.RunEnvironment.WorkingDirectory` when given as relative paths.
+
+    Transport chunking controls apply to optical-transport HDF5 writing:
+    - `transport_chunk_rows`:
+      - integer: explicit rows per HDF5 chunk and per in-memory work batch.
+      - `"auto"`: derive rows from `transport_chunk_target_mib`.
+    - `transport_chunk_target_mib`:
+      - target memory budget (MiB) for one transport processing batch when
+        `transport_chunk_rows` is `"auto"`.
+      - the transport module estimates rows using
+        `(input_row_bytes + output_row_bytes)` and clamps to valid bounds.
     """
 
     simulated_photons_dir: str = Field(
@@ -422,6 +432,64 @@ class RunEnvironmentOutputInfo(StrictModel):
         serialization_alias="TransportedPhotonsDirectory",
         min_length=1,
     )
+    transport_chunk_rows: int | Literal["auto"] = Field(
+        default="auto",
+        validation_alias=AliasChoices(
+            "TransportChunkRows",
+            "transport_chunk_rows",
+            "transportChunkRows",
+        ),
+        serialization_alias="TransportChunkRows",
+    )
+    transport_chunk_target_mib: float = Field(
+        default=32.0,
+        validation_alias=AliasChoices(
+            "TransportChunkTargetMiB",
+            "transport_chunk_target_mib",
+            "transportChunkTargetMiB",
+        ),
+        serialization_alias="TransportChunkTargetMiB",
+        gt=0.0,
+    )
+
+    @field_validator("transport_chunk_rows", mode="before")
+    @classmethod
+    def normalize_transport_chunk_rows(
+        cls,
+        value: object,
+    ) -> int | Literal["auto"]:
+        """Normalize `TransportChunkRows` input into `int` or `"auto"`.
+
+        Accepted inputs:
+        - `None` or empty string -> `"auto"`
+        - case-insensitive `"auto"` string -> `"auto"`
+        - positive integer (or numeric string) -> integer row count
+
+        Rejected inputs:
+        - zero/negative values
+        - non-numeric strings other than `"auto"`
+        - non-string/non-integer object types
+        """
+
+        if value is None:
+            return "auto"
+        if isinstance(value, str):
+            token = value.strip()
+            if token == "":
+                return "auto"
+            if token.lower() == "auto":
+                return "auto"
+            try:
+                value = int(token)
+            except ValueError as exc:
+                raise ValueError(
+                    "`TransportChunkRows` must be a positive integer or 'auto'."
+                ) from exc
+        if isinstance(value, int):
+            if value <= 0:
+                raise ValueError("`TransportChunkRows` must be > 0 when specified.")
+            return value
+        raise ValueError("`TransportChunkRows` must be a positive integer or 'auto'.")
 
 
 class RunEnvironmentConfig(StrictModel):
@@ -434,6 +502,8 @@ class RunEnvironmentConfig(StrictModel):
     - `LogDirectory`: `logs/`
     - `OutputInfo.SimulatedPhotonsDirectory`: `simulatedPhotons/`
     - `OutputInfo.TransportedPhotonsDirectory`: `transportedPhotons/`
+    - `OutputInfo.TransportChunkRows`: `auto`
+    - `OutputInfo.TransportChunkTargetMiB`: `32`
     """
 
     simulation_run_id: str = Field(alias="SimulationRunID", default="example", min_length=1)
@@ -662,6 +732,8 @@ def default_sim_config() -> SimConfig:
                     "OutputInfo": {
                         "SimulatedPhotonsDirectory": "simulatedPhotons",
                         "TransportedPhotonsDirectory": "transportedPhotons",
+                        "TransportChunkRows": "auto",
+                        "TransportChunkTargetMiB": 32.0,
                     },
                 },
             },

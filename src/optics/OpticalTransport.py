@@ -77,6 +77,10 @@ _TRANSPORT_DTYPE = np.dtype(
 )
 
 
+# Binary mebibyte unit used for `TransportChunkTargetMiB` calculations.
+_MIB = 1024 * 1024
+
+
 class PhotonTransportTracer(Protocol):
     """Photon tracer contract used by `transport_from_sim_config`."""
 
@@ -382,7 +386,15 @@ def transport_from_sim_config(
     overwrite: bool = True,
     tracer: PhotonTransportTracer | None = None,
 ) -> TransportSummary:
-    """Run optical transport using a validated `SimConfig` object."""
+    """Run optical transport using a validated `SimConfig` object.
+
+    Implementation notes:
+    - Output is written to a single HDF5 file.
+    - `/transported_photons` is created as a chunked dataset sized to the
+      input `/photons` row count so source-index linkage remains one-to-one.
+    - Processing happens in chunk-sized batches to bound memory usage by
+      roughly one input chunk + one output chunk at a time.
+    """
 
     assumptions = config.optical.transport_assumptions
     defaults = resolve_transport_paths(config)
@@ -421,12 +433,49 @@ def transport_from_sim_config(
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    rows, transported_count = _transport_rows(input_path, tracer_impl)
-
     with h5py.File(input_path, "r") as src, h5py.File(output_path, "w") as dst:
         _copy_dataset_if_present(src, dst, "primaries")
         _copy_dataset_if_present(src, dst, "secondaries")
-        dst.create_dataset("transported_photons", data=rows)
+
+        if "photons" not in src:
+            raise KeyError(f"Dataset 'photons' not found in {input_path}")
+        photons_ds = src["photons"]
+        photon_field_names = photons_ds.dtype.names or ()
+        _require_photon_fields(photon_field_names, _REQUIRED_PHOTON_FIELDS)
+
+        total = len(photons_ds)
+        # Resolve effective row chunking from config.
+        # - explicit integer uses caller-provided chunk rows
+        # - "auto" derives rows from target MiB and row byte sizes
+        chunk_rows = _resolve_transport_chunk_rows(
+            config,
+            total_rows=total,
+            input_row_nbytes=photons_ds.dtype.itemsize,
+            output_row_nbytes=_TRANSPORT_DTYPE.itemsize,
+        )
+        # Create one fixed-size output dataset (not resizable) so row i always
+        # corresponds to source photon i. Missed photons keep NaN hit values.
+        transported_ds = _create_transported_dataset(
+            dst,
+            total_rows=total,
+            chunk_rows=chunk_rows,
+        )
+
+        transported_count = 0
+        if total > 0:
+            for start in range(0, total, chunk_rows):
+                stop = min(start + chunk_rows, total)
+                # Read only one photon slice into memory.
+                photons_chunk = photons_ds[start:stop]
+                out_chunk, hit_count = _transport_rows_chunk(
+                    photons_chunk,
+                    tracer_impl,
+                    source_index_offset=start,
+                    photon_field_names=photon_field_names,
+                )
+                # Persist this slice immediately to keep peak memory bounded.
+                transported_ds[start:stop] = out_chunk
+                transported_count += hit_count
 
         dst.attrs["source_hdf5"] = str(input_path)
         dst.attrs["run_id"] = config.metadata.run_environment.simulation_run_id
@@ -441,9 +490,12 @@ def transport_from_sim_config(
         dst.attrs["transport_engine"] = getattr(
             tracer_impl, "engine_name", tracer_impl.__class__.__name__
         )
+        dst.attrs["transport_chunk_rows"] = int(chunk_rows)
+        dst.attrs["transport_chunk_target_mib"] = float(
+            config.metadata.run_environment.output_info.transport_chunk_target_mib
+        )
         dst.attrs["generated_utc"] = datetime.now(timezone.utc).isoformat()
 
-    total = int(len(rows))
     return TransportSummary(
         input_hdf5=input_path,
         output_hdf5=output_path,
@@ -474,79 +526,137 @@ def _primary_lens_model(config: SimConfig) -> tuple[LensModel, Path | None]:
     return LensModel.from_zmx(lens_path, name=primary_lens.name), smx_path
 
 
-def _transport_rows(
-    input_hdf5_path: Path,
+def _transport_rows_chunk(
+    photons_chunk: np.ndarray,
     tracer: PhotonTransportTracer,
+    *,
+    source_index_offset: int,
+    photon_field_names: tuple[str, ...] | list[str],
 ) -> tuple[np.ndarray, int]:
-    """Build `/transported_photons` structured rows from input `/photons`."""
+    """Build one output chunk for `/transported_photons`.
 
-    with h5py.File(input_hdf5_path, "r") as handle:
-        if "photons" not in handle:
-            raise KeyError(f"Dataset 'photons' not found in {input_hdf5_path}")
-        photons_ds = handle["photons"]
-        photon_field_names = photons_ds.dtype.names or ()
-        _require_photon_fields(photon_field_names, _REQUIRED_PHOTON_FIELDS)
+    The returned array length equals `len(photons_chunk)` and is initialized
+    with NaN intensifier coordinates + `reached_intensifier=False` so misses
+    require no special post-processing.
+    """
 
-        n_photons = len(photons_ds)
-        out = np.zeros(n_photons, dtype=_TRANSPORT_DTYPE)
-        out["source_photon_index"] = np.arange(n_photons, dtype=np.int64)
-        out["intensifier_hit_x_mm"] = np.nan
-        out["intensifier_hit_y_mm"] = np.nan
-        out["intensifier_hit_z_mm"] = np.nan
-        out["reached_intensifier"] = False
+    out = np.zeros(len(photons_chunk), dtype=_TRANSPORT_DTYPE)
+    out["source_photon_index"] = np.arange(
+        source_index_offset,
+        source_index_offset + len(photons_chunk),
+        dtype=np.int64,
+    )
+    out["gun_call_id"] = np.asarray(photons_chunk["gun_call_id"], dtype=np.int64)
+    out["primary_track_id"] = np.asarray(photons_chunk["primary_track_id"], dtype=np.int32)
+    out["secondary_track_id"] = np.asarray(
+        photons_chunk["secondary_track_id"],
+        dtype=np.int32,
+    )
+    out["photon_track_id"] = np.asarray(photons_chunk["photon_track_id"], dtype=np.int32)
+    out["intensifier_hit_x_mm"] = np.nan
+    out["intensifier_hit_y_mm"] = np.nan
+    out["intensifier_hit_z_mm"] = np.nan
+    out["reached_intensifier"] = False
 
-        transported_count = 0
+    transported_count = 0
+    for index, photon in enumerate(photons_chunk):
+        x_mm = float(photon["optical_interface_hit_x_mm"])
+        y_mm = float(photon["optical_interface_hit_y_mm"])
+        dir_x = float(photon["optical_interface_hit_dir_x"])
+        dir_y = float(photon["optical_interface_hit_dir_y"])
+        dir_z = float(photon["optical_interface_hit_dir_z"])
+        wvl_nm = (
+            float(photon["optical_interface_hit_wavelength_nm"])
+            if "optical_interface_hit_wavelength_nm" in photon_field_names
+            else None
+        )
 
-        # Process photons in chunks to avoid loading the entire dataset into memory.
-        chunk_size = 10000
-        for start in range(0, n_photons, chunk_size):
-            stop = min(start + chunk_size, n_photons)
-            photons_chunk = photons_ds[start:stop]
+        if not np.isfinite(x_mm) or not np.isfinite(y_mm):
+            continue
 
-            for offset, photon in enumerate(photons_chunk):
-                index = start + offset
+        hit = tracer.trace_to_sensor(
+            x_mm=x_mm,
+            y_mm=y_mm,
+            dir_x=dir_x,
+            dir_y=dir_y,
+            dir_z=dir_z,
+            wavelength_nm=wvl_nm,
+        )
+        if hit is None:
+            continue
 
-                # Copy identifying fields with appropriate dtypes.
-                out["gun_call_id"][index] = np.int64(photon["gun_call_id"])
-                out["primary_track_id"][index] = np.int32(photon["primary_track_id"])
-                out["secondary_track_id"][index] = np.int32(photon["secondary_track_id"])
-                out["photon_track_id"][index] = np.int32(photon["photon_track_id"])
+        sensor_x, sensor_y, sensor_z = hit
+        if not all(np.isfinite(v) for v in (sensor_x, sensor_y, sensor_z)):
+            continue
 
-                x_mm = float(photon["optical_interface_hit_x_mm"])
-                y_mm = float(photon["optical_interface_hit_y_mm"])
-                dir_x = float(photon["optical_interface_hit_dir_x"])
-                dir_y = float(photon["optical_interface_hit_dir_y"])
-                dir_z = float(photon["optical_interface_hit_dir_z"])
-                wvl_nm = (
-                    float(photon["optical_interface_hit_wavelength_nm"])
-                    if "optical_interface_hit_wavelength_nm" in photon_field_names
-                    else None
-                )
+        out["intensifier_hit_x_mm"][index] = float(sensor_x)
+        out["intensifier_hit_y_mm"][index] = float(sensor_y)
+        out["intensifier_hit_z_mm"][index] = float(sensor_z)
+        out["reached_intensifier"][index] = True
+        transported_count += 1
 
-                if not np.isfinite(x_mm) or not np.isfinite(y_mm):
-                    continue
-
-                hit = tracer.trace_to_sensor(
-                    x_mm=x_mm,
-                    y_mm=y_mm,
-                    dir_x=dir_x,
-                    dir_y=dir_y,
-                    dir_z=dir_z,
-                    wavelength_nm=wvl_nm,
-                )
-                if hit is None:
-                    continue
-
-                sensor_x, sensor_y, sensor_z = hit
-                if not all(np.isfinite(v) for v in (sensor_x, sensor_y, sensor_z)):
-                    continue
-
-                out["intensifier_hit_x_mm"][index] = float(sensor_x)
-                out["intensifier_hit_y_mm"][index] = float(sensor_y)
-                out["intensifier_hit_z_mm"][index] = float(sensor_z)
-                out["reached_intensifier"][index] = True
-                transported_count += 1
     return out, transported_count
+
+
+def _resolve_transport_chunk_rows(
+    config: SimConfig,
+    *,
+    total_rows: int,
+    input_row_nbytes: int,
+    output_row_nbytes: int,
+) -> int:
+    """Resolve effective transport chunk rows from config and row sizes.
+
+    Auto mode uses:
+    `rows = floor(target_mib * 1024^2 / (input_row_nbytes + output_row_nbytes))`
+
+    The final value is clamped to `[1, total_rows]` so chunking is always
+    valid even for tiny inputs or very large target budgets.
+    """
+
+    if total_rows <= 0:
+        return 1
+
+    output_info = config.metadata.run_environment.output_info
+    configured = output_info.transport_chunk_rows
+    if isinstance(configured, int):
+        requested = configured
+    else:
+        row_nbytes = max(1, int(input_row_nbytes) + int(output_row_nbytes))
+        target_nbytes = int(output_info.transport_chunk_target_mib * _MIB)
+        requested = max(1, target_nbytes // row_nbytes)
+
+    return max(1, min(total_rows, int(requested)))
+
+
+def _create_transported_dataset(
+    destination: h5py.File,
+    *,
+    total_rows: int,
+    chunk_rows: int,
+) -> h5py.Dataset:
+    """Create `/transported_photons` dataset with stable row semantics.
+
+    Behavior:
+    - `total_rows == 0`: create empty dataset without explicit chunking.
+    - `total_rows > 0`: create fixed-size chunked dataset using `chunk_rows`.
+
+    This keeps the external file schema unchanged (one dataset in one file)
+    while enabling low-memory incremental writes.
+    """
+
+    if total_rows <= 0:
+        return destination.create_dataset(
+            "transported_photons",
+            shape=(0,),
+            dtype=_TRANSPORT_DTYPE,
+        )
+    return destination.create_dataset(
+        "transported_photons",
+        shape=(total_rows,),
+        dtype=_TRANSPORT_DTYPE,
+        chunks=(chunk_rows,),
+    )
 
 
 def _copy_dataset_if_present(
