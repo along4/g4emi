@@ -67,10 +67,10 @@ pixi run run-vis
 
 ### 2.3 YAML-driven macro generation from Python
 
-Generate a macro from `examples/CanonEF50mmf1p0L_example.yaml`:
+Generate a macro from `examples/yamlFiles/CanonEF50mmf1p0L_example.yaml`:
 
 ```bash
-pixi run python examples/CanonEF50mmf1p0L_example.py
+pixi run python examples/SimulationSetup/CanonEF50mmf1p0L_example.py
 ```
 
 The script prints the generated macro path and a run command. By default (with the current example YAML), the macro is written under:
@@ -87,10 +87,10 @@ pixi run g4emi data/CanonEF50mmf1p0L_run/macros/CanonEF50mmf1p0L_run.mac
 
 ### 2.4 Catalog-based scintillator override example
 
-`examples/scintillatorCataloging/EJ200.yaml` demonstrates:
+`examples/yamlFiles/EJ200.yaml` demonstrates:
 - `scintillator.catalogId: EJ200` baseline hydration from the local catalog.
 - targeted manual overrides in `scintillator.properties` (e.g. `absLength`, `timeComponents`, `scintYield`).
-- `examples/scintillatorCataloging/EJ276D.yaml`
+- `examples/yamlFiles/EJ276D.yaml`
   demonstrates explicit 3-entry `timeComponents` schema usage.
 
 For an actual run, use the Python generator first so output subdirectories
@@ -136,7 +136,7 @@ After generating simulation output (`/photons` optical-interface hits), run:
 
 ```bash
 pixi run python examples/photonTransportation/optical_transport_example.py \
-  examples/SimulationSetup/CanonEF50mmf1p0L_example.yaml
+  examples/yamlFiles/CanonEF50mmf1p0L_example.yaml
 ```
 
 By default this reads:
@@ -158,7 +158,19 @@ The output file contains:
 
 If a photon misses the lens/sensor in ray tracing, its
 `intensifier_hit_*_mm` values are written as `NaN` and
-`reached_intensifier` is `False`.
+  `reached_intensifier` is `False`.
+
+### 2.7 One-step YAML -> run simulation example
+
+To generate the macro and run `g4emi` from one script:
+
+```bash
+pixi run python examples/RunSimulation/run_simulation_from_yaml.py \
+  examples/yamlFiles/CanonEF50mmf1p0L_example.yaml
+```
+
+Useful options:
+- `--dry-run`: write macro + print run command without launching Geant4.
 
 ## 3. Simulation Output Structures
 
