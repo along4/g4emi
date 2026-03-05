@@ -3,12 +3,9 @@
 #include "G4Event.hh"
 #include "G4GeneralParticleSource.hh"
 #include "G4Neutron.hh"
-#include "G4ParticleDefinition.hh"
 
-PrimaryGeneratorAction::PrimaryGeneratorAction() {
-  fGPS = new G4GeneralParticleSource();
-
-  // Safe defaults; macro commands can override all of these.
+PrimaryGeneratorAction::PrimaryGeneratorAction() : fGPS(new G4GeneralParticleSource()) {
+  // Default source particle; macro commands may override it.
   fGPS->SetParticleDefinition(G4Neutron::Definition());
 }
 
