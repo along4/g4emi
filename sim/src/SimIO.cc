@@ -5,45 +5,26 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
-#include <fstream>
 #include <string>
 #include <vector>
 
-/**
- * SimIO centralizes all persistent output writing for the simulation.
- *
- * Design intent:
- * - Event/stepping/tracking code produces semantic row containers.
- * - This module owns the HDF5 schema layout and persistent writes.
- * - HDF5 resources are cached process-wide to avoid re-opening datasets on every
- *   event write.
- *
- * Threading note:
- * - Callers are responsible for external synchronization when multiple threads
- *   may append concurrently (EventAction uses a global mutex).
- */
 namespace SimIO {
 namespace {
-/// Stage subdirectory for raw Geant4-produced photon outputs.
+using Hdf5State = SimStructures::detail::Hdf5State;
+using Hdf5PrimaryNativeRow = SimStructures::detail::Hdf5PrimaryNativeRow;
+using Hdf5SecondaryNativeRow = SimStructures::detail::Hdf5SecondaryNativeRow;
+using Hdf5PhotonNativeRow = SimStructures::detail::Hdf5PhotonNativeRow;
+constexpr std::size_t kSpeciesLabelSize = SimStructures::detail::kHdf5SpeciesLabelSize;
+
+/// Stage subdirectory for raw simulation output.
 constexpr const char* kSimulatedPhotonsDir = "simulatedPhotons";
 
-/**
- * Access the process-global HDF5 writer state singleton.
- *
- * This state stores live HDF5 handles and the currently open path so append
- * operations can reuse open resources across events.
- */
-detail::Hdf5State& GetState() {
-  static detail::Hdf5State state;
+Hdf5State& GetState() {
+  static Hdf5State state;
   return state;
 }
 
-/**
- * Close all open HDF5 handles currently tracked by the global writer state.
- *
- * This function is idempotent: it checks each handle before closing and resets
- * handle fields to invalid sentinel values afterwards.
- */
+// Close all open HDF5 handles in the cached writer state.
 void CloseAll() {
   auto& s = GetState();
   if (s.primariesDs >= 0) {
@@ -77,25 +58,12 @@ void CloseAll() {
   s.openPath.clear();
 }
 
-/**
- * Copy a species label from std::string into a fixed-size null-terminated
- * character buffer used by HDF5 compound rows.
- */
-void CopyLabel(const std::string& in, char out[detail::kSpeciesLabelSize]) {
-  std::memset(out, 0, detail::kSpeciesLabelSize);
-  std::strncpy(out, in.c_str(), detail::kSpeciesLabelSize - 1);
+void CopyLabel(const std::string& in, char out[kSpeciesLabelSize]) {
+  std::memset(out, 0, kSpeciesLabelSize);
+  std::strncpy(out, in.c_str(), kSpeciesLabelSize - 1);
 }
 
-/**
- * Verify parent directory exists for an output file path.
- *
- * Returns true when:
- * - file has no parent directory (current directory target), or
- * - parent directory already exists.
- *
- * Directory creation is intentionally handled by Python config utilities
- * (`ConfigIO`) so runtime IO remains a pure validation/write layer.
- */
+// Validate that an output file path has an existing parent directory.
 bool EnsureParentDirectory(const std::string& filePath) {
   const std::filesystem::path path(filePath);
   const std::filesystem::path parent = path.parent_path();
@@ -107,11 +75,6 @@ bool EnsureParentDirectory(const std::string& filePath) {
   return std::filesystem::exists(parent, ec) && !ec;
 }
 
-/**
- * Create an HDF5 fixed-length C-string type with explicit null termination.
- *
- * Caller owns the returned type handle and must close it with H5Tclose.
- */
 hid_t CreateFixedStringType(std::size_t size) {
   const hid_t t = H5Tcopy(H5T_C_S1);
   H5Tset_size(t, size);
@@ -119,15 +82,7 @@ hid_t CreateFixedStringType(std::size_t size) {
   return t;
 }
 
-/**
- * Open an existing 1D extendable dataset or create it if missing.
- *
- * Dataset properties:
- * - rank: 1
- * - initial size: 0 rows
- * - max size: unlimited
- * - chunk size: 4096 rows for append efficiency
- */
+// Open an existing 1D extendable dataset or create it if missing.
 hid_t CreateExtendableDataset(hid_t file, const char* name, hid_t rowType) {
   if (H5Lexists(file, name, H5P_DEFAULT) > 0) {
     return H5Dopen2(file, name, H5P_DEFAULT);
@@ -148,15 +103,6 @@ hid_t CreateExtendableDataset(hid_t file, const char* name, hid_t rowType) {
   return ds;
 }
 
-/**
- * Append native POD rows into an extendable HDF5 dataset.
- *
- * Workflow:
- * 1. Query current dataset extent.
- * 2. Extend extent by nRows.
- * 3. Select a hyperslab at the appended region.
- * 4. Write caller-provided contiguous row block.
- */
 bool AppendNativeRows(hid_t dataset,
                       hid_t rowType,
                       const void* data,
@@ -189,19 +135,7 @@ bool AppendNativeRows(hid_t dataset,
   return writeStatus >= 0;
 }
 
-/**
- * Ensure the HDF5 writer is initialized for the requested file path.
- *
- * Behavior:
- * - Reuses existing open handles when the same path is requested.
- * - Closes and reopens all handles when path changes.
- * - Opens existing file in read/write mode, otherwise creates a new file.
- * - Ensures required datasets and compound row types are ready.
- *
- * Schema compatibility note:
- * - Existing datasets are opened as-is and are not migrated in place.
- * - New HDF5 fields appear when `/photons` is created in a fresh file.
- */
+// Ensure cached HDF5 handles are initialized for the target output file.
 bool EnsureReady(const std::string& hdf5Path, std::string* errorMessage) {
   auto& s = GetState();
   if (s.file >= 0 && s.openPath == hdf5Path) {
@@ -219,14 +153,11 @@ bool EnsureReady(const std::string& hdf5Path, std::string* errorMessage) {
     return false;
   }
 
-  {
-    std::ifstream in(hdf5Path);
-    if (in.good()) {
-      s.file = H5Fopen(hdf5Path.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
-    } else {
-      s.file =
-          H5Fcreate(hdf5Path.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
-    }
+  std::error_code existsEc;
+  if (std::filesystem::exists(hdf5Path, existsEc) && !existsEc) {
+    s.file = H5Fopen(hdf5Path.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
+  } else {
+    s.file = H5Fcreate(hdf5Path.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
   }
   if (s.file < 0) {
     if (errorMessage) {
@@ -237,130 +168,128 @@ bool EnsureReady(const std::string& hdf5Path, std::string* errorMessage) {
 
   s.openPath = hdf5Path;
 
-  const hid_t speciesType = CreateFixedStringType(detail::kSpeciesLabelSize);
+  const hid_t speciesType = CreateFixedStringType(kSpeciesLabelSize);
 
-  s.primaryType = H5Tcreate(H5T_COMPOUND, sizeof(detail::Hdf5PrimaryNativeRow));
+  s.primaryType = H5Tcreate(H5T_COMPOUND, sizeof(Hdf5PrimaryNativeRow));
   H5Tinsert(s.primaryType, "gun_call_id",
-            HOFFSET(detail::Hdf5PrimaryNativeRow, gun_call_id),
+            HOFFSET(Hdf5PrimaryNativeRow, gun_call_id),
             H5T_NATIVE_INT64);
   H5Tinsert(s.primaryType, "primary_track_id",
-            HOFFSET(detail::Hdf5PrimaryNativeRow, primary_track_id), H5T_NATIVE_INT32);
+            HOFFSET(Hdf5PrimaryNativeRow, primary_track_id), H5T_NATIVE_INT32);
   H5Tinsert(s.primaryType, "primary_species",
-            HOFFSET(detail::Hdf5PrimaryNativeRow, primary_species), speciesType);
+            HOFFSET(Hdf5PrimaryNativeRow, primary_species), speciesType);
   H5Tinsert(s.primaryType, "primary_x_mm",
-            HOFFSET(detail::Hdf5PrimaryNativeRow, primary_x_mm),
+            HOFFSET(Hdf5PrimaryNativeRow, primary_x_mm),
             H5T_NATIVE_DOUBLE);
   H5Tinsert(s.primaryType, "primary_y_mm",
-            HOFFSET(detail::Hdf5PrimaryNativeRow, primary_y_mm),
+            HOFFSET(Hdf5PrimaryNativeRow, primary_y_mm),
             H5T_NATIVE_DOUBLE);
   H5Tinsert(s.primaryType, "primary_energy_MeV",
-            HOFFSET(detail::Hdf5PrimaryNativeRow, primary_energy_MeV),
+            HOFFSET(Hdf5PrimaryNativeRow, primary_energy_MeV),
             H5T_NATIVE_DOUBLE);
   H5Tinsert(s.primaryType, "primary_t0_time_ns",
-            HOFFSET(detail::Hdf5PrimaryNativeRow, primary_t0_time_ns),
+            HOFFSET(Hdf5PrimaryNativeRow, primary_t0_time_ns),
             H5T_NATIVE_DOUBLE);
   H5Tinsert(s.primaryType, "primary_created_secondary_count",
-            HOFFSET(detail::Hdf5PrimaryNativeRow, primary_created_secondary_count),
+            HOFFSET(Hdf5PrimaryNativeRow, primary_created_secondary_count),
             H5T_NATIVE_INT64);
   H5Tinsert(s.primaryType, "primary_generated_optical_photon_count",
-            HOFFSET(detail::Hdf5PrimaryNativeRow,
-                    primary_generated_optical_photon_count),
+            HOFFSET(Hdf5PrimaryNativeRow, primary_generated_optical_photon_count),
             H5T_NATIVE_INT64);
   H5Tinsert(s.primaryType, "primary_detected_optical_interface_photon_count",
-            HOFFSET(detail::Hdf5PrimaryNativeRow,
+            HOFFSET(Hdf5PrimaryNativeRow,
                     primary_detected_optical_interface_photon_count),
             H5T_NATIVE_INT64);
 
-  s.secondaryType = H5Tcreate(H5T_COMPOUND, sizeof(detail::Hdf5SecondaryNativeRow));
+  s.secondaryType = H5Tcreate(H5T_COMPOUND, sizeof(Hdf5SecondaryNativeRow));
   H5Tinsert(s.secondaryType, "gun_call_id",
-            HOFFSET(detail::Hdf5SecondaryNativeRow, gun_call_id), H5T_NATIVE_INT64);
+            HOFFSET(Hdf5SecondaryNativeRow, gun_call_id), H5T_NATIVE_INT64);
   H5Tinsert(s.secondaryType, "primary_track_id",
-            HOFFSET(detail::Hdf5SecondaryNativeRow, primary_track_id),
-            H5T_NATIVE_INT32);
+            HOFFSET(Hdf5SecondaryNativeRow, primary_track_id), H5T_NATIVE_INT32);
   H5Tinsert(s.secondaryType, "secondary_track_id",
-            HOFFSET(detail::Hdf5SecondaryNativeRow, secondary_track_id),
+            HOFFSET(Hdf5SecondaryNativeRow, secondary_track_id),
             H5T_NATIVE_INT32);
   H5Tinsert(s.secondaryType, "secondary_species",
-            HOFFSET(detail::Hdf5SecondaryNativeRow, secondary_species), speciesType);
+            HOFFSET(Hdf5SecondaryNativeRow, secondary_species), speciesType);
   H5Tinsert(s.secondaryType, "secondary_origin_x_mm",
-            HOFFSET(detail::Hdf5SecondaryNativeRow, secondary_origin_x_mm),
+            HOFFSET(Hdf5SecondaryNativeRow, secondary_origin_x_mm),
             H5T_NATIVE_DOUBLE);
   H5Tinsert(s.secondaryType, "secondary_origin_y_mm",
-            HOFFSET(detail::Hdf5SecondaryNativeRow, secondary_origin_y_mm),
+            HOFFSET(Hdf5SecondaryNativeRow, secondary_origin_y_mm),
             H5T_NATIVE_DOUBLE);
   H5Tinsert(s.secondaryType, "secondary_origin_z_mm",
-            HOFFSET(detail::Hdf5SecondaryNativeRow, secondary_origin_z_mm),
+            HOFFSET(Hdf5SecondaryNativeRow, secondary_origin_z_mm),
             H5T_NATIVE_DOUBLE);
   H5Tinsert(s.secondaryType, "secondary_origin_energy_MeV",
-            HOFFSET(detail::Hdf5SecondaryNativeRow, secondary_origin_energy_MeV),
+            HOFFSET(Hdf5SecondaryNativeRow, secondary_origin_energy_MeV),
             H5T_NATIVE_DOUBLE);
 
-  s.photonType = H5Tcreate(H5T_COMPOUND, sizeof(detail::Hdf5PhotonNativeRow));
+  s.photonType = H5Tcreate(H5T_COMPOUND, sizeof(Hdf5PhotonNativeRow));
   H5Tinsert(s.photonType, "gun_call_id",
-            HOFFSET(detail::Hdf5PhotonNativeRow, gun_call_id),
+            HOFFSET(Hdf5PhotonNativeRow, gun_call_id),
             H5T_NATIVE_INT64);
   H5Tinsert(s.photonType, "primary_track_id",
-            HOFFSET(detail::Hdf5PhotonNativeRow, primary_track_id), H5T_NATIVE_INT32);
+            HOFFSET(Hdf5PhotonNativeRow, primary_track_id), H5T_NATIVE_INT32);
   H5Tinsert(s.photonType, "secondary_track_id",
-            HOFFSET(detail::Hdf5PhotonNativeRow, secondary_track_id),
+            HOFFSET(Hdf5PhotonNativeRow, secondary_track_id),
             H5T_NATIVE_INT32);
   H5Tinsert(s.photonType, "photon_track_id",
-            HOFFSET(detail::Hdf5PhotonNativeRow, photon_track_id), H5T_NATIVE_INT32);
+            HOFFSET(Hdf5PhotonNativeRow, photon_track_id), H5T_NATIVE_INT32);
   H5Tinsert(s.photonType, "photon_creation_time_ns",
-            HOFFSET(detail::Hdf5PhotonNativeRow, photon_creation_time_ns),
+            HOFFSET(Hdf5PhotonNativeRow, photon_creation_time_ns),
             H5T_NATIVE_DOUBLE);
   H5Tinsert(s.photonType, "photon_origin_x_mm",
-            HOFFSET(detail::Hdf5PhotonNativeRow, photon_origin_x_mm),
+            HOFFSET(Hdf5PhotonNativeRow, photon_origin_x_mm),
             H5T_NATIVE_DOUBLE);
   H5Tinsert(s.photonType, "photon_origin_y_mm",
-            HOFFSET(detail::Hdf5PhotonNativeRow, photon_origin_y_mm),
+            HOFFSET(Hdf5PhotonNativeRow, photon_origin_y_mm),
             H5T_NATIVE_DOUBLE);
   H5Tinsert(s.photonType, "photon_origin_z_mm",
-            HOFFSET(detail::Hdf5PhotonNativeRow, photon_origin_z_mm),
+            HOFFSET(Hdf5PhotonNativeRow, photon_origin_z_mm),
             H5T_NATIVE_DOUBLE);
   H5Tinsert(s.photonType, "photon_scint_exit_x_mm",
-            HOFFSET(detail::Hdf5PhotonNativeRow, photon_scint_exit_x_mm),
+            HOFFSET(Hdf5PhotonNativeRow, photon_scint_exit_x_mm),
             H5T_NATIVE_DOUBLE);
   H5Tinsert(s.photonType, "photon_scint_exit_y_mm",
-            HOFFSET(detail::Hdf5PhotonNativeRow, photon_scint_exit_y_mm),
+            HOFFSET(Hdf5PhotonNativeRow, photon_scint_exit_y_mm),
             H5T_NATIVE_DOUBLE);
   H5Tinsert(s.photonType, "photon_scint_exit_z_mm",
-            HOFFSET(detail::Hdf5PhotonNativeRow, photon_scint_exit_z_mm),
+            HOFFSET(Hdf5PhotonNativeRow, photon_scint_exit_z_mm),
             H5T_NATIVE_DOUBLE);
   H5Tinsert(s.photonType, "optical_interface_hit_x_mm",
-            HOFFSET(detail::Hdf5PhotonNativeRow, optical_interface_hit_x_mm),
+            HOFFSET(Hdf5PhotonNativeRow, optical_interface_hit_x_mm),
             H5T_NATIVE_DOUBLE);
   H5Tinsert(s.photonType, "optical_interface_hit_y_mm",
-            HOFFSET(detail::Hdf5PhotonNativeRow, optical_interface_hit_y_mm),
+            HOFFSET(Hdf5PhotonNativeRow, optical_interface_hit_y_mm),
             H5T_NATIVE_DOUBLE);
   H5Tinsert(s.photonType, "optical_interface_hit_time_ns",
-            HOFFSET(detail::Hdf5PhotonNativeRow, optical_interface_hit_time_ns),
+            HOFFSET(Hdf5PhotonNativeRow, optical_interface_hit_time_ns),
             H5T_NATIVE_DOUBLE);
 
-  // Optical-interface crossing optical state used for downstream lens/ray propagation.
+  // Optical-interface state at crossing for downstream transport.
   H5Tinsert(s.photonType, "optical_interface_hit_dir_x",
-            HOFFSET(detail::Hdf5PhotonNativeRow, optical_interface_hit_dir_x),
+            HOFFSET(Hdf5PhotonNativeRow, optical_interface_hit_dir_x),
             H5T_NATIVE_DOUBLE);
   H5Tinsert(s.photonType, "optical_interface_hit_dir_y",
-            HOFFSET(detail::Hdf5PhotonNativeRow, optical_interface_hit_dir_y),
+            HOFFSET(Hdf5PhotonNativeRow, optical_interface_hit_dir_y),
             H5T_NATIVE_DOUBLE);
   H5Tinsert(s.photonType, "optical_interface_hit_dir_z",
-            HOFFSET(detail::Hdf5PhotonNativeRow, optical_interface_hit_dir_z),
+            HOFFSET(Hdf5PhotonNativeRow, optical_interface_hit_dir_z),
             H5T_NATIVE_DOUBLE);
   H5Tinsert(s.photonType, "optical_interface_hit_pol_x",
-            HOFFSET(detail::Hdf5PhotonNativeRow, optical_interface_hit_pol_x),
+            HOFFSET(Hdf5PhotonNativeRow, optical_interface_hit_pol_x),
             H5T_NATIVE_DOUBLE);
   H5Tinsert(s.photonType, "optical_interface_hit_pol_y",
-            HOFFSET(detail::Hdf5PhotonNativeRow, optical_interface_hit_pol_y),
+            HOFFSET(Hdf5PhotonNativeRow, optical_interface_hit_pol_y),
             H5T_NATIVE_DOUBLE);
   H5Tinsert(s.photonType, "optical_interface_hit_pol_z",
-            HOFFSET(detail::Hdf5PhotonNativeRow, optical_interface_hit_pol_z),
+            HOFFSET(Hdf5PhotonNativeRow, optical_interface_hit_pol_z),
             H5T_NATIVE_DOUBLE);
   H5Tinsert(s.photonType, "optical_interface_hit_energy_eV",
-            HOFFSET(detail::Hdf5PhotonNativeRow, optical_interface_hit_energy_eV),
+            HOFFSET(Hdf5PhotonNativeRow, optical_interface_hit_energy_eV),
             H5T_NATIVE_DOUBLE);
   H5Tinsert(s.photonType, "optical_interface_hit_wavelength_nm",
-            HOFFSET(detail::Hdf5PhotonNativeRow, optical_interface_hit_wavelength_nm),
+            HOFFSET(Hdf5PhotonNativeRow, optical_interface_hit_wavelength_nm),
             H5T_NATIVE_DOUBLE);
 
   H5Tclose(speciesType);
@@ -384,15 +313,11 @@ bool EnsureReady(const std::string& hdf5Path, std::string* errorMessage) {
   return true;
 }
 
-/**
- * Convert semantic primary row containers into HDF5-native POD rows.
- */
-std::vector<detail::Hdf5PrimaryNativeRow> ToNative(
-    const std::vector<PrimaryInfo>& rows) {
-  std::vector<detail::Hdf5PrimaryNativeRow> out;
+std::vector<Hdf5PrimaryNativeRow> ToNative(const std::vector<PrimaryInfo>& rows) {
+  std::vector<Hdf5PrimaryNativeRow> out;
   out.reserve(rows.size());
   for (const auto& row : rows) {
-    detail::Hdf5PrimaryNativeRow native{};
+    Hdf5PrimaryNativeRow native{};
     native.gun_call_id = row.gunCallId;
     native.primary_track_id = row.primaryTrackId;
     CopyLabel(row.primarySpecies, native.primary_species);
@@ -410,15 +335,11 @@ std::vector<detail::Hdf5PrimaryNativeRow> ToNative(
   return out;
 }
 
-/**
- * Convert semantic secondary row containers into HDF5-native POD rows.
- */
-std::vector<detail::Hdf5SecondaryNativeRow> ToNative(
-    const std::vector<SecondaryInfo>& rows) {
-  std::vector<detail::Hdf5SecondaryNativeRow> out;
+std::vector<Hdf5SecondaryNativeRow> ToNative(const std::vector<SecondaryInfo>& rows) {
+  std::vector<Hdf5SecondaryNativeRow> out;
   out.reserve(rows.size());
   for (const auto& row : rows) {
-    detail::Hdf5SecondaryNativeRow native{};
+    Hdf5SecondaryNativeRow native{};
     native.gun_call_id = row.gunCallId;
     native.primary_track_id = row.primaryTrackId;
     native.secondary_track_id = row.secondaryTrackId;
@@ -432,19 +353,11 @@ std::vector<detail::Hdf5SecondaryNativeRow> ToNative(
   return out;
 }
 
-/**
- * Convert semantic photon row containers into HDF5-native POD rows.
- *
- * This maps one semantic PhotonInfo row into the exact `/photons` binary
- * layout, including optical-interface crossing position, direction, polarization,
- * timing, and spectrally relevant fields (energy and wavelength).
- */
-std::vector<detail::Hdf5PhotonNativeRow> ToNative(
-    const std::vector<PhotonInfo>& rows) {
-  std::vector<detail::Hdf5PhotonNativeRow> out;
+std::vector<Hdf5PhotonNativeRow> ToNative(const std::vector<PhotonInfo>& rows) {
+  std::vector<Hdf5PhotonNativeRow> out;
   out.reserve(rows.size());
   for (const auto& row : rows) {
-    detail::Hdf5PhotonNativeRow native{};
+    Hdf5PhotonNativeRow native{};
     native.gun_call_id = row.gunCallId;
     native.primary_track_id = row.primaryTrackId;
     native.secondary_track_id = row.secondaryTrackId;
@@ -473,14 +386,7 @@ std::vector<detail::Hdf5PhotonNativeRow> ToNative(
 }
 }  // namespace
 
-/**
- * Normalize a user-provided run-name into a single directory-safe token.
- *
- * Transformations:
- * - Trim leading/trailing whitespace.
- * - Remove one layer of matching single or double quotes.
- * - Replace path separators and embedded whitespace with underscores.
- */
+// Normalize a run name into a directory-safe token.
 std::string NormalizeRunName(const std::string& value) {
   std::string normalized = Utils::Unquote(Utils::Trim(value));
 
@@ -494,11 +400,7 @@ std::string NormalizeRunName(const std::string& value) {
   return normalized;
 }
 
-/**
- * Strip a known output extension from a base file name/path.
- *
- * Recognized extensions are `.h5` and `.hdf5` (case-insensitive).
- */
+// Strip `.h5`/`.hdf5` suffixes (case-insensitive) when present.
 std::string StripKnownOutputExtension(const std::string& value) {
   const std::filesystem::path path(value);
   const std::string ext = Utils::ToLower(path.extension().string());
@@ -511,9 +413,7 @@ std::string StripKnownOutputExtension(const std::string& value) {
   return base.string();
 }
 
-/**
- * Resolve a filesystem path against repository-root context when relative.
- */
+// Resolve a relative path against repository root (or cwd fallback).
 std::filesystem::path ResolveAgainstRepositoryRoot(std::filesystem::path path) {
   if (!path.is_relative()) {
     return path;
@@ -525,12 +425,7 @@ std::filesystem::path ResolveAgainstRepositoryRoot(std::filesystem::path path) {
 #endif
 }
 
-/**
- * Ensure simulation outputs are grouped under the `simulatedPhotons` stage dir.
- *
- * This avoids writing simulation and downstream-transport products into the
- * same directory as the workflow expands (for example transportedPhotons).
- */
+// Ensure simulation outputs live under the `simulatedPhotons` stage directory.
 std::filesystem::path AppendSimulatedPhotonsDir(std::filesystem::path root) {
   if (root.filename() == kSimulatedPhotonsDir) {
     return root;
@@ -538,10 +433,7 @@ std::filesystem::path AppendSimulatedPhotonsDir(std::filesystem::path root) {
   return root / kSimulatedPhotonsDir;
 }
 
-/**
- * Compose an absolute output file path from base name, optional output-path
- * override, optional run-name, and output extension.
- */
+// Compose absolute output path from base name, output path override, and run name.
 std::string ComposeOutputPath(const std::string& base,
                               const std::string& outputPath,
                               const std::string& runName,
@@ -564,8 +456,7 @@ std::string ComposeOutputPath(const std::string& base,
   }
 
   if (runName.empty()) {
-    // No explicit output-path override and no run name: preserve base-path
-    // parent semantics, but place simulation output under simulatedPhotons/.
+    // No output override and no run name: use base parent + simulatedPhotons/.
     std::filesystem::path root = basePath.parent_path();
     if (root.empty()) {
 #ifdef G4EMI_REPO_ROOT
@@ -578,8 +469,7 @@ std::string ComposeOutputPath(const std::string& base,
     return (root / baseLeaf).string() + extension;
   }
 
-  // Run-name routing without explicit output path uses data/<runName>/ and
-  // then places simulation output under simulatedPhotons/.
+  // With run name and no output override, route through data/<runName>/simulatedPhotons.
 #ifdef G4EMI_REPO_ROOT
   std::filesystem::path runDir =
       std::filesystem::path(G4EMI_REPO_ROOT) / "data" / runName;
@@ -592,15 +482,7 @@ std::string ComposeOutputPath(const std::string& base,
   return (runDir / baseLeaf).string() + extension;
 }
 
-/**
- * Append semantic primary/secondary/photon containers into the HDF5 file.
- *
- * Dataset mapping:
- * - /primaries   <- primaryRows
- * - /secondaries <- secondaryRows
- * - /photons     <- photonRows (includes optical-interface crossing direction,
- *                   polarization, timing, energy, wavelength)
- */
+// Append semantic row containers into /primaries, /secondaries, and /photons.
 bool AppendHdf5(const std::string& hdf5Path,
                 const std::vector<PrimaryInfo>& primaryRows,
                 const std::vector<SecondaryInfo>& secondaryRows,

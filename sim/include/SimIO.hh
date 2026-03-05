@@ -13,62 +13,19 @@ using PrimaryInfo = SimStructures::PrimaryInfo;
 using SecondaryInfo = SimStructures::SecondaryInfo;
 using PhotonInfo = SimStructures::PhotonInfo;
 
-namespace detail {
-
-/// Fixed width for species labels in HDF5 native row structures.
-constexpr std::size_t kSpeciesLabelSize = SimStructures::detail::kHdf5SpeciesLabelSize;
-/// Native in-memory row type used for `/primaries` HDF5 dataset writes.
-using Hdf5PrimaryNativeRow = SimStructures::detail::Hdf5PrimaryNativeRow;
-/// Native in-memory row type used for `/secondaries` HDF5 dataset writes.
-using Hdf5SecondaryNativeRow = SimStructures::detail::Hdf5SecondaryNativeRow;
-/// Native in-memory row type used for `/photons` HDF5 dataset writes.
-using Hdf5PhotonNativeRow = SimStructures::detail::Hdf5PhotonNativeRow;
-/// Internal HDF5-handle cache/state.
-using Hdf5State = SimStructures::detail::Hdf5State;
-
-}  // namespace detail
-
-/**
- * Normalize a user-provided run-name into a single directory-safe token.
- *
- * Transformations:
- * - Trim leading/trailing whitespace.
- * - Remove one layer of matching single or double quotes.
- * - Replace path separators and embedded whitespace with underscores.
- */
+/// Normalize run name for filesystem-safe directory usage.
 std::string NormalizeRunName(const std::string& value);
 
-/**
- * Strip a known output extension from a base file name/path.
- *
- * Recognized extensions are `.h5` and `.hdf5` (case-insensitive).
- * Unknown extensions are preserved as-is.
- */
+/// Strip `.h5` or `.hdf5` suffixes (case-insensitive) when present.
 std::string StripKnownOutputExtension(const std::string& value);
 
-/**
- * Compose an absolute output file path from base name, optional output-path
- * override, optional run-name, and file extension.
- *
- * Behavior summary:
- * - If `outputPath` is empty:
- *   - `runName` empty    -> route to `<baseParent>/simulatedPhotons/`.
- *   - `runName` nonempty -> route into repository
- *                           `data/<runName>/simulatedPhotons/`.
- * - If `outputPath` is set:
- *   - `runName` empty    -> write to
- *                           `<outputPath>/simulatedPhotons/<baseLeaf><extension>`.
- *   - `runName` nonempty -> write to
- *                           `<outputPath>/<runName>/simulatedPhotons/<baseLeaf><extension>`.
- *
- * Relative paths are anchored to the repository root.
- */
+/// Compose absolute output file path with run/output-path routing rules.
 std::string ComposeOutputPath(const std::string& base,
                               const std::string& outputPath,
                               const std::string& runName,
                               const char* extension);
 
-/// Append primary/secondary/photon rows to structured HDF5 datasets.
+/// Append primary/secondary/photon rows to HDF5 datasets.
 bool AppendHdf5(const std::string& hdf5Path,
                 const std::vector<PrimaryInfo>& primaryRows,
                 const std::vector<SecondaryInfo>& secondaryRows,

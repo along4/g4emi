@@ -7,20 +7,20 @@ class DetectorConstruction;
 class EventAction;
 class G4Step;
 
-/// Per-step hook for scoring deposition and optical-photon context capture.
+/// Per-step hook that records scintillator interactions and photon context.
 class SteppingAction : public G4UserSteppingAction {
  public:
-  /// Requires detector/scoring-volume access plus event-level accumulator.
+  /// Requires detector geometry access and event-level accumulator.
   SteppingAction(const DetectorConstruction* detector, EventAction* eventAction);
   ~SteppingAction() override = default;
 
-  /// Called each transport step; filtered to scintillator scoring volume.
+  /// Process one Geant4 step (filtered to the scintillator scoring volume).
   void UserSteppingAction(const G4Step* step) override;
 
  private:
-  /// Geometry access (especially scoring volume pointer).
+  /// Geometry access (for scoring-volume lookup).
   const DetectorConstruction* fDetector = nullptr;
-  /// Event-local state sink.
+  /// Event-local sink for recorded step-derived state.
   EventAction* fEventAction = nullptr;
 };
 
