@@ -121,18 +121,10 @@ class Config {
   G4double GetScintResolutionScale() const;
   /// Set scintillation resolution scale.
   void SetScintResolutionScale(G4double value);
-  /// Get all scintillation decay time constants in Geant4 internal units.
-  std::array<G4double, 3> GetScintTimeConstants() const;
-  /// Set all scintillation decay time constants in Geant4 internal units.
-  void SetScintTimeConstants(const std::array<G4double, 3>& values);
   /// Get one scintillation decay time constant by 1-based component index.
   G4double GetScintTimeConstant(G4int componentIndex) const;
   /// Set one scintillation decay time constant by 1-based component index.
   void SetScintTimeConstant(G4int componentIndex, G4double value);
-  /// Get all scintillation yield fractions (components 1..3).
-  std::array<G4double, 3> GetScintYieldFractions() const;
-  /// Set all scintillation yield fractions (components 1..3).
-  void SetScintYieldFractions(const std::array<G4double, 3>& values);
   /// Get one scintillation yield fraction by 1-based component index.
   G4double GetScintYieldFraction(G4int componentIndex) const;
   /// Set one scintillation yield fraction by 1-based component index.
