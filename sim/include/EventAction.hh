@@ -5,6 +5,7 @@
 #include "G4Types.hh"
 #include "G4UserEventAction.hh"
 
+#include <cstdint>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -13,10 +14,10 @@ class G4Event;
 class G4Track;
 class Config;
 
-/// Per-event aggregation and output-dispatch action.
+/// Per-event aggregation and HDF5 row assembly.
 class EventAction : public G4UserEventAction {
  public:
-  /// Per-track origin and ancestry metadata cached within an event.
+  /// Track metadata cached by track ID.
   struct TrackInfo {
     std::string species = "unknown";
     G4ThreeVector originPosition;
@@ -24,7 +25,7 @@ class EventAction : public G4UserEventAction {
     G4int primaryTrackID = -1;
   };
 
-  /// Photon creation metadata resolved from tracking/stepping callbacks.
+  /// Optical-photon ancestry and creation context.
   struct PhotonCreationInfo {
     G4int primaryTrackID = -1;
     G4int secondaryTrackID = -1;
@@ -34,126 +35,88 @@ class EventAction : public G4UserEventAction {
     G4double secondaryOriginEnergy = -1.0;
   };
 
-  /// Finalized optical-interface-hit record (one entry per detected optical photon).
+  /// Per-primary activity counters accumulated during stepping/hit capture.
+  struct PrimaryActivity {
+    std::int64_t createdSecondaryCount = 0;
+    std::int64_t generatedOpticalPhotonCount = 0;
+    std::int64_t detectedOpticalInterfacePhotonCount = 0;
+  };
+
+  /// One detected optical-interface photon hit.
   struct PhotonHitRecord {
-    /// Geant4 track IDs (event-local).
     G4int primaryID = -1;
     G4int secondaryID = -1;
     G4int photonID = -1;
 
-    /// Event primary metadata carried into each hit row for convenience.
     std::string primarySpecies = "unknown";
     G4double primaryX = -1.0;
     G4double primaryY = -1.0;
 
-    /// Parent-secondary metadata resolved during ancestry reconstruction.
     std::string secondarySpecies = "unknown";
     G4ThreeVector secondaryOriginPosition;
     G4double secondaryOriginEnergy = -1.0;
 
-    /// Optical-photon creation point inside the scintillator volume.
     G4ThreeVector scintOriginPosition;
-    /// Last recorded point where this photon crossed out of the scintillator volume.
     G4ThreeVector photonScintExitPosition;
-    /// True when a scintillator-exit crossing was captured for this photon.
     G4bool hasPhotonScintExitPosition = false;
 
-    /// Optical-interface crossing position (world frame) at pre-step boundary entry.
     G4ThreeVector opticalInterfaceHitPosition;
-    /// Global time at optical-interface crossing (Geant4 internal time units).
     G4double opticalInterfaceHitTime = -1.0;
-    /// Unit momentum-direction vector (dx,dy,dz) at optical-interface crossing.
     G4ThreeVector opticalInterfaceHitDirection;
-    /// Polarization vector at optical-interface crossing (world frame components).
     G4ThreeVector opticalInterfaceHitPolarization;
-    /// Optical-photon creation global time (Geant4 internal time units).
     G4double photonCreationTime = -1.0;
-    /// Photon total energy at optical-interface crossing (Geant4 internal energy units).
     G4double opticalInterfaceHitEnergy = -1.0;
-    /// Photon wavelength at optical-interface crossing (Geant4 length units).
     G4double opticalInterfaceHitWavelength = -1.0;
   };
 
-  /// Stores pointer to shared run configuration.
   explicit EventAction(const Config* config);
   ~EventAction() override;
 
-  /// Returns thread-local `EventAction` instance for current worker.
   static EventAction* Instance();
 
-  /// Reset per-event state and cache primary input metadata.
   void BeginOfEventAction(const G4Event* event) override;
-  /// Finalize rows and delegate writing to SimIO.
   void EndOfEventAction(const G4Event* event) override;
 
-  /// Accumulate scintillator energy deposition for this event.
-  void AddEdep(G4double edep) { fEdep += edep; }
-  /// Cache per-track metadata by Geant4 track ID.
   void RecordTrackInfo(G4int trackID, const TrackInfo& info);
-  /// Retrieve cached track metadata (or nullptr when missing).
   const TrackInfo* FindTrackInfo(G4int trackID) const;
 
-  /// Cache resolved optical-photon creation context.
   void RecordPhotonCreationInfo(G4int photonTrackID, const PhotonCreationInfo& info);
-  /// Retrieve photon creation context (or nullptr when missing).
   const PhotonCreationInfo* FindPhotonCreationInfo(G4int photonTrackID) const;
-  /// Store stepping-time optical-photon origin before tracking callback runs.
   void RecordPendingPhotonOrigin(const G4Track* photonTrack,
                                  const G4ThreeVector& origin);
-  /// Retrieve-and-remove pending origin; returns false when none exists.
   bool ConsumePendingPhotonOrigin(const G4Track* photonTrack,
                                   G4ThreeVector* origin);
-  /// Record/update the most recent scintillator-exit boundary point for a photon.
   void RecordPhotonScintillatorExit(G4int photonTrackID,
                                     const G4ThreeVector& position);
-  /// Retrieve-and-remove scintillator-exit point by photon track ID.
   bool ConsumePhotonScintillatorExit(G4int photonTrackID,
                                      G4ThreeVector* position);
 
-  /// Append one finalized optical-interface hit including crossing ray state metadata.
   void RecordPhotonHit(const PhotonHitRecord& hit);
-  /// Event primary species label.
   const std::string& GetPrimarySpecies() const { return fPrimarySpecies; }
-  /// Event primary origin position.
   const G4ThreeVector& GetPrimaryPosition() const { return fPrimaryPosition; }
-  /// Event primary kinetic energy at source.
-  G4double GetPrimaryEnergy() const { return fPrimaryEnergy; }
-  /// Event primary start time (Geant4 internal time units).
-  G4double GetPrimaryT0Time() const { return fPrimaryT0Time; }
-  /// Record earliest primary-neutron interaction time inside scintillator.
+
+  /// Called from stepping when first non-transportation primary step is seen.
   void RecordPrimaryScintillatorFirstInteraction(G4int primaryTrackID,
                                                  G4double globalTime);
-  /// Look up earliest recorded primary-neutron scintillator interaction time.
-  const G4double* FindPrimaryScintillatorFirstInteractionTime(
-      G4int primaryTrackID) const;
+
+  /// Called from stepping for each created secondary in scintillator.
+  void RecordPrimarySecondaryCreation(G4int primaryTrackID,
+                                      G4bool generatedOpticalPhoton);
 
  private:
-  /// Thread-local singleton pointer used by SD/tracking helpers.
   static G4ThreadLocal EventAction* fgInstance;
 
-  /// Total energy deposited in scoring volume for current event.
-  G4double fEdep = 0.0;
-  /// Shared runtime configuration.
   const Config* fConfig = nullptr;
-  /// Primary particle label for current event.
   std::string fPrimarySpecies = "unknown";
-  /// Primary source position for current event.
   G4ThreeVector fPrimaryPosition;
-  /// Primary source kinetic energy for current event.
   G4double fPrimaryEnergy = -1.0;
-  /// Primary source start time for current event.
   G4double fPrimaryT0Time = 0.0;
-  /// Track ID -> track metadata lookup.
   std::unordered_map<G4int, TrackInfo> fTrackInfo;
-  /// Photon track ID -> photon creation metadata lookup.
   std::unordered_map<G4int, PhotonCreationInfo> fPhotonCreationInfo;
-  /// Track pointer -> pending origin captured at stepping-time.
   std::unordered_map<const void*, G4ThreeVector> fPendingPhotonOrigin;
-  /// Photon track ID -> latest scintillator-exit boundary position.
   std::unordered_map<G4int, G4ThreeVector> fPhotonScintillatorExit;
-  /// Primary track ID -> earliest recorded scintillator interaction time.
   std::unordered_map<G4int, G4double> fPrimaryScintillatorFirstInteractionTime;
-  /// Collected optical-interface-hit rows for end-of-event serialization.
+  std::unordered_map<G4int, PrimaryActivity> fPrimaryActivity;
   std::vector<PhotonHitRecord> fPhotonHits;
 };
 

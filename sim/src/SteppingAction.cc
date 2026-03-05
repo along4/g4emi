@@ -52,21 +52,14 @@ void SteppingAction::UserSteppingAction(const G4Step* step) {
     return;
   }
 
-  // Accumulate per-event energy deposition in scintillator.
-  const auto edep = step->GetTotalEnergyDeposit();
-  if (edep > 0.0) {
-    fEventAction->AddEdep(edep);
-  }
-
   // Capture optical-photon exit point when crossing out of scintillator at a
   // geometry boundary. This does not require an additional sensitive detector.
   const auto* track = step->GetTrack();
   const auto* postStepPoint = step->GetPostStepPoint();
 
-  // Record first interaction time for primary neutrons in scintillator.
+  // Record first interaction time for primary particles in scintillator.
   // We treat non-transportation step-ending processes as interactions.
-  if (track && postStepPoint && track->GetParentID() == 0 &&
-      track->GetParticleDefinition()->GetParticleName() == "neutron") {
+  if (track && postStepPoint && track->GetParentID() == 0) {
     const auto* process = postStepPoint->GetProcessDefinedStep();
     if (process) {
       const auto processName = process->GetProcessName();
@@ -98,10 +91,24 @@ void SteppingAction::UserSteppingAction(const G4Step* step) {
     return;
   }
 
+  G4int primaryTrackID = -1;
+  if (track) {
+    if (track->GetParentID() == 0) {
+      primaryTrackID = track->GetTrackID();
+    } else if (const auto* trackInfo = fEventAction->FindTrackInfo(track->GetTrackID())) {
+      primaryTrackID = trackInfo->primaryTrackID;
+    }
+  }
+
   for (const auto* secondary : *secondaries) {
-    if (!secondary ||
-        secondary->GetParticleDefinition() !=
-            G4OpticalPhoton::OpticalPhotonDefinition()) {
+    if (!secondary) {
+      continue;
+    }
+    const G4bool isOpticalPhoton =
+        secondary->GetParticleDefinition() ==
+        G4OpticalPhoton::OpticalPhotonDefinition();
+    fEventAction->RecordPrimarySecondaryCreation(primaryTrackID, isOpticalPhoton);
+    if (!isOpticalPhoton) {
       continue;
     }
 

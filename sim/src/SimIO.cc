@@ -259,6 +259,17 @@ bool EnsureReady(const std::string& hdf5Path, std::string* errorMessage) {
   H5Tinsert(s.primaryType, "primary_t0_time_ns",
             HOFFSET(detail::Hdf5PrimaryNativeRow, primary_t0_time_ns),
             H5T_NATIVE_DOUBLE);
+  H5Tinsert(s.primaryType, "primary_created_secondary_count",
+            HOFFSET(detail::Hdf5PrimaryNativeRow, primary_created_secondary_count),
+            H5T_NATIVE_INT64);
+  H5Tinsert(s.primaryType, "primary_generated_optical_photon_count",
+            HOFFSET(detail::Hdf5PrimaryNativeRow,
+                    primary_generated_optical_photon_count),
+            H5T_NATIVE_INT64);
+  H5Tinsert(s.primaryType, "primary_detected_optical_interface_photon_count",
+            HOFFSET(detail::Hdf5PrimaryNativeRow,
+                    primary_detected_optical_interface_photon_count),
+            H5T_NATIVE_INT64);
 
   s.secondaryType = H5Tcreate(H5T_COMPOUND, sizeof(detail::Hdf5SecondaryNativeRow));
   H5Tinsert(s.secondaryType, "gun_call_id",
@@ -389,6 +400,11 @@ std::vector<detail::Hdf5PrimaryNativeRow> ToNative(
     native.primary_y_mm = row.primaryYmm;
     native.primary_energy_MeV = row.primaryEnergyMeV;
     native.primary_t0_time_ns = row.primaryT0TimeNs;
+    native.primary_created_secondary_count = row.primaryCreatedSecondaryCount;
+    native.primary_generated_optical_photon_count =
+        row.primaryGeneratedOpticalPhotonCount;
+    native.primary_detected_optical_interface_photon_count =
+        row.primaryDetectedOpticalInterfacePhotonCount;
     out.push_back(native);
   }
   return out;
