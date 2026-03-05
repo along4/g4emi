@@ -99,6 +99,7 @@ void EventAction::BeginOfEventAction(const G4Event* event) {
   fPhotonCreationInfo.clear();
   fPendingPhotonOrigin.clear();
   fPhotonScintillatorExit.clear();
+  fPrimaryScintillatorFirstInteractionTime.clear();
   fPhotonHits.clear();
 
   if (!event) {
@@ -150,6 +151,13 @@ void EventAction::EndOfEventAction(const G4Event* event) {
   std::vector<SimIO::PrimaryInfo> primaryRows;
   std::vector<SimIO::SecondaryInfo> secondaryRows;
   std::vector<SimIO::PhotonInfo> photonRows;
+  const auto resolvePrimaryT0Ns = [this](G4int primaryTrackID) {
+    if (const auto* firstInteraction =
+            FindPrimaryScintillatorFirstInteractionTime(primaryTrackID)) {
+      return *firstInteraction / ns;
+    }
+    return fPrimaryT0Time / ns;
+  };
   // Primaries: deduplicate by primary track ID.
   std::unordered_set<G4int> seenPrimary;
   for (const auto& hit : fPhotonHits) {
@@ -164,26 +172,16 @@ void EventAction::EndOfEventAction(const G4Event* event) {
     row.primaryXmm = hit.primaryX / mm;
     row.primaryYmm = hit.primaryY / mm;
     row.primaryEnergyMeV = fPrimaryEnergy / MeV;
-    row.primaryT0TimeNs = fPrimaryT0Time / ns;
+    row.primaryT0TimeNs = resolvePrimaryT0Ns(hit.primaryID);
     if (const auto* info = FindTrackInfo(hit.primaryID)) {
       row.primaryEnergyMeV = info->originEnergy / MeV;
     }
     primaryRows.push_back(row);
   }
 
-  // Ensure each event has at least one primary row even when no photon carries
-  // a resolved primary ID (e.g., empty-hit events or unresolved ancestry).
-  if (primaryRows.empty()) {
-    SimIO::PrimaryInfo row;
-    row.gunCallId = eventID64;
-    row.primaryTrackId = 1;
-    row.primarySpecies = fPrimarySpecies;
-    row.primaryXmm = fPrimaryPosition.x() / mm;
-    row.primaryYmm = fPrimaryPosition.y() / mm;
-    row.primaryEnergyMeV = fPrimaryEnergy / MeV;
-    row.primaryT0TimeNs = fPrimaryT0Time / ns;
-    primaryRows.push_back(row);
-  }
+  // No fallback primary row is written for events without detected optical
+  // interface photons. `/primaries` therefore contains only primaries linked
+  // to at least one detected photon hit.
 
   // Secondaries: deduplicate by secondary track ID.
   std::unordered_set<G4int> seenSecondary;
@@ -348,6 +346,31 @@ bool EventAction::ConsumePhotonScintillatorExit(G4int photonTrackID,
   }
   fPhotonScintillatorExit.erase(it);
   return true;
+}
+
+/**
+ * Record earliest primary-neutron scintillator interaction time for one track.
+ */
+void EventAction::RecordPrimaryScintillatorFirstInteraction(
+    G4int primaryTrackID, G4double globalTime) {
+  const auto it = fPrimaryScintillatorFirstInteractionTime.find(primaryTrackID);
+  if (it == fPrimaryScintillatorFirstInteractionTime.end() ||
+      globalTime < it->second) {
+    fPrimaryScintillatorFirstInteractionTime[primaryTrackID] = globalTime;
+  }
+}
+
+/**
+ * Return earliest recorded primary-neutron scintillator interaction time.
+ *
+ * Returns nullptr when no scintillator interaction has been recorded for this
+ * primary track in the current event.
+ */
+const G4double* EventAction::FindPrimaryScintillatorFirstInteractionTime(
+    G4int primaryTrackID) const {
+  const auto it = fPrimaryScintillatorFirstInteractionTime.find(primaryTrackID);
+  return (it == fPrimaryScintillatorFirstInteractionTime.end()) ? nullptr
+                                                                 : &it->second;
 }
 
 /**

@@ -120,6 +120,12 @@ class EventAction : public G4UserEventAction {
   G4double GetPrimaryEnergy() const { return fPrimaryEnergy; }
   /// Event primary start time (Geant4 internal time units).
   G4double GetPrimaryT0Time() const { return fPrimaryT0Time; }
+  /// Record earliest primary-neutron interaction time inside scintillator.
+  void RecordPrimaryScintillatorFirstInteraction(G4int primaryTrackID,
+                                                 G4double globalTime);
+  /// Look up earliest recorded primary-neutron scintillator interaction time.
+  const G4double* FindPrimaryScintillatorFirstInteractionTime(
+      G4int primaryTrackID) const;
 
  private:
   /// Thread-local singleton pointer used by SD/tracking helpers.
@@ -145,6 +151,8 @@ class EventAction : public G4UserEventAction {
   std::unordered_map<const void*, G4ThreeVector> fPendingPhotonOrigin;
   /// Photon track ID -> latest scintillator-exit boundary position.
   std::unordered_map<G4int, G4ThreeVector> fPhotonScintillatorExit;
+  /// Primary track ID -> earliest recorded scintillator interaction time.
+  std::unordered_map<G4int, G4double> fPrimaryScintillatorFirstInteractionTime;
   /// Collected optical-interface-hit rows for end-of-event serialization.
   std::vector<PhotonHitRecord> fPhotonHits;
 };

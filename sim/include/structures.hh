@@ -21,7 +21,8 @@ namespace SimStructures {
  * - `primarySpecies`: compact species label (`n`, `p`, `g`, etc.).
  * - `primaryXmm`, `primaryYmm`: primary origin position in mm.
  * - `primaryEnergyMeV`: primary origin kinetic energy in MeV.
- * - `primaryT0TimeNs`: primary start time (T0 anchor) in ns.
+ * - `primaryT0TimeNs`: first primary-neutron scintillator interaction time
+ *   in ns (fallback: primary source time when no interaction is recorded).
  */
 struct PrimaryInfo {
   std::int64_t gunCallId = -1;

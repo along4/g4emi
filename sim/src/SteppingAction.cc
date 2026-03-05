@@ -10,6 +10,7 @@
 #include "G4StepStatus.hh"
 #include "G4Track.hh"
 #include "G4TouchableHandle.hh"
+#include "G4VProcess.hh"
 #include "G4VPhysicalVolume.hh"
 
 /**
@@ -61,6 +62,21 @@ void SteppingAction::UserSteppingAction(const G4Step* step) {
   // geometry boundary. This does not require an additional sensitive detector.
   const auto* track = step->GetTrack();
   const auto* postStepPoint = step->GetPostStepPoint();
+
+  // Record first interaction time for primary neutrons in scintillator.
+  // We treat non-transportation step-ending processes as interactions.
+  if (track && postStepPoint && track->GetParentID() == 0 &&
+      track->GetParticleDefinition()->GetParticleName() == "neutron") {
+    const auto* process = postStepPoint->GetProcessDefinedStep();
+    if (process) {
+      const auto processName = process->GetProcessName();
+      if (processName != "Transportation" && processName != "CoupledTransportation") {
+        fEventAction->RecordPrimaryScintillatorFirstInteraction(
+            track->GetTrackID(), postStepPoint->GetGlobalTime());
+      }
+    }
+  }
+
   if (track && postStepPoint &&
       track->GetParticleDefinition() ==
           G4OpticalPhoton::OpticalPhotonDefinition() &&
