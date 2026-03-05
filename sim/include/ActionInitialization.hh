@@ -9,19 +9,19 @@ class Config;
 /// Registers Geant4 user action classes used during each run.
 class ActionInitialization : public G4VUserActionInitialization {
  public:
-  /// `detector` and `config` are shared read-only dependencies for actions.
+  /// `detector` and `config` are shared read-only action dependencies.
   ActionInitialization(const DetectorConstruction* detector, const Config* config);
   ~ActionInitialization() override = default;
 
-  /// Construct per-thread action instances (generator, event, stepping, tracking).
+  /// Register worker-thread actions.
   void Build() const override;
-  /// Construct master-only actions used before worker dispatch.
+  /// Register master-thread actions.
   void BuildForMaster() const override;
 
  private:
-  /// Detector access for stepping action configuration.
+  /// Detector reference used to configure stepping action.
   const DetectorConstruction* fDetector = nullptr;
-  /// Global run configuration (output mode, geometry settings, etc.).
+  /// Global runtime configuration.
   const Config* fConfig = nullptr;
 };
 

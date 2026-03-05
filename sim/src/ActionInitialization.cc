@@ -6,7 +6,6 @@
 #include "RunAction.hh"
 #include "SteppingAction.hh"
 #include "TrackingAction.hh"
-#include "config.hh"
 
 ActionInitialization::ActionInitialization(const DetectorConstruction* detector,
                                            const Config* config)
