@@ -10,6 +10,7 @@
 #include <string>
 
 namespace {
+// Return true when the output path has no parent or its parent exists.
 bool ParentDirectoryExists(const std::string& outputFilePath) {
   const std::filesystem::path parent =
       std::filesystem::path(outputFilePath).parent_path();
@@ -24,19 +25,19 @@ bool ParentDirectoryExists(const std::string& outputFilePath) {
 RunAction::RunAction(const Config* config) : fConfig(config) {}
 
 void RunAction::BeginOfRunAction(const G4Run* /*run*/) {
-  // Validate once on master before worker tasks are launched.
+  // Validate once on master before worker dispatch.
   if (!IsMaster() || fConfig == nullptr) {
     return;
   }
 
-  std::string missingTargets;
+  std::string missingPaths;
 
   const std::string hdf5Path = fConfig->GetHdf5FilePath();
   if (!ParentDirectoryExists(hdf5Path)) {
-    missingTargets += "  - HDF5 target: " + hdf5Path + "\n";
+    missingPaths += "  - HDF5 target: " + hdf5Path + "\n";
   }
 
-  if (missingTargets.empty()) {
+  if (missingPaths.empty()) {
     return;
   }
 
@@ -44,7 +45,7 @@ void RunAction::BeginOfRunAction(const G4Run* /*run*/) {
   message
       << "Output directory validation failed before run start.\n"
       << "Expected output parent directories do not exist:\n"
-      << missingTargets
+      << missingPaths
       << "Create directories in Python before launching Geant4 "
       << "(for example via ConfigIO.ensure_output_directories / write_macro).";
 

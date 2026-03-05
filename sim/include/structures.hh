@@ -1,6 +1,9 @@
 #ifndef structures_h
 #define structures_h 1
 
+#include "G4ThreeVector.hh"
+#include "G4Types.hh"
+
 #include <hdf5.h>
 
 #include <cstddef>
@@ -21,6 +24,14 @@ namespace SimStructures {
  * - `primarySpecies`: compact species label (`n`, `p`, `g`, etc.).
  * - `primaryXmm`, `primaryYmm`: primary origin position in mm.
  * - `primaryEnergyMeV`: primary origin kinetic energy in MeV.
+ * - `primaryT0TimeNs`: first primary scintillator interaction time in ns
+ *   (fallback: primary source time when no interaction is recorded).
+ * - `primaryCreatedSecondaryCount`: number of secondaries created in the
+ *   scintillator and attributed to this primary ancestry.
+ * - `primaryGeneratedOpticalPhotonCount`: number of created optical photons
+ *   attributed to this primary ancestry.
+ * - `primaryDetectedOpticalInterfacePhotonCount`: number of detected
+ *   optical-interface photon hits attributed to this primary ancestry.
  */
 struct PrimaryInfo {
   std::int64_t gunCallId = -1;
@@ -29,6 +40,10 @@ struct PrimaryInfo {
   double primaryXmm = 0.0;
   double primaryYmm = 0.0;
   double primaryEnergyMeV = 0.0;
+  double primaryT0TimeNs = 0.0;
+  std::int64_t primaryCreatedSecondaryCount = 0;
+  std::int64_t primaryGeneratedOpticalPhotonCount = 0;
+  std::int64_t primaryDetectedOpticalInterfacePhotonCount = 0;
 };
 
 /**
@@ -64,6 +79,8 @@ struct PhotonInfo {
   std::int32_t secondaryTrackId = -1;
   /// Geant4 optical-photon track ID (event-local).
   std::int32_t photonTrackId = -1;
+  /// Optical-photon creation time in ns (Geant4 global time basis).
+  double photonCreationTimeNs = 0.0;
 
   /// Photon creation-point position in the scintillator frame, expressed in mm.
   double photonOriginXmm = 0.0;
@@ -80,6 +97,8 @@ struct PhotonInfo {
   /// Optical-interface entry-point coordinates in mm at the pre-step boundary crossing.
   double opticalInterfaceHitXmm = 0.0;
   double opticalInterfaceHitYmm = 0.0;
+  /// Optical-interface crossing time in ns (Geant4 global time basis).
+  double opticalInterfaceHitTimeNs = 0.0;
 
   /// Unit momentum-direction components at optical-interface crossing.
   double opticalInterfaceHitDirX = 0.0;
@@ -95,6 +114,58 @@ struct PhotonInfo {
   double opticalInterfaceHitEnergyEV = -1.0;
   /// Photon wavelength at optical-interface crossing in nm.
   double opticalInterfaceHitWavelengthNm = -1.0;
+};
+
+/// Event-local track metadata cached by Geant4 track ID.
+struct TrackInfo {
+  std::string species = "unknown";
+  G4ThreeVector originPosition;
+  G4double originEnergy = -1.0;
+  G4int primaryTrackID = -1;
+};
+
+/// Optical-photon ancestry and creation context.
+struct PhotonCreationInfo {
+  G4int primaryTrackID = -1;
+  G4int secondaryTrackID = -1;
+  G4ThreeVector scintOriginPosition;
+  std::string secondarySpecies = "unknown";
+  G4ThreeVector secondaryOriginPosition;
+  G4double secondaryOriginEnergy = -1.0;
+};
+
+/// Per-primary activity counters accumulated during stepping/hit capture.
+struct PrimaryActivity {
+  std::int64_t createdSecondaryCount = 0;
+  std::int64_t generatedOpticalPhotonCount = 0;
+  std::int64_t detectedOpticalInterfacePhotonCount = 0;
+};
+
+/// One detected optical-interface photon hit.
+struct PhotonHitRecord {
+  G4int primaryID = -1;
+  G4int secondaryID = -1;
+  G4int photonID = -1;
+
+  std::string primarySpecies = "unknown";
+  G4double primaryX = -1.0;
+  G4double primaryY = -1.0;
+
+  std::string secondarySpecies = "unknown";
+  G4ThreeVector secondaryOriginPosition;
+  G4double secondaryOriginEnergy = -1.0;
+
+  G4ThreeVector scintOriginPosition;
+  G4ThreeVector photonScintExitPosition;
+  G4bool hasPhotonScintExitPosition = false;
+
+  G4ThreeVector opticalInterfaceHitPosition;
+  G4double opticalInterfaceHitTime = -1.0;
+  G4ThreeVector opticalInterfaceHitDirection;
+  G4ThreeVector opticalInterfaceHitPolarization;
+  G4double photonCreationTime = -1.0;
+  G4double opticalInterfaceHitEnergy = -1.0;
+  G4double opticalInterfaceHitWavelength = -1.0;
 };
 
 namespace detail {
@@ -120,6 +191,10 @@ struct Hdf5PrimaryNativeRow {
   double primary_x_mm;
   double primary_y_mm;
   double primary_energy_MeV;
+  double primary_t0_time_ns;
+  std::int64_t primary_created_secondary_count;
+  std::int64_t primary_generated_optical_photon_count;
+  std::int64_t primary_detected_optical_interface_photon_count;
 };
 
 /**
@@ -147,6 +222,7 @@ struct Hdf5PhotonNativeRow {
   std::int32_t primary_track_id;
   std::int32_t secondary_track_id;
   std::int32_t photon_track_id;
+  double photon_creation_time_ns;
   double photon_origin_x_mm;
   double photon_origin_y_mm;
   double photon_origin_z_mm;
@@ -155,6 +231,7 @@ struct Hdf5PhotonNativeRow {
   double photon_scint_exit_z_mm;
   double optical_interface_hit_x_mm;
   double optical_interface_hit_y_mm;
+  double optical_interface_hit_time_ns;
   double optical_interface_hit_dir_x;
   double optical_interface_hit_dir_y;
   double optical_interface_hit_dir_z;

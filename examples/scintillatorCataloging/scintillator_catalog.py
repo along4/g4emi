@@ -24,8 +24,13 @@ from src.config.ConfigIO import (  # noqa: E402
     write_macro,
 )
 
-# Default YAML example in this directory.
-EXAMPLE_YAML_PATH = Path(__file__).with_name("EJ200.yaml")
+# Default YAML example in the shared examples YAML directory.
+EXAMPLE_YAML_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "examples"
+    / "yamlFiles"
+    / "EJ200.yaml"
+)
 
 
 def main() -> None:

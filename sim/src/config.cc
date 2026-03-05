@@ -19,22 +19,7 @@ std::size_t ToZeroBasedComponentIndex(G4int componentIndex) {
 }
 }  // namespace
 
-/**
- * Construct simulation defaults used when no UI command overrides are provided.
- *
- * Defaults are intentionally conservative and mirror the original hard-coded
- * application setup:
- * - Geometry: 5x5x1 cm scintillator with a 0.1 mm optical-interface plane.
- * - Scintillator position defaults to world origin (0,0,0).
- * - Optical-interface X/Y default to 0, which means "inherit scintillator X/Y".
- * - Optical-interface position defaults to NaN on all axes, which means:
- *   - X/Y align to scintillator center,
- *   - Z uses default flush placement at scintillator +Z face.
- * - Material: EJ200.
- * - Output: HDF5 file path derived from output base name
- *   "data/photon_optical_interface_hits", no explicit output-path override,
- *   and no run-name subdirectory.
- */
+// Initialize geometry, material, and output defaults.
 Config::Config()
     : fScintX(5.0 * cm),
       fScintY(5.0 * cm),
@@ -66,174 +51,141 @@ Config::Config()
       fOutputPath(""),
       fOutputRunName("") {}
 
-/// Thread-safe geometry getter: scintillator size in X (Geant4 internal units).
 G4double Config::GetScintX() const {
   std::lock_guard<std::mutex> lock(fMutex);
   return fScintX;
 }
 
-/// Thread-safe geometry getter: scintillator size in Y.
 G4double Config::GetScintY() const {
   std::lock_guard<std::mutex> lock(fMutex);
   return fScintY;
 }
 
-/// Thread-safe geometry getter: scintillator size in Z (thickness).
 G4double Config::GetScintZ() const {
   std::lock_guard<std::mutex> lock(fMutex);
   return fScintZ;
 }
 
-/// Thread-safe geometry getter: scintillator center position X.
 G4double Config::GetScintPosX() const {
   std::lock_guard<std::mutex> lock(fMutex);
   return fScintPosX;
 }
 
-/// Thread-safe geometry getter: scintillator center position Y.
 G4double Config::GetScintPosY() const {
   std::lock_guard<std::mutex> lock(fMutex);
   return fScintPosY;
 }
 
-/// Thread-safe geometry getter: scintillator center position Z.
 G4double Config::GetScintPosZ() const {
   std::lock_guard<std::mutex> lock(fMutex);
   return fScintPosZ;
 }
 
-/// Thread-safe geometry getter: mask radius at scintillator +Z face.
 G4double Config::GetMaskRadius() const {
   std::lock_guard<std::mutex> lock(fMutex);
   return fMaskRadius;
 }
 
-/// Thread-safe geometry getter: optical-interface size in X.
 G4double Config::GetOpticalInterfaceX() const {
   std::lock_guard<std::mutex> lock(fMutex);
   return fOpticalInterfaceX;
 }
 
-/// Thread-safe geometry getter: optical-interface size in Y.
 G4double Config::GetOpticalInterfaceY() const {
   std::lock_guard<std::mutex> lock(fMutex);
   return fOpticalInterfaceY;
 }
 
-/// Thread-safe geometry getter: optical-interface thickness in Z.
 G4double Config::GetOpticalInterfaceThickness() const {
   std::lock_guard<std::mutex> lock(fMutex);
   return fOpticalInterfaceThickness;
 }
 
-/// Thread-safe geometry getter: optical-interface center position X.
 G4double Config::GetOpticalInterfacePosX() const {
   std::lock_guard<std::mutex> lock(fMutex);
   return fOpticalInterfacePosX;
 }
 
-/// Thread-safe geometry getter: optical-interface center position Y.
 G4double Config::GetOpticalInterfacePosY() const {
   std::lock_guard<std::mutex> lock(fMutex);
   return fOpticalInterfacePosY;
 }
 
-/// Thread-safe geometry getter: optical-interface center position Z.
 G4double Config::GetOpticalInterfacePosZ() const {
   std::lock_guard<std::mutex> lock(fMutex);
   return fOpticalInterfacePosZ;
 }
 
-/// Thread-safe geometry setter: scintillator size in X.
 void Config::SetScintX(G4double value) {
   std::lock_guard<std::mutex> lock(fMutex);
   fScintX = value;
 }
 
-/// Thread-safe geometry setter: scintillator size in Y.
 void Config::SetScintY(G4double value) {
   std::lock_guard<std::mutex> lock(fMutex);
   fScintY = value;
 }
 
-/// Thread-safe geometry setter: scintillator size in Z.
 void Config::SetScintZ(G4double value) {
   std::lock_guard<std::mutex> lock(fMutex);
   fScintZ = value;
 }
 
-/// Thread-safe geometry setter: scintillator center position X.
 void Config::SetScintPosX(G4double value) {
   std::lock_guard<std::mutex> lock(fMutex);
   fScintPosX = value;
 }
 
-/// Thread-safe geometry setter: scintillator center position Y.
 void Config::SetScintPosY(G4double value) {
   std::lock_guard<std::mutex> lock(fMutex);
   fScintPosY = value;
 }
 
-/// Thread-safe geometry setter: scintillator center position Z.
 void Config::SetScintPosZ(G4double value) {
   std::lock_guard<std::mutex> lock(fMutex);
   fScintPosZ = value;
 }
 
-/// Thread-safe geometry setter: mask radius at scintillator +Z face.
 void Config::SetMaskRadius(G4double value) {
   std::lock_guard<std::mutex> lock(fMutex);
   fMaskRadius = value;
 }
 
-/// Thread-safe geometry setter: optical-interface size in X.
 void Config::SetOpticalInterfaceX(G4double value) {
   std::lock_guard<std::mutex> lock(fMutex);
   fOpticalInterfaceX = value;
 }
 
-/// Thread-safe geometry setter: optical-interface size in Y.
 void Config::SetOpticalInterfaceY(G4double value) {
   std::lock_guard<std::mutex> lock(fMutex);
   fOpticalInterfaceY = value;
 }
 
-/// Thread-safe geometry setter: optical-interface thickness in Z.
 void Config::SetOpticalInterfaceThickness(G4double value) {
   std::lock_guard<std::mutex> lock(fMutex);
   fOpticalInterfaceThickness = value;
 }
 
-/// Thread-safe geometry setter: optical-interface center position X.
 void Config::SetOpticalInterfacePosX(G4double value) {
   std::lock_guard<std::mutex> lock(fMutex);
   fOpticalInterfacePosX = value;
 }
 
-/// Thread-safe geometry setter: optical-interface center position Y.
 void Config::SetOpticalInterfacePosY(G4double value) {
   std::lock_guard<std::mutex> lock(fMutex);
   fOpticalInterfacePosY = value;
 }
 
-/// Thread-safe geometry setter: optical-interface center position Z.
 void Config::SetOpticalInterfacePosZ(G4double value) {
   std::lock_guard<std::mutex> lock(fMutex);
   fOpticalInterfacePosZ = value;
 }
 
-/// Thread-safe material-name getter.
 std::string Config::GetScintMaterial() const {
   std::lock_guard<std::mutex> lock(fMutex);
   return fScintMaterial;
 }
 
-/**
- * Set scintillator material name.
- *
- * Empty strings are ignored to prevent accidental erasure from malformed macro
- * lines or empty UI arguments.
- */
 void Config::SetScintMaterial(const std::string& value) {
   if (value.empty()) {
     return;
@@ -243,13 +195,11 @@ void Config::SetScintMaterial(const std::string& value) {
   ++fScintMaterialVersion;
 }
 
-/// Thread-safe scintillator density getter.
 G4double Config::GetScintDensity() const {
   std::lock_guard<std::mutex> lock(fMutex);
   return fScintDensity;
 }
 
-/// Thread-safe scintillator density setter.
 void Config::SetScintDensity(G4double value) {
   if (value <= 0.0) {
     return;
@@ -259,13 +209,11 @@ void Config::SetScintDensity(G4double value) {
   ++fScintMaterialVersion;
 }
 
-/// Thread-safe carbon atom-count getter.
 G4int Config::GetScintCarbonAtoms() const {
   std::lock_guard<std::mutex> lock(fMutex);
   return fScintCarbonAtoms;
 }
 
-/// Thread-safe carbon atom-count setter.
 void Config::SetScintCarbonAtoms(G4int value) {
   if (value <= 0) {
     return;
@@ -275,13 +223,11 @@ void Config::SetScintCarbonAtoms(G4int value) {
   ++fScintMaterialVersion;
 }
 
-/// Thread-safe hydrogen atom-count getter.
 G4int Config::GetScintHydrogenAtoms() const {
   std::lock_guard<std::mutex> lock(fMutex);
   return fScintHydrogenAtoms;
 }
 
-/// Thread-safe hydrogen atom-count setter.
 void Config::SetScintHydrogenAtoms(G4int value) {
   if (value <= 0) {
     return;
@@ -291,13 +237,11 @@ void Config::SetScintHydrogenAtoms(G4int value) {
   ++fScintMaterialVersion;
 }
 
-/// Thread-safe photon-energy grid getter.
 std::vector<G4double> Config::GetScintPhotonEnergy() const {
   std::lock_guard<std::mutex> lock(fMutex);
   return fScintPhotonEnergy;
 }
 
-/// Thread-safe photon-energy grid setter.
 void Config::SetScintPhotonEnergy(const std::vector<G4double>& values) {
   if (values.empty()) {
     return;
@@ -307,13 +251,11 @@ void Config::SetScintPhotonEnergy(const std::vector<G4double>& values) {
   ++fScintMaterialVersion;
 }
 
-/// Thread-safe refractive-index table getter.
 std::vector<G4double> Config::GetScintRIndex() const {
   std::lock_guard<std::mutex> lock(fMutex);
   return fScintRIndex;
 }
 
-/// Thread-safe refractive-index table setter.
 void Config::SetScintRIndex(const std::vector<G4double>& values) {
   if (values.empty()) {
     return;
@@ -323,13 +265,11 @@ void Config::SetScintRIndex(const std::vector<G4double>& values) {
   ++fScintMaterialVersion;
 }
 
-/// Thread-safe absorption-length table getter.
 std::vector<G4double> Config::GetScintAbsLength() const {
   std::lock_guard<std::mutex> lock(fMutex);
   return fScintAbsLength;
 }
 
-/// Thread-safe absorption-length table setter.
 void Config::SetScintAbsLength(const std::vector<G4double>& values) {
   if (values.empty()) {
     return;
@@ -339,13 +279,11 @@ void Config::SetScintAbsLength(const std::vector<G4double>& values) {
   ++fScintMaterialVersion;
 }
 
-/// Thread-safe scintillation-spectrum getter.
 std::vector<G4double> Config::GetScintSpectrum() const {
   std::lock_guard<std::mutex> lock(fMutex);
   return fScintSpectrum;
 }
 
-/// Thread-safe scintillation-spectrum setter.
 void Config::SetScintSpectrum(const std::vector<G4double>& values) {
   if (values.empty()) {
     return;
@@ -355,13 +293,11 @@ void Config::SetScintSpectrum(const std::vector<G4double>& values) {
   ++fScintMaterialVersion;
 }
 
-/// Thread-safe scintillation-yield getter.
 G4double Config::GetScintYield() const {
   std::lock_guard<std::mutex> lock(fMutex);
   return fScintYield;
 }
 
-/// Thread-safe scintillation-yield setter.
 void Config::SetScintYield(G4double value) {
   if (value <= 0.0) {
     return;
@@ -371,13 +307,11 @@ void Config::SetScintYield(G4double value) {
   ++fScintMaterialVersion;
 }
 
-/// Thread-safe resolution-scale getter.
 G4double Config::GetScintResolutionScale() const {
   std::lock_guard<std::mutex> lock(fMutex);
   return fScintResolutionScale;
 }
 
-/// Thread-safe resolution-scale setter.
 void Config::SetScintResolutionScale(G4double value) {
   if (value <= 0.0) {
     return;
@@ -387,25 +321,6 @@ void Config::SetScintResolutionScale(G4double value) {
   ++fScintMaterialVersion;
 }
 
-/// Thread-safe time-constants getter.
-std::array<G4double, 3> Config::GetScintTimeConstants() const {
-  std::lock_guard<std::mutex> lock(fMutex);
-  return fScintTimeConstants;
-}
-
-/// Thread-safe time-constants setter.
-void Config::SetScintTimeConstants(const std::array<G4double, 3>& values) {
-  for (G4double value : values) {
-    if (value < 0.0) {
-      return;
-    }
-  }
-  std::lock_guard<std::mutex> lock(fMutex);
-  fScintTimeConstants = values;
-  ++fScintMaterialVersion;
-}
-
-/// Thread-safe per-component time-constant getter (1-based index).
 G4double Config::GetScintTimeConstant(G4int componentIndex) const {
   if (!IsValidScintillationComponentIndex(componentIndex)) {
     return 0.0;
@@ -414,7 +329,6 @@ G4double Config::GetScintTimeConstant(G4int componentIndex) const {
   return fScintTimeConstants[ToZeroBasedComponentIndex(componentIndex)];
 }
 
-/// Thread-safe per-component time-constant setter (1-based index).
 void Config::SetScintTimeConstant(G4int componentIndex, G4double value) {
   if (!IsValidScintillationComponentIndex(componentIndex) || value < 0.0) {
     return;
@@ -424,25 +338,6 @@ void Config::SetScintTimeConstant(G4int componentIndex, G4double value) {
   ++fScintMaterialVersion;
 }
 
-/// Thread-safe yield-fractions getter.
-std::array<G4double, 3> Config::GetScintYieldFractions() const {
-  std::lock_guard<std::mutex> lock(fMutex);
-  return fScintYieldFractions;
-}
-
-/// Thread-safe yield-fractions setter.
-void Config::SetScintYieldFractions(const std::array<G4double, 3>& values) {
-  for (G4double value : values) {
-    if (value < 0.0) {
-      return;
-    }
-  }
-  std::lock_guard<std::mutex> lock(fMutex);
-  fScintYieldFractions = values;
-  ++fScintMaterialVersion;
-}
-
-/// Thread-safe per-component yield-fraction getter (1-based index).
 G4double Config::GetScintYieldFraction(G4int componentIndex) const {
   if (!IsValidScintillationComponentIndex(componentIndex)) {
     return 0.0;
@@ -451,7 +346,6 @@ G4double Config::GetScintYieldFraction(G4int componentIndex) const {
   return fScintYieldFractions[ToZeroBasedComponentIndex(componentIndex)];
 }
 
-/// Thread-safe per-component yield-fraction setter (1-based index).
 void Config::SetScintYieldFraction(G4int componentIndex, G4double value) {
   if (!IsValidScintillationComponentIndex(componentIndex) || value < 0.0) {
     return;
@@ -461,10 +355,8 @@ void Config::SetScintYieldFraction(G4int componentIndex, G4double value) {
   ++fScintMaterialVersion;
 }
 
-/// Compatibility getter for component-1 time constant.
 G4double Config::GetScintTimeConstant() const { return GetScintTimeConstant(1); }
 
-/// Compatibility setter for component-1 time constant.
 void Config::SetScintTimeConstant(G4double value) {
   if (value <= 0.0) {
     return;
@@ -472,10 +364,8 @@ void Config::SetScintTimeConstant(G4double value) {
   SetScintTimeConstant(1, value);
 }
 
-/// Compatibility getter for component-1 yield fraction.
 G4double Config::GetScintYield1() const { return GetScintYieldFraction(1); }
 
-/// Compatibility setter for component-1 yield fraction.
 void Config::SetScintYield1(G4double value) {
   if (value < 0.0) {
     return;
@@ -483,25 +373,16 @@ void Config::SetScintYield1(G4double value) {
   SetScintYieldFraction(1, value);
 }
 
-/// Thread-safe scintillator material-version getter.
 G4int Config::GetScintMaterialVersion() const {
   std::lock_guard<std::mutex> lock(fMutex);
   return fScintMaterialVersion;
 }
 
-/// Thread-safe getter for output base filename/path.
 std::string Config::GetOutputFilename() const {
   std::lock_guard<std::mutex> lock(fMutex);
   return fOutputFilename;
 }
 
-/**
- * Set output base filename/path.
- *
- * If the user passes a recognized output extension (.h5/.hdf5), that
- * extension is removed so format-specific getters can append the selected
- * canonical extension.
- */
 void Config::SetOutputFilename(const std::string& value) {
   if (value.empty()) {
     return;
@@ -516,20 +397,11 @@ void Config::SetOutputFilename(const std::string& value) {
   fOutputFilename = normalized;
 }
 
-/// Thread-safe getter for optional output directory path override.
 std::string Config::GetOutputPath() const {
   std::lock_guard<std::mutex> lock(fMutex);
   return fOutputPath;
 }
 
-/**
- * Set optional output directory path.
- *
- * Behavior:
- * - Trim and unquote one layer of quoting.
- * - Empty input clears explicit path override (default behavior resumes).
- * - Non-empty values are lexically normalized for stable path composition.
- */
 void Config::SetOutputPath(const std::string& value) {
   std::string normalized = Utils::Unquote(Utils::Trim(value));
   if (!normalized.empty()) {
@@ -540,25 +412,16 @@ void Config::SetOutputPath(const std::string& value) {
   fOutputPath = normalized;
 }
 
-/// Thread-safe getter for output run name.
 std::string Config::GetOutputRunName() const {
   std::lock_guard<std::mutex> lock(fMutex);
   return fOutputRunName;
 }
 
-/**
- * Set optional run-name output directory.
- *
- * An empty value clears run-name routing. Non-empty values are normalized so
- * they map to exactly one directory token. Final output placement is handled
- * by SimIO and includes a `simulatedPhotons/` stage subdirectory.
- */
 void Config::SetOutputRunName(const std::string& value) {
   std::lock_guard<std::mutex> lock(fMutex);
   fOutputRunName = SimIO::NormalizeRunName(value);
 }
 
-/// Thread-safe getter for HDF5 output path derived from output settings.
 std::string Config::GetHdf5FilePath() const {
   std::lock_guard<std::mutex> lock(fMutex);
   return SimIO::ComposeOutputPath(fOutputFilename, fOutputPath, fOutputRunName,

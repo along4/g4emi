@@ -6,16 +6,17 @@
 class G4Run;
 class Config;
 
-/// Run-level validation hooks.
+/// Run-level validation before event processing starts.
 class RunAction : public G4UserRunAction {
  public:
   explicit RunAction(const Config* config);
   ~RunAction() override = default;
 
-  /// Validate output paths before event processing starts.
+  /// Validate output paths on run start.
   void BeginOfRunAction(const G4Run* run) override;
 
  private:
+  /// Read-only runtime configuration source.
   const Config* fConfig = nullptr;
 };
 

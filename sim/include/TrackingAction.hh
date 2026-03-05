@@ -6,18 +6,18 @@
 class EventAction;
 class G4Track;
 
-/// Per-track hook that records ancestry/origin metadata before tracking starts.
+/// Per-track hook that records ancestry/origin metadata at track start.
 class TrackingAction : public G4UserTrackingAction {
  public:
-  /// `eventAction` receives all collected track/photon context.
+  /// `eventAction` receives track and photon creation context.
   explicit TrackingAction(EventAction* eventAction);
   ~TrackingAction() override = default;
 
-  /// Called by Geant4 for each new track at tracking start.
+  /// Called by Geant4 before each track is processed.
   void PreUserTrackingAction(const G4Track* track) override;
 
  private:
-  /// Event-level metadata cache/write target.
+  /// Event-local sink for per-track metadata.
   EventAction* fEventAction = nullptr;
 };
 

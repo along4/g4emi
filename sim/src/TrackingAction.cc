@@ -7,22 +7,7 @@
 
 #include <string>
 
-/**
- * TrackingAction captures per-track origin/ancestry metadata as soon as Geant4
- * starts tracking each particle.
- *
- * This is the main place where we attach:
- * - species label,
- * - vertex position/energy,
- * - resolved primary ancestor track ID,
- * and, for optical photons, parent-secondary context used by output rows.
- */
 namespace {
-/**
- * Convert Geant4 particle names into compact analysis labels.
- *
- * Stable short labels keep HDF5 records easier to read and post-process.
- */
 std::string ToSpeciesLabel(const G4String& particleName) {
   if (particleName == "neutron") return "n";
   if (particleName == "gamma") return "g";
@@ -37,23 +22,28 @@ std::string ToSpeciesLabel(const G4String& particleName) {
   }
   return particleName;
 }
+
+G4int ResolvePrimaryTrackID(const G4Track* track, EventAction* eventAction) {
+  if (!track || !eventAction) {
+    return -1;
+  }
+  if (track->GetParentID() == 0) {
+    return track->GetTrackID();
+  }
+  if (const auto* parentInfo = eventAction->FindTrackInfo(track->GetParentID())) {
+    return parentInfo->primaryTrackID;
+  }
+  return -1;
+}
+
+bool IsOpticalPhoton(const G4String& particleName) {
+  return particleName == "opticalphoton";
+}
 }  // namespace
 
-/**
- * Construct tracking action with access to event-local aggregation state.
- */
 TrackingAction::TrackingAction(EventAction* eventAction)
     : fEventAction(eventAction) {}
 
-/**
- * Called by Geant4 before each track is processed.
- *
- * Responsibilities:
- * 1. Record generic track-origin metadata.
- * 2. Resolve and cache primary ancestry (`primaryTrackID`) through parent links.
- * 3. For optical photons, build PhotonCreationInfo so optical-interface hits can later
- *    include secondary parent and scintillation origin metadata.
- */
 void TrackingAction::PreUserTrackingAction(const G4Track* track) {
   if (!fEventAction || !track) {
     return;
@@ -66,29 +56,16 @@ void TrackingAction::PreUserTrackingAction(const G4Track* track) {
   trackInfo.species = ToSpeciesLabel(particleName);
   trackInfo.originPosition = track->GetVertexPosition();
   trackInfo.originEnergy = track->GetVertexKineticEnergy();
-
-  // Resolve event-local primary ancestor for this track.
-  // - parentID == 0 means Geant4 primary particle.
-  // - otherwise inherit ancestor from already-recorded parent track info.
-  if (parentID == 0) {
-    trackInfo.primaryTrackID = trackID;
-  } else if (const auto* parentInfo = fEventAction->FindTrackInfo(parentID)) {
-    trackInfo.primaryTrackID = parentInfo->primaryTrackID;
-  } else {
-    trackInfo.primaryTrackID = -1;
-  }
+  trackInfo.primaryTrackID = ResolvePrimaryTrackID(track, fEventAction);
   fEventAction->RecordTrackInfo(trackID, trackInfo);
 
-  // For optical photons, cache creation ancestry used when the optical-interface SD records
-  // the eventual hit. This bridges tracking-time ancestry with SD hit capture.
-  if (particleName == "opticalphoton") {
+  if (IsOpticalPhoton(particleName)) {
     EventAction::PhotonCreationInfo info;
     info.primaryTrackID = trackInfo.primaryTrackID;
     info.secondaryTrackID = parentID;
     info.scintOriginPosition = track->GetVertexPosition();
 
-    // If stepping recorded a more precise creation point for this newly created
-    // secondary track, prefer that value.
+    // Prefer stepping-recorded creation point when available.
     fEventAction->ConsumePendingPhotonOrigin(track, &info.scintOriginPosition);
 
     if (parentID > 0) {

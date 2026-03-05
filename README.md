@@ -67,10 +67,10 @@ pixi run run-vis
 
 ### 2.3 YAML-driven macro generation from Python
 
-Generate a macro from `examples/CanonEF50mmf1p0L_example.yaml`:
+Generate a macro from `examples/yamlFiles/CanonEF50mmf1p0L_example.yaml`:
 
 ```bash
-pixi run python examples/CanonEF50mmf1p0L_example.py
+pixi run python examples/SimulationSetup/CanonEF50mmf1p0L_example.py
 ```
 
 The script prints the generated macro path and a run command. By default (with the current example YAML), the macro is written under:
@@ -87,10 +87,10 @@ pixi run g4emi data/CanonEF50mmf1p0L_run/macros/CanonEF50mmf1p0L_run.mac
 
 ### 2.4 Catalog-based scintillator override example
 
-`examples/scintillatorCataloging/EJ200.yaml` demonstrates:
+`examples/yamlFiles/EJ200.yaml` demonstrates:
 - `scintillator.catalogId: EJ200` baseline hydration from the local catalog.
 - targeted manual overrides in `scintillator.properties` (e.g. `absLength`, `timeComponents`, `scintYield`).
-- `examples/scintillatorCataloging/EJ276D.yaml`
+- `examples/yamlFiles/EJ276D.yaml`
   demonstrates explicit 3-entry `timeComponents` schema usage.
 
 For an actual run, use the Python generator first so output subdirectories
@@ -136,7 +136,7 @@ After generating simulation output (`/photons` optical-interface hits), run:
 
 ```bash
 pixi run python examples/photonTransportation/optical_transport_example.py \
-  examples/SimulationSetup/CanonEF50mmf1p0L_example.yaml
+  examples/yamlFiles/CanonEF50mmf1p0L_example.yaml
 ```
 
 By default this reads:
@@ -158,7 +158,19 @@ The output file contains:
 
 If a photon misses the lens/sensor in ray tracing, its
 `intensifier_hit_*_mm` values are written as `NaN` and
-`reached_intensifier` is `False`.
+  `reached_intensifier` is `False`.
+
+### 2.7 One-step YAML -> run simulation example
+
+To generate the macro and run `g4emi` from one script:
+
+```bash
+pixi run python examples/RunSimulation/run_simulation_from_yaml.py \
+  examples/yamlFiles/CanonEF50mmf1p0L_example.yaml
+```
+
+Useful options:
+- `--dry-run`: write macro + print run command without launching Geant4.
 
 ## 3. Simulation Output Structures
 
@@ -185,13 +197,20 @@ HDF5 mode writes normalized datasets:
 - `/secondaries`
 - `/photons`
 
+Selection semantics:
+- `/primaries` contains only primaries that created at least one secondary in the scintillator volume.
+- `/secondaries` contains only secondaries linked to at least one detected optical-interface photon hit.
+- `/photons` contains one row per detected optical-interface photon hit.
+
 Dataset columns:
 
-- `/primaries`: `gun_call_id`, `primary_track_id`, `primary_species`, `primary_x_mm`, `primary_y_mm`, `primary_energy_MeV`
+- `/primaries`: `gun_call_id`, `primary_track_id`, `primary_species`, `primary_x_mm`, `primary_y_mm`, `primary_energy_MeV`, `primary_t0_time_ns`, `primary_created_secondary_count`, `primary_generated_optical_photon_count`, `primary_detected_optical_interface_photon_count`
 - `/secondaries`: `gun_call_id`, `primary_track_id`, `secondary_track_id`, `secondary_species`, `secondary_origin_x_mm`, `secondary_origin_y_mm`, `secondary_origin_z_mm`, `secondary_origin_energy_MeV`
-- `/photons`: `gun_call_id`, `primary_track_id`, `secondary_track_id`, `photon_track_id`, `photon_origin_x_mm`, `photon_origin_y_mm`, `photon_origin_z_mm`, `photon_scint_exit_x_mm`, `photon_scint_exit_y_mm`, `photon_scint_exit_z_mm`, `optical_interface_hit_x_mm`, `optical_interface_hit_y_mm`, `optical_interface_hit_dir_x`, `optical_interface_hit_dir_y`, `optical_interface_hit_dir_z`, `optical_interface_hit_pol_x`, `optical_interface_hit_pol_y`, `optical_interface_hit_pol_z`, `optical_interface_hit_energy_eV`, `optical_interface_hit_wavelength_nm`
+- `/photons`: `gun_call_id`, `primary_track_id`, `secondary_track_id`, `photon_track_id`, `photon_creation_time_ns`, `photon_origin_x_mm`, `photon_origin_y_mm`, `photon_origin_z_mm`, `photon_scint_exit_x_mm`, `photon_scint_exit_y_mm`, `photon_scint_exit_z_mm`, `optical_interface_hit_x_mm`, `optical_interface_hit_y_mm`, `optical_interface_hit_time_ns`, `optical_interface_hit_dir_x`, `optical_interface_hit_dir_y`, `optical_interface_hit_dir_z`, `optical_interface_hit_pol_x`, `optical_interface_hit_pol_y`, `optical_interface_hit_pol_z`, `optical_interface_hit_energy_eV`, `optical_interface_hit_wavelength_nm`
 
-`/photons` captures both geometric and optical state at the crossing point (position, direction, polarization, energy, wavelength) so downstream ray tracing does not need to reconstruct those values. When no scintillator-exit crossing is recorded for a photon, the `photon_scint_exit_x_mm`, `photon_scint_exit_y_mm`, and `photon_scint_exit_z_mm` fields are written as `NaN`; consumers should treat these `NaN` values as missing coordinates rather than valid positions.
+`/photons` captures geometric state, optical state, and timing at the crossing point (position, time, direction, polarization, energy, wavelength) so downstream pipelines can do both ray tracing and time-domain analyses. `optical_interface_hit_time_ns` and `photon_creation_time_ns` share the same Geant4 global-time basis (event-local clock), while `/primaries.primary_t0_time_ns` stores the first primary interaction time in the scintillator (falling back to primary source time when no interaction is recorded) for relative-time calculations. When no scintillator-exit crossing is recorded for a photon, the `photon_scint_exit_x_mm`, `photon_scint_exit_y_mm`, and `photon_scint_exit_z_mm` fields are written as `NaN`; consumers should treat these `NaN` values as missing coordinates rather than valid positions.
+
+`/primaries` activity counters summarize per-primary ancestry in the scintillator: created secondaries, generated optical photons, and detected optical-interface photons.
 
 ## 4. Useful Things to Know About the Code
 

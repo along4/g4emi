@@ -25,16 +25,9 @@ rayoptics = ">=0.9,<1"
 pytest = ">=9.0.2, <10"
 
 [tasks]
-check-ray-optics = "python -c \"import rayoptics; print('rayoptics import OK')\""
-check-geant4 = "python -c \"import os; from pathlib import Path; prefix = Path(os.environ['CONDA_PREFIX']); cfg = prefix / 'lib/cmake/Geant4/Geant4Config.cmake'; print(f'Geant4 CMake config: {cfg}'); print('exists=' + str(cfg.exists()));\""
-python-repl = "python"
-configure-sim = "cmake -S . -B build -G Ninja -DGeant4_DIR=$CONDA_PREFIX/lib/cmake/Geant4 -DHDF5_ROOT=$CONDA_PREFIX -DCMAKE_PREFIX_PATH=$CONDA_PREFIX -DCMAKE_BUILD_TYPE=Release"
-compile-sim = "cmake --build build -j"
-link-sim = "ln -sf $PIXI_PROJECT_ROOT/build/g4emi $CONDA_PREFIX/bin/g4emi"
-build-sim = { depends-on = ["configure-sim", "compile-sim", "link-sim"] }
+check-enviornment = "python -c \"import importlib.util, os; from pathlib import Path; prefix = Path(os.environ['CONDA_PREFIX']); cfg = prefix / 'lib/cmake/Geant4/Geant4Config.cmake'; has_ro = importlib.util.find_spec('rayoptics') is not None; print(f'Geant4 CMake config: {cfg} (exists={cfg.exists()})'); print(f'rayoptics import OK={has_ro}'); raise SystemExit(0 if cfg.exists() and has_ro else 1)\""
+build-sim = "cmake -S . -B build -G Ninja -DGeant4_DIR=$CONDA_PREFIX/lib/cmake/Geant4 -DHDF5_ROOT=$CONDA_PREFIX -DCMAKE_PREFIX_PATH=$CONDA_PREFIX -DCMAKE_BUILD_TYPE=Release && cmake --build build -j && ln -sf $PIXI_PROJECT_ROOT/build/g4emi $CONDA_PREFIX/bin/g4emi"
 clean-sim = "cmake --build build --target clean"
 rebuild-sim = { depends-on = ["clean-sim", "build-sim"] }
-run-neutron-gps = "g4emi sim/macros/neutron_gps.mac"
+config-run = "g4emi sim/macros/neutron_gps.mac"
 run-vis = "g4emi"
-test-photon-vis = "g4emi sim/macros/test-photon-vis.mac"
-test-python = "python -m unittest discover -s test/unit -t . -p 'test_*.py'"

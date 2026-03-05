@@ -26,7 +26,7 @@ from src.config.ConfigIO import (  # noqa: E402
 EXAMPLE_YAML_PATH = (
     Path(__file__).resolve().parents[2]
     / "examples"
-    / "SimulationSetup"
+    / "yamlFiles"
     / "CanonEF50mmf1p0L_example.yaml"
 )
 
