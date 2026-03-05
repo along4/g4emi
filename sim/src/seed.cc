@@ -9,10 +9,7 @@
 #include <random>
 
 namespace {
-/**
- * SplitMix64 mixer used to decorrelate entropy bits before converting to Geant4
- * seeds.
- */
+// SplitMix64 mixer for seed decorrelation.
 std::uint64_t Mix64(std::uint64_t x) {
   x += 0x9e3779b97f4a7c15ULL;
   x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ULL;
@@ -20,9 +17,7 @@ std::uint64_t Mix64(std::uint64_t x) {
   return x ^ (x >> 31);
 }
 
-/**
- * Convert raw entropy into a positive Geant4-compatible seed value.
- */
+// Convert entropy to positive Geant4-compatible seed.
 G4long ToSeed(std::uint64_t value) {
   const std::uint64_t mixed = Mix64(value);
   const std::uint64_t positive = mixed & 0x7fffffffffffffffULL;
@@ -32,11 +27,6 @@ G4long ToSeed(std::uint64_t value) {
 
 namespace Seed {
 
-/**
- * Generate fresh master seeds for each process invocation.
- *
- * The user can still override this in macro files with `/random/setSeeds`.
- */
 void SetAutoMasterSeeds() {
   const auto now = std::chrono::high_resolution_clock::now().time_since_epoch();
   const auto nowNs = static_cast<std::uint64_t>(
