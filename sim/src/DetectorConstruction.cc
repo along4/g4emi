@@ -25,27 +25,14 @@
 #include <vector>
 
 namespace {
-/**
- * Number of tabulation points used for optical material properties.
- *
- * The same energy grid is reused for scintillator and world (air) optical
- * properties so Geant4 interpolation remains consistent across boundaries.
- */
+// Shared optical tabulation size for fixed-size property tables.
 constexpr G4int kNEntries = 5;
 
-/**
- * Guard against invalid configuration values.
- *
- * Messenger/UI commands already enforce positive ranges, but this defensive
- * check ensures geometry construction still succeeds if values are injected
- * programmatically or if validation changes later.
- */
 G4double PositiveOrDefault(G4double value, G4double fallback) {
   return (value > 0.0) ? value : fallback;
 }
 
 struct ScintillatorMaterialConfig {
-  std::string baseName = "EJ200";
   G4double density = 1.023 * g / cm3;
   G4int carbonAtoms = 9;
   G4int hydrogenAtoms = 10;
@@ -62,8 +49,12 @@ struct ScintillatorMaterialConfig {
   G4int version = 0;
 };
 
+ScintillatorMaterialConfig DefaultScintillatorMaterialConfig() {
+  return {};
+}
+
 ScintillatorMaterialConfig ResolveScintillatorMaterialConfig(const Config* config) {
-  ScintillatorMaterialConfig out;
+  auto out = DefaultScintillatorMaterialConfig();
   if (!config) {
     return out;
   }
@@ -81,49 +72,33 @@ ScintillatorMaterialConfig ResolveScintillatorMaterialConfig(const Config* confi
   out.yield1 = config->GetScintYield1();
   out.version = config->GetScintMaterialVersion();
 
-  if (out.density <= 0.0) {
-    out.density = 1.023 * g / cm3;
-  }
-  if (out.carbonAtoms <= 0) {
-    out.carbonAtoms = 9;
-  }
-  if (out.hydrogenAtoms <= 0) {
-    out.hydrogenAtoms = 10;
-  }
-  if (out.scintYieldPerMeV <= 0.0) {
-    out.scintYieldPerMeV = 10000.0;
-  }
-  if (out.resolutionScale <= 0.0) {
-    out.resolutionScale = 1.0;
-  }
-  if (out.timeConstant <= 0.0) {
-    out.timeConstant = 2.1 * ns;
-  }
-  if (out.yield1 < 0.0) {
-    out.yield1 = 1.0;
-  }
+  const auto defaults = DefaultScintillatorMaterialConfig();
+  out.density = PositiveOrDefault(out.density, defaults.density);
+  out.carbonAtoms = (out.carbonAtoms > 0) ? out.carbonAtoms : defaults.carbonAtoms;
+  out.hydrogenAtoms = (out.hydrogenAtoms > 0) ? out.hydrogenAtoms : defaults.hydrogenAtoms;
+  out.scintYieldPerMeV = PositiveOrDefault(out.scintYieldPerMeV, defaults.scintYieldPerMeV);
+  out.resolutionScale = PositiveOrDefault(out.resolutionScale, defaults.resolutionScale);
+  out.timeConstant = PositiveOrDefault(out.timeConstant, defaults.timeConstant);
+  out.yield1 = (out.yield1 >= 0.0) ? out.yield1 : defaults.yield1;
 
   const std::size_t nEntries = out.photonEnergy.size();
   if (nEntries == 0 || out.rIndex.size() != nEntries || out.absLength.size() != nEntries ||
       out.scintSpectrum.size() != nEntries) {
     G4cout << "[Scintillator] Invalid material-table sizes; falling back to EJ200 defaults."
            << G4endl;
-    out.photonEnergy = {2.00 * eV, 2.40 * eV, 2.76 * eV, 3.10 * eV, 3.50 * eV};
-    out.rIndex = {1.58, 1.58, 1.58, 1.58, 1.58};
-    out.absLength = {380.0 * cm, 380.0 * cm, 380.0 * cm, 300.0 * cm, 220.0 * cm};
-    out.scintSpectrum = {0.05, 0.35, 1.00, 0.45, 0.08};
+    out.photonEnergy = defaults.photonEnergy;
+    out.rIndex = defaults.rIndex;
+    out.absLength = defaults.absLength;
+    out.scintSpectrum = defaults.scintSpectrum;
   }
 
   return out;
 }
 
-/**
- * Build (once per version) and return a configurable EJ200-like material.
- */
+// Build (once per config version) and return a configurable EJ200-like material.
 G4Material* BuildOrGetEJ200(G4NistManager* nist, const Config* config) {
   const auto settings = ResolveScintillatorMaterialConfig(config);
-  const std::string runtimeName =
-      settings.baseName + "_cfg_" + std::to_string(settings.version);
+  const std::string runtimeName = "EJ200_cfg_" + std::to_string(settings.version);
 
   if (auto* existing = G4Material::GetMaterial(runtimeName, false)) {
     return existing;
@@ -150,9 +125,7 @@ G4Material* BuildOrGetEJ200(G4NistManager* nist, const Config* config) {
   return scintMaterial;
 }
 
-/**
- * Build (once) and return a highly absorbing optical material for scintillator masks.
- */
+// Build (once) and return a highly absorbing material for the optional mask.
 G4Material* BuildOrGetMaskAbsorber(G4NistManager* nist) {
   if (auto* existing = G4Material::GetMaterial("ScintMaskAbsorber", false)) {
     return existing;
@@ -177,30 +150,13 @@ G4Material* BuildOrGetMaskAbsorber(G4NistManager* nist) {
 }
 }  // namespace
 
-/**
- * Detector construction is parameterized by Config so macro/UI commands can
- * modify geometry and material choices prior to /run/initialize.
- */
 DetectorConstruction::DetectorConstruction(const Config* config) : fConfig(config) {}
 
-/**
- * Build geometry and materials for one run-manager initialization.
- *
- * Geometry layout:
- * - World: air box, auto-sized to stay comfortably larger than active volumes.
- * - Scintillator: centered EJ200 (or requested material) slab with configurable
- *   size and world position.
- * - Optical interface: thin plane (size/position configurable) used to record optical hits.
- *
- * Optical transport:
- * - World air gets RINDEX/ABSLENGTH to avoid undefined optical boundaries.
- * - Scintillator gets scintillation and attenuation properties through EJ200 MPT.
- */
 G4VPhysicalVolume* DetectorConstruction::Construct() {
   auto* nist = G4NistManager::Instance();
   auto* worldMaterial = nist->FindOrBuildMaterial("G4_AIR");
 
-  // Resolve scintillator material from config; unknown names fall back to EJ200.
+  // Unknown scintillator names fall back to configurable EJ200.
   G4Material* scintMaterial = nullptr;
   std::string scintMaterialName = "EJ200";
   if (fConfig) {
@@ -218,8 +174,7 @@ G4VPhysicalVolume* DetectorConstruction::Construct() {
     }
   }
 
-  // Give world material optical properties so optical photons can propagate
-  // with a well-defined refractive index and absorption length in air.
+  // Define world optical properties for optical-photon transport.
   auto* worldMpt = new G4MaterialPropertiesTable();
   G4double photonEnergy[kNEntries] = {2.00 * eV, 2.40 * eV, 2.76 * eV, 3.10 * eV,
                                       3.50 * eV};
@@ -230,8 +185,7 @@ G4VPhysicalVolume* DetectorConstruction::Construct() {
   worldMpt->AddProperty("ABSLENGTH", photonEnergy, airAbsLength, kNEntries);
   worldMaterial->SetMaterialPropertiesTable(worldMpt);
 
-  // Geometry defaults match the baseline setup and may be overridden by
-  // /scintillator/geom/* and /optical_interface/geom/* commands before /run/initialize.
+  // Baseline geometry defaults; config overrides are applied below.
   auto scintX = 5.0 * cm;
   auto scintY = 5.0 * cm;
   auto scintZ = 1.0 * cm;
@@ -241,7 +195,7 @@ G4VPhysicalVolume* DetectorConstruction::Construct() {
   auto scintPosY = 0.0 * mm;
   auto scintPosZ = 0.0 * mm;
 
-  // Optical interface defaults to covering the scintillator back face unless overridden.
+  // Optical interface defaults to the scintillator +Z face.
   auto opticalInterfaceX = scintX;
   auto opticalInterfaceY = scintY;
   auto opticalInterfaceThickness = 0.1 * mm;
@@ -251,7 +205,7 @@ G4VPhysicalVolume* DetectorConstruction::Construct() {
   auto opticalInterfacePosY = std::numeric_limits<G4double>::quiet_NaN();
   auto opticalInterfacePosZ = std::numeric_limits<G4double>::quiet_NaN();
 
-  // Optional circular mask pass-through radius at scintillator +Z face.
+  // Optional circular mask aperture centered on scintillator +Z face.
   auto maskRadius = 0.0 * mm;
   const auto maskThickness = 0.01 * mm;
 
@@ -294,25 +248,23 @@ G4VPhysicalVolume* DetectorConstruction::Construct() {
       scintBackFaceZ + (maskEnabled ? maskThickness : 0.0) +
       0.5 * opticalInterfaceThickness;
 
-  const auto opticalInterfaceCenterX = std::isnan(opticalInterfacePosX) ? defaultOpticalInterfaceX : opticalInterfacePosX;
-  const auto opticalInterfaceCenterY = std::isnan(opticalInterfacePosY) ? defaultOpticalInterfaceY : opticalInterfacePosY;
-  const auto opticalInterfaceCenterZ = std::isnan(opticalInterfacePosZ) ? defaultOpticalInterfaceZ : opticalInterfacePosZ;
-  const auto effectiveMaskRadius = maskEnabled ? maskRadius : 0.0 * mm;
+  const auto opticalInterfaceCenterX =
+      std::isnan(opticalInterfacePosX) ? defaultOpticalInterfaceX : opticalInterfacePosX;
+  const auto opticalInterfaceCenterY =
+      std::isnan(opticalInterfacePosY) ? defaultOpticalInterfaceY : opticalInterfacePosY;
+  const auto opticalInterfaceCenterZ =
+      std::isnan(opticalInterfacePosZ) ? defaultOpticalInterfaceZ : opticalInterfacePosZ;
 
-  G4cout << "[Geom] Scint(mm)=(" << scintPosX / mm << "," << scintPosY / mm
-         << "," << scintPosZ / mm << ") OpticalInterface(mm)=(" << opticalInterfaceCenterX / mm
-         << "," << opticalInterfaceCenterY / mm << "," << opticalInterfaceCenterZ / mm
-         << ") MaskEnabled=" << (maskEnabled ? "true" : "false")
-         << " MaskR(mm)=" << effectiveMaskRadius / mm << G4endl;
-
-  // Keep world automatically large enough even when volumes are shifted.
-  // We size from required half-extents with a 4x safety factor.
+  // Auto-size world from required half-extents with margin.
   const auto requiredHalfX = std::max(std::abs(scintPosX) + 0.5 * scintX,
-                                      std::abs(opticalInterfaceCenterX) + 0.5 * opticalInterfaceX);
+                                      std::abs(opticalInterfaceCenterX) +
+                                          0.5 * opticalInterfaceX);
   const auto requiredHalfY = std::max(std::abs(scintPosY) + 0.5 * scintY,
-                                      std::abs(opticalInterfaceCenterY) + 0.5 * opticalInterfaceY);
+                                      std::abs(opticalInterfaceCenterY) +
+                                          0.5 * opticalInterfaceY);
   auto requiredHalfZ = std::max(std::abs(scintPosZ) + 0.5 * scintZ,
-                                std::abs(opticalInterfaceCenterZ) + 0.5 * opticalInterfaceThickness);
+                                std::abs(opticalInterfaceCenterZ) +
+                                    0.5 * opticalInterfaceThickness);
   if (maskEnabled) {
     requiredHalfZ =
         std::max(requiredHalfZ, std::abs(maskCenterZ) + 0.5 * maskThickness);
@@ -341,7 +293,7 @@ G4VPhysicalVolume* DetectorConstruction::Construct() {
                     0,
                     true);
 
-  // Visualization: tint scintillator so optical-interface motion is easier to see.
+  // Visualization colors for quick scene inspection.
   static auto* scintVisAttributes = []() {
     auto* vis = new G4VisAttributes(G4Colour(0.1, 0.5, 0.9, 0.35));
     vis->SetVisibility(true);
@@ -385,7 +337,6 @@ G4VPhysicalVolume* DetectorConstruction::Construct() {
     }
   }
 
-  // Photon optical-interface is a dedicated logical volume used only for hit collection.
   auto* opticalInterfaceSolid =
       new G4Box("PhotonOpticalInterfaceSolid", 0.5 * opticalInterfaceX,
                 0.5 * opticalInterfaceY, 0.5 * opticalInterfaceThickness);
@@ -393,7 +344,6 @@ G4VPhysicalVolume* DetectorConstruction::Construct() {
       new G4LogicalVolume(opticalInterfaceSolid, worldMaterial,
                           "PhotonOpticalInterfaceLV");
 
-  // Visualization: draw the optical interface in solid red for easy OGL inspection.
   static auto* opticalInterfaceVisAttributes = []() {
     auto* vis = new G4VisAttributes(G4Colour(1.0, 0.0, 0.0));
     vis->SetVisibility(true);
@@ -403,7 +353,8 @@ G4VPhysicalVolume* DetectorConstruction::Construct() {
   fOpticalInterfaceVolume->SetVisAttributes(opticalInterfaceVisAttributes);
 
   new G4PVPlacement(nullptr,
-                    G4ThreeVector(opticalInterfaceCenterX, opticalInterfaceCenterY, opticalInterfaceCenterZ),
+                    G4ThreeVector(opticalInterfaceCenterX, opticalInterfaceCenterY,
+                                  opticalInterfaceCenterZ),
                     fOpticalInterfaceVolume,
                     "PhotonOpticalInterfacePV",
                     worldLV,
@@ -414,12 +365,6 @@ G4VPhysicalVolume* DetectorConstruction::Construct() {
   return worldPV;
 }
 
-/**
- * Attach sensitive detector(s) after geometry is built.
- *
- * We register a single PhotonOpticalInterfaceSD instance and assign it to the optical-interface
- * logical volume. If geometry was not built (or failed), we skip safely.
- */
 void DetectorConstruction::ConstructSDandField() {
   if (!fOpticalInterfaceVolume) {
     return;
@@ -427,9 +372,7 @@ void DetectorConstruction::ConstructSDandField() {
 
   auto* sdManager = G4SDManager::GetSDMpointer();
 
-  // Reuse the existing SD across geometry reinitializations. This avoids
-  // duplicate-registration warnings (DET1010) when geometry commands trigger
-  // /run/reinitializeGeometry in interactive sessions.
+  // Reuse existing SD across geometry reinitializations.
   auto* existing = sdManager->FindSensitiveDetector("PhotonOpticalInterfaceSD", false);
   auto* photonOpticalInterface =
       existing ? static_cast<PhotonOpticalInterfaceSD*>(existing)
