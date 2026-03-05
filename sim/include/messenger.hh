@@ -13,18 +13,18 @@ class G4UIcmdWithAnInteger;
 class G4UIcmdWithAString;
 class G4UIcommand;
 
-/// Geant4 UI messenger that maps `/scintillator/*`, `/optical_interface/geom/*`, and `/output/*` commands into `Config` updates.
+/// Geant4 UI messenger that maps runtime UI commands into `Config` updates.
 class Messenger : public G4UImessenger {
  public:
   /// `config` is a shared mutable settings object updated by UI commands.
   explicit Messenger(Config* config);
   ~Messenger() override;
 
-  /// Geant4 command-dispatch entry point.
+  /// Geant4 command-dispatch callback.
   void SetNewValue(G4UIcommand* command, G4String newValue) override;
 
  private:
-  /// Notify run manager that geometry must be reinitialized before beamOn.
+  /// Mark geometry as modified after geometry-affecting updates.
   void NotifyGeometryChanged() const;
 
   /// Shared runtime configuration sink.

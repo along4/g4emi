@@ -79,48 +79,30 @@ bool ParseListWithOptionalUnit(const G4String& rawValue,
 }
 }  // namespace
 
-/**
- * Geant4 UI messenger responsible for runtime configuration commands.
- *
- * Responsibilities:
- * - Register `/scintillator/geom/...`, `/optical_interface/geom/...`, and `/output/...`
- *   command hierarchy.
- * - Parse user-provided command values.
- * - Forward validated values into the shared Config object.
- * - Notify the run manager when geometry-affecting fields are modified.
- */
 Messenger::Messenger(Config* config) : fConfig(config) {
-  // Top-level namespace for scintillator configuration commands.
   fScintillatorDir = new G4UIdirectory("/scintillator/");
   fScintillatorDir->SetGuidance("Scintillator controls");
 
-  // Scintillator geometry/material subtree.
   fScintillatorGeomDir = new G4UIdirectory("/scintillator/geom/");
   fScintillatorGeomDir->SetGuidance("Scintillator geometry and material controls");
 
-  // Scintillator material-properties subtree.
   fScintillatorPropertiesDir = new G4UIdirectory("/scintillator/properties/");
   fScintillatorPropertiesDir->SetGuidance("Scintillator optical/material properties");
 
-  // Top-level namespace for optical-interface geometry commands.
   fOpticalInterfaceDir = new G4UIdirectory("/optical_interface/");
   fOpticalInterfaceDir->SetGuidance("Optical-interface controls");
 
-  // Optical-interface geometry subtree.
   fOpticalInterfaceGeomDir = new G4UIdirectory("/optical_interface/geom/");
   fOpticalInterfaceGeomDir->SetGuidance("Optical-interface geometry controls");
 
-  // Output subtree (file destination controls).
   fOutputDir = new G4UIdirectory("/output/");
   fOutputDir->SetGuidance("Output controls");
 
-  // Material name command; accepts NIST names or custom labels handled later.
   fGeomMaterialCmd = new G4UIcmdWithAString("/scintillator/geom/material", this);
   fGeomMaterialCmd->SetGuidance("Set scintillator material name (EJ200 or NIST name)");
   fGeomMaterialCmd->SetParameterName("material", false);
   fGeomMaterialCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 
-  // Scintillator X dimension command in Geant4 length units.
   fGeomScintXCmd = new G4UIcmdWithADoubleAndUnit("/scintillator/geom/scintX", this);
   fGeomScintXCmd->SetGuidance("Set scintillator size in X");
   fGeomScintXCmd->SetParameterName("scintX", false);
@@ -128,7 +110,6 @@ Messenger::Messenger(Config* config) : fConfig(config) {
   fGeomScintXCmd->SetRange("scintX > 0.");
   fGeomScintXCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 
-  // Scintillator Y dimension command.
   fGeomScintYCmd = new G4UIcmdWithADoubleAndUnit("/scintillator/geom/scintY", this);
   fGeomScintYCmd->SetGuidance("Set scintillator size in Y");
   fGeomScintYCmd->SetParameterName("scintY", false);
@@ -136,7 +117,6 @@ Messenger::Messenger(Config* config) : fConfig(config) {
   fGeomScintYCmd->SetRange("scintY > 0.");
   fGeomScintYCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 
-  // Scintillator thickness (Z) command.
   fGeomScintZCmd = new G4UIcmdWithADoubleAndUnit("/scintillator/geom/scintZ", this);
   fGeomScintZCmd->SetGuidance("Set scintillator thickness in Z");
   fGeomScintZCmd->SetParameterName("scintZ", false);
@@ -144,7 +124,6 @@ Messenger::Messenger(Config* config) : fConfig(config) {
   fGeomScintZCmd->SetRange("scintZ > 0.");
   fGeomScintZCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 
-  // Scintillator absolute center-position commands in world coordinates.
   fGeomScintPosXCmd = new G4UIcmdWithADoubleAndUnit("/scintillator/geom/posX", this);
   fGeomScintPosXCmd->SetGuidance("Set scintillator center X position in world coordinates");
   fGeomScintPosXCmd->SetParameterName("posX", false);
@@ -163,7 +142,6 @@ Messenger::Messenger(Config* config) : fConfig(config) {
   fGeomScintPosZCmd->SetUnitCategory("Length");
   fGeomScintPosZCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 
-  // Mask radius command for circular pass-through region at scintillator +Z face.
   fGeomMaskRadiusCmd =
       new G4UIcmdWithADoubleAndUnit("/scintillator/geom/maskRadius", this);
   fGeomMaskRadiusCmd->SetGuidance(
@@ -173,7 +151,6 @@ Messenger::Messenger(Config* config) : fConfig(config) {
   fGeomMaskRadiusCmd->SetRange("maskRadius >= 0.");
   fGeomMaskRadiusCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 
-  // Scintillator material-property commands.
   fScintDensityCmd =
       new G4UIcmdWithADoubleAndUnit("/scintillator/properties/density", this);
   fScintDensityCmd->SetGuidance("Set scintillator density");
@@ -258,7 +235,6 @@ Messenger::Messenger(Config* config) : fConfig(config) {
     fScintYieldFractionCmds[i]->AvailableForStates(G4State_PreInit, G4State_Idle);
   }
 
-  // Optical-interface dimensions (X, Y) and thickness (Z).
   fOpticalInterfaceXCmd =
       new G4UIcmdWithADoubleAndUnit("/optical_interface/geom/sizeX", this);
   fOpticalInterfaceXCmd->SetGuidance(
@@ -285,7 +261,6 @@ Messenger::Messenger(Config* config) : fConfig(config) {
   fOpticalInterfaceThicknessCmd->SetRange("thickness > 0.");
   fOpticalInterfaceThicknessCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 
-  // Optical-interface center-position commands in world coordinates.
   fOpticalInterfacePosXCmd = new G4UIcmdWithADoubleAndUnit("/optical_interface/geom/posX", this);
   fOpticalInterfacePosXCmd->SetGuidance(
       "Set optical-interface center X position in world coordinates (default aligns with scintillator center)");
@@ -307,21 +282,18 @@ Messenger::Messenger(Config* config) : fConfig(config) {
   fOpticalInterfacePosZCmd->SetUnitCategory("Length");
   fOpticalInterfacePosZCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 
-  // Output directory command. Empty string clears explicit override.
   fOutputPathCmd = new G4UIcmdWithAString("/output/path", this);
   fOutputPathCmd->SetGuidance(
       "Set output directory path. Use \"\" to clear and fall back to legacy base-path behavior.");
   fOutputPathCmd->SetParameterName("path", false);
   fOutputPathCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 
-  // Output filename command.
   fOutputFilenameCmd = new G4UIcmdWithAString("/output/filename", this);
   fOutputFilenameCmd->SetGuidance(
       "Set output base filename/path; .h5 extension is added automatically");
   fOutputFilenameCmd->SetParameterName("filename", false);
   fOutputFilenameCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 
-  // Optional run-name command used for routing outputs to data/<runname>/.
   fOutputRunNameCmd = new G4UIcmdWithAString("/output/runname", this);
   fOutputRunNameCmd->SetGuidance(
       "Set optional run name; outputs go under <output/path>/<runname>/ when path is set, otherwise data/<runname>/. Use \"\" to clear.");
@@ -329,12 +301,6 @@ Messenger::Messenger(Config* config) : fConfig(config) {
   fOutputRunNameCmd->AvailableForStates(G4State_PreInit, G4State_Idle);
 }
 
-/**
- * Destroy all UI command and directory objects owned by this messenger.
- *
- * Deletion is performed in reverse ownership order for clarity and to mirror
- * constructor allocation flow.
- */
 Messenger::~Messenger() {
   delete fOutputRunNameCmd;
   delete fOutputFilenameCmd;
@@ -380,21 +346,11 @@ Messenger::~Messenger() {
   delete fScintillatorDir;
 }
 
-/**
- * Dispatch callback invoked by Geant4 when one registered command is executed.
- *
- * This method:
- * - maps command pointer identity to a specific Config mutation,
- * - performs command-specific value conversion where needed,
- * - emits concise status feedback to stdout,
- * - marks geometry dirty after geometry-affecting command changes.
- */
 void Messenger::SetNewValue(G4UIcommand* command, G4String newValue) {
   if (!fConfig) {
     return;
   }
 
-  // Material change affects geometry/material tables used during initialization.
   if (command == fGeomMaterialCmd) {
     fConfig->SetScintMaterial(newValue);
     G4cout << "Scintillator material set to '" << newValue
@@ -403,7 +359,6 @@ void Messenger::SetNewValue(G4UIcommand* command, G4String newValue) {
     return;
   }
 
-  // Scintillator dimensions are parsed in configured units by Geant4 helpers.
   if (command == fGeomScintXCmd) {
     fConfig->SetScintX(fGeomScintXCmd->GetNewDoubleValue(newValue));
     NotifyGeometryChanged();
@@ -571,7 +526,6 @@ void Messenger::SetNewValue(G4UIcommand* command, G4String newValue) {
     }
   }
 
-  // Optical-interface dimensions are controlled in dedicated /optical_interface/geom subtree.
   if (command == fOpticalInterfaceXCmd) {
     fConfig->SetOpticalInterfaceX(fOpticalInterfaceXCmd->GetNewDoubleValue(newValue));
     NotifyGeometryChanged();
@@ -590,7 +544,6 @@ void Messenger::SetNewValue(G4UIcommand* command, G4String newValue) {
     return;
   }
 
-  // Optical-interface absolute center position controls.
   if (command == fOpticalInterfacePosXCmd) {
     const auto value = fOpticalInterfacePosXCmd->GetNewDoubleValue(newValue);
     fConfig->SetOpticalInterfacePosX(value);
@@ -615,7 +568,6 @@ void Messenger::SetNewValue(G4UIcommand* command, G4String newValue) {
     return;
   }
 
-  // Output-path override controls destination directory for output writers.
   if (command == fOutputPathCmd) {
     fConfig->SetOutputPath(newValue);
     const auto configuredPath = fConfig->GetOutputPath();
@@ -629,7 +581,6 @@ void Messenger::SetNewValue(G4UIcommand* command, G4String newValue) {
     return;
   }
 
-  // Output filename targets HDF5 output; extension is derived automatically.
   if (command == fOutputFilenameCmd) {
     fConfig->SetOutputFilename(newValue);
     G4cout << "Output filename set. HDF5 path: '" << fConfig->GetHdf5FilePath()
@@ -637,7 +588,6 @@ void Messenger::SetNewValue(G4UIcommand* command, G4String newValue) {
     return;
   }
 
-  // Run name controls optional output routing under run-specific output folders.
   if (command == fOutputRunNameCmd) {
     fConfig->SetOutputRunName(newValue);
     const auto runName = fConfig->GetOutputRunName();
@@ -651,20 +601,10 @@ void Messenger::SetNewValue(G4UIcommand* command, G4String newValue) {
   }
 }
 
-/**
- * Notify Geant4 that geometry-dependent data should be rebuilt before running.
- *
- * This is required after runtime geometry parameter changes to ensure the next
- * `/run/initialize` uses updated detector dimensions/material choices.
- */
 void Messenger::NotifyGeometryChanged() const {
   auto* runManager = G4RunManager::GetRunManager();
   if (runManager) {
-    // Mark detector geometry as dirty. We intentionally avoid forcing an
-    // immediate destructive rebuild from this callback because active
-    // visualization scenes can still reference old physical-volume models.
-    // A forced rebuild in that state can trigger model invalidation warnings
-    // and, on some Geant4/OGL stacks, a segmentation fault.
+    // Mark geometry dirty; users can rebuild with reinitialize/initialize commands.
     runManager->GeometryHasBeenModified();
   }
   G4cout << "Geometry updated. Run /run/reinitializeGeometry, then /run/initialize, then /vis/drawVolume."
