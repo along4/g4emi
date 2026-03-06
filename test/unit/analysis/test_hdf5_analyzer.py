@@ -79,7 +79,6 @@ class IntensifierPlotTests(unittest.TestCase):
         with self.h5py.File(path, "w") as handle:
             handle.create_dataset("transported_photons", data=rows)
             handle.attrs["intensifier_input_screen_defined"] = True
-            handle.attrs["intensifier_input_screen_shape"] = "circle"
             handle.attrs["intensifier_input_screen_diameter_mm"] = 18.0
             handle.attrs["intensifier_input_screen_center_mm"] = self.np.array(
                 [0.0, 0.0],

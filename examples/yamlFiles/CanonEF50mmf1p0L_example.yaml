@@ -67,7 +67,6 @@ optical:
 intensifier:
   model: Cricket2
   input_screen:
-    shape: circle
     image_circle_diameter_mm: 18.0
     center_mm: [0.0, 0.0]
     magnification: 1.0

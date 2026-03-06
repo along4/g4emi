@@ -161,7 +161,6 @@ class OpticalTransportTests(unittest.TestCase):
             payload["intensifier"] = {
                 "model": "Cricket2",
                 "input_screen": {
-                    "shape": "circle",
                     "image_circle_diameter_mm": image_circle_diameter_mm,
                     "center_mm": [float(center_mm[0]), float(center_mm[1])],
                     "magnification": 1.0,
@@ -298,7 +297,6 @@ class OpticalTransportTests(unittest.TestCase):
                 self.assertIn("source_hdf5", handle.attrs)
                 self.assertIn("lens_zmx_path", handle.attrs)
                 self.assertTrue(bool(handle.attrs["intensifier_input_screen_defined"]))
-                self.assertEqual(handle.attrs["intensifier_input_screen_shape"], "circle")
                 self.assertAlmostEqual(
                     float(handle.attrs["intensifier_input_screen_diameter_mm"]),
                     18.0,

@@ -365,7 +365,6 @@ class OpticalTransportAssumptionsConfig(StrictModel):
 class IntensifierInputScreenConfig(StrictModel):
     """Usable active area on the intensifier input plane."""
 
-    shape: Literal["circle"] = "circle"
     image_circle_diameter_mm: float = Field(
         gt=0.0,
         validation_alias=AliasChoices(
@@ -778,7 +777,6 @@ def default_sim_config() -> SimConfig:
             "intensifier": {
                 "model": "Cricket2",
                 "input_screen": {
-                    "shape": "circle",
                     "image_circle_diameter_mm": 18.0,
                     "center_mm": [0.0, 0.0],
                     "magnification": 1.0,

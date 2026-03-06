@@ -127,7 +127,6 @@ class TransportSummary:
 class IntensifierInputScreen:
     """Active-area geometry in intensifier input-plane coordinates."""
 
-    shape: str
     image_circle_diameter_mm: float
     center_x_mm: float
     center_y_mm: float
@@ -512,7 +511,6 @@ def transport_from_sim_config(
         if input_screen is not None:
             dst.attrs["intensifier_model"] = config.intensifier.model
             dst.attrs["intensifier_input_screen_defined"] = True
-            dst.attrs["intensifier_input_screen_shape"] = input_screen.shape
             dst.attrs["intensifier_input_screen_diameter_mm"] = float(
                 input_screen.image_circle_diameter_mm
             )
@@ -569,7 +567,6 @@ def _resolve_intensifier_input_screen(config: SimConfig) -> IntensifierInputScre
 
     input_screen = intensifier.input_screen
     return IntensifierInputScreen(
-        shape=input_screen.shape,
         image_circle_diameter_mm=float(input_screen.image_circle_diameter_mm),
         center_x_mm=float(input_screen.center_mm[0]),
         center_y_mm=float(input_screen.center_mm[1]),

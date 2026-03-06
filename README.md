@@ -164,7 +164,7 @@ If a photon misses the lens/sensor in ray tracing, its
 
 When `intensifier.input_screen` is present in `SimConfig`, transport also
 writes HDF5 attributes describing the active input screen
-(`shape`, `diameter_mm`, `center_mm`, `coordinate_frame`, and
+(`diameter_mm`, `center_mm`, `coordinate_frame`, and
 `magnification`) so downstream analysis can use fixed physical extents.
 
 ### 2.7 One-step YAML -> run simulation example

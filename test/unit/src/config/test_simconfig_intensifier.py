@@ -21,7 +21,7 @@ sys.path.insert(0, str(_repo_root()))
 
 
 class SimConfigIntensifierTests(unittest.TestCase):
-    """Validate intensifier input-screen shape and center parsing."""
+    """Validate intensifier input-screen center parsing."""
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -109,7 +109,6 @@ class SimConfigIntensifierTests(unittest.TestCase):
         payload["intensifier"] = {
             "model": "Cricket2",
             "input_screen": {
-                "shape": "circle",
                 "image_circle_diameter_mm": 18.0,
                 "center_mm": [1.25, -2.5],
                 "magnification": 1.0,
@@ -124,7 +123,6 @@ class SimConfigIntensifierTests(unittest.TestCase):
         payload["intensifier"] = {
             "model": "CricketPro",
             "input_screen": {
-                "shape": "circle",
                 "image_circle_diameter_mm": 25.0,
                 "center_mm": {"x_mm": 3.0, "y_mm": -1.0},
                 "magnification": 1.0,
