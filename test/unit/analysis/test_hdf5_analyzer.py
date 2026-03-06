@@ -59,6 +59,7 @@ class IntensifierPlotTests(unittest.TestCase):
         cls.np = np
         cls.plt = plt
         cls.ScintillationDecayComponent = ScintillationDecayComponent
+        cls.scipy_available = analyzer_module.least_squares is not None
         cls.decay_model_bin_counts = staticmethod(decay_model_bin_counts)
         cls.fit_photon_creation_delay_histogram = staticmethod(
             fit_photon_creation_delay_histogram
@@ -278,6 +279,10 @@ class IntensifierPlotTests(unittest.TestCase):
             self.plt.close(fig)
 
     def test_photon_creation_delay_fit_recovers_three_component_model(self) -> None:
+        if not self.scipy_available:
+            raise unittest.SkipTest(
+                "scipy is unavailable; skipping timing-fit recovery test."
+            )
         with tempfile.TemporaryDirectory() as tmp_dir:
             rng = self.np.random.default_rng(12345)
             true_components = (
