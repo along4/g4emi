@@ -52,6 +52,23 @@ def _parse_args() -> argparse.Namespace:
             "data/<run>/transportedPhotons/photons_intensifier_hits.h5."
         ),
     )
+    parser.add_argument(
+        "--sim-config-yaml",
+        type=Path,
+        default=None,
+        help=(
+            "Optional SimConfig YAML path used to set photon-origin/exit plot "
+            "extents to scintillator XY size."
+        ),
+    )
+    parser.add_argument(
+        "--disable-scintillator-extent",
+        action="store_true",
+        help=(
+            "Use legacy autoscaled/shared-range behavior for origin/exit plots "
+            "instead of SimConfig scintillator extents."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -72,6 +89,34 @@ def _default_output_dir_from_input(hdf5_path: Path) -> Path:
     if hdf5_path.parent.name in stage_dir_names:
         return hdf5_path.parent.parent / "plots"
     return hdf5_path.parent / "plots"
+
+
+def _infer_sim_config_yaml_path(sim_hdf5_path: Path) -> Path | None:
+    """Best-effort infer `examples/yamlFiles/*.yaml` from run-root naming."""
+
+    if sim_hdf5_path.parent.name != "simulatedPhotons":
+        return None
+
+    run_id = sim_hdf5_path.parent.parent.name
+    repo_root = Path(__file__).resolve().parents[2]
+    yaml_dir = repo_root / "examples" / "yamlFiles"
+    candidates = [
+        yaml_dir / f"{run_id}.yaml",
+        yaml_dir / f"{run_id}_example.yaml",
+    ]
+    if run_id.endswith("_run"):
+        stem = run_id[: -len("_run")]
+        candidates.extend(
+            [
+                yaml_dir / f"{stem}.yaml",
+                yaml_dir / f"{stem}_example.yaml",
+            ]
+        )
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate.resolve()
+    return None
 
 
 def main() -> None:
@@ -100,10 +145,36 @@ def main() -> None:
         if args.transport_hdf5_path is not None
         else _infer_transport_hdf5_path(hdf5_path)
     )
+    use_scintillator_extent = not args.disable_scintillator_extent
+    sim_config_yaml_path = None
+    if use_scintillator_extent:
+        sim_config_yaml_path = (
+            args.sim_config_yaml.expanduser().resolve()
+            if args.sim_config_yaml is not None
+            else _infer_sim_config_yaml_path(hdf5_path)
+        )
+        if sim_config_yaml_path is None:
+            raise FileNotFoundError(
+                "Could not infer SimConfig YAML for scintillator-based extents. "
+                "Pass `--sim-config-yaml <path>` or set "
+                "`--disable-scintillator-extent`."
+            )
+        if not sim_config_yaml_path.exists():
+            raise FileNotFoundError(f"SimConfig YAML not found: {sim_config_yaml_path}")
 
     neutron_hits_to_image(hdf5_path, output_path=neutron_png)
-    photon_origins_to_image(hdf5_path, output_path=origins_png)
-    photon_exit_to_image(hdf5_path, output_path=exit_png)
+    photon_origins_to_image(
+        hdf5_path,
+        output_path=origins_png,
+        use_scintillator_extent=use_scintillator_extent,
+        sim_config_yaml_path=sim_config_yaml_path,
+    )
+    photon_exit_to_image(
+        hdf5_path,
+        output_path=exit_png,
+        use_scintillator_extent=use_scintillator_extent,
+        sim_config_yaml_path=sim_config_yaml_path,
+    )
     optical_interface_photons_to_image(hdf5_path, output_path=interface_png)
     if transport_hdf5_path is not None and transport_hdf5_path.exists():
         intensifier_photons_to_image(
@@ -114,6 +185,8 @@ def main() -> None:
         intensifier_png = None
 
     print(f"Input HDF5: {hdf5_path}")
+    if use_scintillator_extent and sim_config_yaml_path is not None:
+        print(f"SimConfig YAML (for origin/exit extent): {sim_config_yaml_path}")
     print("Wrote images:")
     print(f"  - {neutron_png}")
     print(f"  - {origins_png}")

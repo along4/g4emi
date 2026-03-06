@@ -155,22 +155,38 @@ The output file contains:
 - copied `/primaries` and `/secondaries` datasets for linkage to source tracks
 - `/transported_photons` dataset with source track IDs and transported sensor
   coordinates (`intensifier_hit_*_mm`)
+- per-hit booleans: `reached_intensifier` and `in_bounds` (inside configured
+  intensifier image circle)
 
 If a photon misses the lens/sensor in ray tracing, its
 `intensifier_hit_*_mm` values are written as `NaN` and
   `reached_intensifier` is `False`.
+
+When `intensifier.input_screen` is present in `SimConfig`, transport also
+writes HDF5 attributes describing the active input screen
+(`shape`, `diameter_mm`, `center_mm`, `coordinate_frame`, and
+`magnification`) so downstream analysis can use fixed physical extents.
 
 ### 2.7 One-step YAML -> run simulation example
 
 To generate the macro and run `g4emi` from one script:
 
 ```bash
-pixi run python examples/RunSimulation/run_simulation_from_yaml.py \
+pixi run python examples/runSimulation/run_simulation_from_yaml.py \
   examples/yamlFiles/CanonEF50mmf1p0L_example.yaml
 ```
 
 Useful options:
 - `--dry-run`: write macro + print run command without launching Geant4.
+
+### 2.8 End-to-end YAML -> simulation -> transport
+
+To run the full pipeline (macro generation, simulation, then optical transport):
+
+```bash
+pixi run python examples/endToEnd/end_to_end_example.py \
+  examples/yamlFiles/CanonEF50mmf1p0L_example.yaml
+```
 
 ## 3. Simulation Output Structures
 

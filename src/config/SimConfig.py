@@ -362,6 +362,64 @@ class OpticalTransportAssumptionsConfig(StrictModel):
     )
 
 
+class IntensifierInputScreenConfig(StrictModel):
+    """Usable active area on the intensifier input plane."""
+
+    shape: Literal["circle"] = "circle"
+    image_circle_diameter_mm: float = Field(
+        gt=0.0,
+        validation_alias=AliasChoices(
+            "image_circle_diameter_mm",
+            "imageCircleDiameterMm",
+        ),
+        serialization_alias="image_circle_diameter_mm",
+    )
+    center_mm: tuple[float, float] = Field(
+        default=(0.0, 0.0),
+        validation_alias=AliasChoices("center_mm", "centerMm"),
+        serialization_alias="center_mm",
+    )
+    magnification: float = Field(default=1.0, gt=0.0)
+    coordinate_frame: str = Field(
+        default="intensifier_input_plane",
+        validation_alias=AliasChoices("coordinate_frame", "coordinateFrame"),
+        serialization_alias="coordinate_frame",
+        min_length=1,
+    )
+    notes: str | None = None
+
+    @field_validator("center_mm", mode="before")
+    @classmethod
+    def normalize_center_mm(cls, value: object) -> tuple[float, float]:
+        """Accept center as `[x, y]`, `(x, y)`, or `{x_mm, y_mm}`."""
+
+        if value is None:
+            return (0.0, 0.0)
+        if isinstance(value, (tuple, list)):
+            if len(value) != 2:
+                raise ValueError("`center_mm` must contain exactly two values: [x_mm, y_mm].")
+            return (float(value[0]), float(value[1]))
+        if isinstance(value, dict):
+            keys = set(value.keys())
+            if {"x_mm", "y_mm"}.issubset(keys):
+                return (float(value["x_mm"]), float(value["y_mm"]))
+            if {"x", "y"}.issubset(keys):
+                return (float(value["x"]), float(value["y"]))
+        raise ValueError(
+            "`center_mm` must be [x_mm, y_mm] or a mapping with `{x_mm, y_mm}`."
+        )
+
+
+class IntensifierConfig(StrictModel):
+    """Image-intensifier model metadata and active input-screen definition."""
+
+    model: str = Field(min_length=1)
+    input_screen: IntensifierInputScreenConfig = Field(
+        validation_alias=AliasChoices("input_screen", "inputScreen"),
+        serialization_alias="input_screen",
+    )
+
+
 class OpticalConfig(StrictModel):
     """Optical subsystem definition.
 
@@ -629,6 +687,7 @@ class SimConfig(StrictModel):
     scintillator: ScintillatorConfig
     source: SourceConfig
     optical: OpticalConfig
+    intensifier: IntensifierConfig | None = None
     simulation: SimulationConfig | None = None
     metadata: MetadataConfig = Field(
         validation_alias=AliasChoices("Metadata", "metadata"),
@@ -714,6 +773,17 @@ def default_sim_config() -> SimConfig:
                 "transportAssumptions": {
                     "objectPlane": "scintillator_back_face",
                     "opticalInterfaceRepresents": "lens_entrance_plane",
+                },
+            },
+            "intensifier": {
+                "model": "Cricket2",
+                "input_screen": {
+                    "shape": "circle",
+                    "image_circle_diameter_mm": 18.0,
+                    "center_mm": [0.0, 0.0],
+                    "magnification": 1.0,
+                    "coordinate_frame": "intensifier_input_plane",
+                    "notes": "Cricket2 nominal image-circle diameter and 1:1 magnification.",
                 },
             },
             "simulation": {

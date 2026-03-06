@@ -22,6 +22,8 @@ from matplotlib.axes import Axes
 from matplotlib.colors import LogNorm
 from matplotlib.figure import Figure
 
+XYRange = tuple[tuple[float, float], tuple[float, float]]
+
 
 def _read_structured_dataset(hdf5_path: str | Path, dataset_name: str) -> np.ndarray:
     """Read one structured dataset from an HDF5 file."""
@@ -34,6 +36,23 @@ def _read_structured_dataset(hdf5_path: str | Path, dataset_name: str) -> np.nda
         if dataset_name not in handle:
             raise KeyError(f"Dataset {dataset_name!r} not found in {path}")
         return handle[dataset_name][:]
+
+
+def _read_structured_dataset_with_file_attrs(
+    hdf5_path: str | Path,
+    dataset_name: str,
+) -> tuple[np.ndarray, dict[str, object]]:
+    """Read one structured dataset plus root-level HDF5 file attributes."""
+
+    path = Path(hdf5_path)
+    if not path.exists():
+        raise FileNotFoundError(f"HDF5 file not found: {path}")
+
+    with h5py.File(path, "r") as handle:
+        if dataset_name not in handle:
+            raise KeyError(f"Dataset {dataset_name!r} not found in {path}")
+        attrs = {str(key): handle.attrs[key] for key in handle.attrs.keys()}
+        return handle[dataset_name][:], attrs
 
 
 def _decode_species(values: np.ndarray) -> np.ndarray:
@@ -55,14 +74,48 @@ def _histogram_image(
     x_mm: np.ndarray,
     y_mm: np.ndarray,
     bins: int | Sequence[int],
-    xy_range: tuple[tuple[float, float], tuple[float, float]] | None = None,
+    xy_range: XYRange | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Build a 2D histogram image and the corresponding bin edges."""
 
     if x_mm.size == 0 or y_mm.size == 0:
-        raise ValueError("No points available to plot.")
+        if xy_range is None:
+            raise ValueError("No points available to plot.")
+        return np.histogram2d(
+            np.array([], dtype=float),
+            np.array([], dtype=float),
+            bins=bins,
+            range=xy_range,
+        )
 
     return np.histogram2d(x_mm, y_mm, bins=bins, range=xy_range)
+
+
+def _intensifier_input_screen_from_attrs(
+    attrs: dict[str, object],
+) -> tuple[float, float, float] | None:
+    """Return `(center_x_mm, center_y_mm, diameter_mm)` from file attrs."""
+
+    if "intensifier_input_screen_diameter_mm" not in attrs:
+        return None
+    if not bool(attrs.get("intensifier_input_screen_defined", True)):
+        return None
+
+    diameter_mm = float(attrs["intensifier_input_screen_diameter_mm"])
+    center_raw = attrs.get("intensifier_input_screen_center_mm")
+    if center_raw is None:
+        return None
+    center = np.asarray(center_raw, dtype=float).reshape(-1)
+    if center.size != 2:
+        return None
+    center_x_mm = float(center[0])
+    center_y_mm = float(center[1])
+
+    if not np.isfinite(diameter_mm) or diameter_mm <= 0.0:
+        return None
+    if not np.isfinite(center_x_mm) or not np.isfinite(center_y_mm):
+        return None
+    return (center_x_mm, center_y_mm, diameter_mm)
 
 
 def _photon_exit_field_names(photons: np.ndarray) -> tuple[str, str]:
@@ -83,7 +136,7 @@ def _photon_exit_field_names(photons: np.ndarray) -> tuple[str, str]:
 def _shared_xy_range(
     hdf5_path: str | Path,
     neutron_labels: Sequence[str],
-) -> tuple[tuple[float, float], tuple[float, float]]:
+) -> XYRange:
     """Compute a shared XY histogram range for neutron/origin/exit plots."""
 
     primaries = _read_structured_dataset(hdf5_path, "primaries")
@@ -116,7 +169,57 @@ def _shared_xy_range(
             "Unable to compute shared range because no finite XY points were found."
         )
 
-    return ((float(np.min(x_all)), float(np.max(x_all))), (float(np.min(y_all)), float(np.max(y_all))))
+    return (
+        (float(np.min(x_all)), float(np.max(x_all))),
+        (float(np.min(y_all)), float(np.max(y_all))),
+    )
+
+
+def _scintillator_xy_range_from_sim_config(sim_config_yaml_path: str | Path) -> XYRange:
+    """Read scintillator XY extent from SimConfig YAML."""
+
+    path = Path(sim_config_yaml_path).expanduser().resolve()
+    if not path.exists():
+        raise FileNotFoundError(f"SimConfig YAML not found: {path}")
+
+    try:
+        from src.config.ConfigIO import from_yaml
+    except ModuleNotFoundError as exc:
+        raise ModuleNotFoundError(
+            "Could not import `src.config.ConfigIO.from_yaml` required for "
+            "scintillator-based plot extents. Run in the project environment "
+            "(for example: `pixi run ...`)."
+        ) from exc
+
+    config = from_yaml(path)
+    center_x = float(config.scintillator.position_mm.x_mm)
+    center_y = float(config.scintillator.position_mm.y_mm)
+    size_x = float(config.scintillator.dimension_mm.x_mm)
+    size_y = float(config.scintillator.dimension_mm.y_mm)
+    return (
+        (center_x - 0.5 * size_x, center_x + 0.5 * size_x),
+        (center_y - 0.5 * size_y, center_y + 0.5 * size_y),
+    )
+
+
+def _resolve_scintillator_plot_xy_range(
+    *,
+    hdf5_path: str | Path,
+    neutron_labels: Sequence[str],
+    shared_range: bool,
+    use_scintillator_extent: bool,
+    sim_config_yaml_path: str | Path | None,
+    xy_range_override: XYRange | None,
+) -> XYRange | None:
+    """Resolve XY range with precedence: override -> scintillator -> shared."""
+
+    if xy_range_override is not None:
+        return xy_range_override
+    if use_scintillator_extent and sim_config_yaml_path is not None:
+        return _scintillator_xy_range_from_sim_config(sim_config_yaml_path)
+    if shared_range:
+        return _shared_xy_range(hdf5_path, neutron_labels)
+    return None
 
 
 def _plot_histogram(
@@ -212,8 +315,17 @@ def photon_origins_to_image(
     show: bool = False,
     shared_range: bool = True,
     neutron_labels: Sequence[str] = ("n", "neutron"),
+    use_scintillator_extent: bool = True,
+    sim_config_yaml_path: str | Path | None = None,
+    xy_range_override: XYRange | None = None,
 ) -> tuple[Figure, Axes]:
-    """Plot photon origin coordinates (`/photons`) as a 2D image."""
+    """Plot photon origin coordinates (`/photons`) as a 2D image.
+
+    XY-range precedence:
+    1. `xy_range_override` (explicit user range)
+    2. SimConfig scintillator extent (`sim_config_yaml_path`) when enabled
+    3. legacy shared-data range (`shared_range=True`)
+    """
 
     photons = _read_structured_dataset(hdf5_path, "photons")
     required = {"photon_origin_x_mm", "photon_origin_y_mm"}
@@ -222,7 +334,14 @@ def photon_origins_to_image(
 
     x_mm = np.asarray(photons["photon_origin_x_mm"], dtype=float)
     y_mm = np.asarray(photons["photon_origin_y_mm"], dtype=float)
-    xy_range = _shared_xy_range(hdf5_path, neutron_labels) if shared_range else None
+    xy_range = _resolve_scintillator_plot_xy_range(
+        hdf5_path=hdf5_path,
+        neutron_labels=neutron_labels,
+        shared_range=shared_range,
+        use_scintillator_extent=use_scintillator_extent,
+        sim_config_yaml_path=sim_config_yaml_path,
+        xy_range_override=xy_range_override,
+    )
     hist, x_edges, y_edges = _histogram_image(x_mm, y_mm, bins, xy_range=xy_range)
 
     return _plot_histogram(
@@ -247,8 +366,17 @@ def photon_exit_to_image(
     show: bool = False,
     shared_range: bool = True,
     neutron_labels: Sequence[str] = ("n", "neutron"),
+    use_scintillator_extent: bool = True,
+    sim_config_yaml_path: str | Path | None = None,
+    xy_range_override: XYRange | None = None,
 ) -> tuple[Figure, Axes]:
-    """Plot photon scintillator-exit coordinates (`/photons`) as a 2D image."""
+    """Plot photon scintillator-exit coordinates (`/photons`) as a 2D image.
+
+    XY-range precedence:
+    1. `xy_range_override` (explicit user range)
+    2. SimConfig scintillator extent (`sim_config_yaml_path`) when enabled
+    3. legacy shared-data range (`shared_range=True`)
+    """
 
     photons = _read_structured_dataset(hdf5_path, "photons")
     x_field, y_field = _photon_exit_field_names(photons)
@@ -258,7 +386,14 @@ def photon_exit_to_image(
     finite_exit_mask = np.isfinite(x_mm) & np.isfinite(y_mm)
     x_mm = x_mm[finite_exit_mask]
     y_mm = y_mm[finite_exit_mask]
-    xy_range = _shared_xy_range(hdf5_path, neutron_labels) if shared_range else None
+    xy_range = _resolve_scintillator_plot_xy_range(
+        hdf5_path=hdf5_path,
+        neutron_labels=neutron_labels,
+        shared_range=shared_range,
+        use_scintillator_extent=use_scintillator_extent,
+        sim_config_yaml_path=sim_config_yaml_path,
+        xy_range_override=xy_range_override,
+    )
     hist, x_edges, y_edges = _histogram_image(x_mm, y_mm, bins, xy_range=xy_range)
 
     return _plot_histogram(
@@ -318,6 +453,7 @@ def intensifier_photons_to_image(
     bins: int | Sequence[int] = (256, 256),
     *,
     require_reached_intensifier: bool = True,
+    overlay_input_screen: bool = True,
     cmap: str = "viridis",
     log_scale: bool = True,
     output_path: str | Path | None = None,
@@ -325,38 +461,92 @@ def intensifier_photons_to_image(
 ) -> tuple[Figure, Axes]:
     """Plot transported intensifier-plane photon hits (`/transported_photons`)."""
 
-    transported = _read_structured_dataset(hdf5_path, "transported_photons")
+    transported, file_attrs = _read_structured_dataset_with_file_attrs(
+        hdf5_path,
+        "transported_photons",
+    )
     required = {"intensifier_hit_x_mm", "intensifier_hit_y_mm"}
-    if not required.issubset(set(transported.dtype.names or ())):
+    transported_names = set(transported.dtype.names or ())
+    if not required.issubset(transported_names):
         raise KeyError(
             "/transported_photons is missing required fields: "
             f"{sorted(required)}"
         )
 
+    screen = _intensifier_input_screen_from_attrs(file_attrs)
+    xy_range = None
+    if screen is not None:
+        center_x_mm, center_y_mm, diameter_mm = screen
+        radius_mm = 0.5 * diameter_mm
+        xy_range = (
+            (center_x_mm - radius_mm, center_x_mm + radius_mm),
+            (center_y_mm - radius_mm, center_y_mm + radius_mm),
+        )
+
     mask = np.ones(len(transported), dtype=bool)
-    if (
-        require_reached_intensifier
-        and "reached_intensifier" in (transported.dtype.names or ())
-    ):
-        mask &= np.asarray(transported["reached_intensifier"], dtype=bool)
+    reached_mask = np.ones(len(transported), dtype=bool)
+    if "reached_intensifier" in transported_names:
+        reached_mask = np.asarray(transported["reached_intensifier"], dtype=bool)
+    else:
+        reached_mask = (
+            np.isfinite(np.asarray(transported["intensifier_hit_x_mm"], dtype=float))
+            & np.isfinite(np.asarray(transported["intensifier_hit_y_mm"], dtype=float))
+        )
+    if require_reached_intensifier:
+        mask &= reached_mask
+
+    out_of_bounds_fraction = None
+    if "in_bounds" in transported_names:
+        in_bounds_mask = np.asarray(transported["in_bounds"], dtype=bool)
+        reached_count = int(np.count_nonzero(reached_mask))
+        if reached_count > 0:
+            out_of_bounds_count = int(np.count_nonzero(reached_mask & ~in_bounds_mask))
+            out_of_bounds_fraction = float(out_of_bounds_count / reached_count)
 
     x_mm = np.asarray(transported["intensifier_hit_x_mm"][mask], dtype=float)
     y_mm = np.asarray(transported["intensifier_hit_y_mm"][mask], dtype=float)
     finite_mask = np.isfinite(x_mm) & np.isfinite(y_mm)
     x_mm = x_mm[finite_mask]
     y_mm = y_mm[finite_mask]
-    hist, x_edges, y_edges = _histogram_image(x_mm, y_mm, bins)
+    hist, x_edges, y_edges = _histogram_image(x_mm, y_mm, bins, xy_range=xy_range)
 
-    return _plot_histogram(
+    title = "Intensifier Photon Hits"
+    if out_of_bounds_fraction is not None:
+        title = f"{title} (out-of-bounds: {out_of_bounds_fraction:.1%})"
+
+    fig, ax = _plot_histogram(
         hist,
         x_edges,
         y_edges,
-        title="Intensifier Photon Hits",
+        title=title,
         cmap=cmap,
         log_scale=log_scale,
-        output_path=output_path,
-        show=show,
+        output_path=None,
+        show=False,
     )
+
+    if screen is not None and overlay_input_screen:
+        center_x_mm, center_y_mm, diameter_mm = screen
+        radius_mm = 0.5 * diameter_mm
+        ax.add_patch(
+            plt.Circle(
+                (center_x_mm, center_y_mm),
+                radius_mm,
+                fill=False,
+                color="white",
+                linewidth=1.25,
+                linestyle="--",
+            )
+        )
+        ax.set_xlim(center_x_mm - radius_mm, center_x_mm + radius_mm)
+        ax.set_ylim(center_y_mm - radius_mm, center_y_mm + radius_mm)
+
+    if output_path is not None:
+        fig.savefig(Path(output_path), dpi=150)
+    if show:
+        plt.show()
+
+    return fig, ax
 
 
 __all__ = [

@@ -73,6 +73,7 @@ _TRANSPORT_DTYPE = np.dtype(
         ("intensifier_hit_y_mm", np.float64),
         ("intensifier_hit_z_mm", np.float64),
         ("reached_intensifier", np.bool_),
+        ("in_bounds", np.bool_),
     ]
 )
 
@@ -120,6 +121,18 @@ class TransportSummary:
     total_photons: int
     transported_photons: int
     missed_photons: int
+
+
+@dataclass(frozen=True)
+class IntensifierInputScreen:
+    """Active-area geometry in intensifier input-plane coordinates."""
+
+    shape: str
+    image_circle_diameter_mm: float
+    center_x_mm: float
+    center_y_mm: float
+    magnification: float
+    coordinate_frame: str
 
 
 class RayOpticsLensTracer:
@@ -397,6 +410,7 @@ def transport_from_sim_config(
     """
 
     assumptions = config.optical.transport_assumptions
+    input_screen = _resolve_intensifier_input_screen(config)
     defaults = resolve_transport_paths(config)
     run_paths = resolve_run_environment_paths(config)
     run_paths.log.mkdir(parents=True, exist_ok=True)
@@ -472,6 +486,7 @@ def transport_from_sim_config(
                     tracer_impl,
                     source_index_offset=start,
                     photon_field_names=photon_field_names,
+                    input_screen=input_screen,
                 )
                 # Persist this slice immediately to keep peak memory bounded.
                 transported_ds[start:stop] = out_chunk
@@ -494,6 +509,25 @@ def transport_from_sim_config(
         dst.attrs["transport_chunk_target_mib"] = float(
             config.metadata.run_environment.output_info.transport_chunk_target_mib
         )
+        if input_screen is not None:
+            dst.attrs["intensifier_model"] = config.intensifier.model
+            dst.attrs["intensifier_input_screen_defined"] = True
+            dst.attrs["intensifier_input_screen_shape"] = input_screen.shape
+            dst.attrs["intensifier_input_screen_diameter_mm"] = float(
+                input_screen.image_circle_diameter_mm
+            )
+            dst.attrs["intensifier_input_screen_center_mm"] = np.array(
+                [input_screen.center_x_mm, input_screen.center_y_mm],
+                dtype=np.float64,
+            )
+            dst.attrs["intensifier_input_screen_magnification"] = float(
+                input_screen.magnification
+            )
+            dst.attrs["intensifier_input_screen_coordinate_frame"] = (
+                input_screen.coordinate_frame
+            )
+        else:
+            dst.attrs["intensifier_input_screen_defined"] = False
         dst.attrs["generated_utc"] = datetime.now(timezone.utc).isoformat()
 
     return TransportSummary(
@@ -526,12 +560,45 @@ def _primary_lens_model(config: SimConfig) -> tuple[LensModel, Path | None]:
     return LensModel.from_zmx(lens_path, name=primary_lens.name), smx_path
 
 
+def _resolve_intensifier_input_screen(config: SimConfig) -> IntensifierInputScreen | None:
+    """Extract optional intensifier active-area definition from `SimConfig`."""
+
+    intensifier = config.intensifier
+    if intensifier is None:
+        return None
+
+    input_screen = intensifier.input_screen
+    return IntensifierInputScreen(
+        shape=input_screen.shape,
+        image_circle_diameter_mm=float(input_screen.image_circle_diameter_mm),
+        center_x_mm=float(input_screen.center_mm[0]),
+        center_y_mm=float(input_screen.center_mm[1]),
+        magnification=float(input_screen.magnification),
+        coordinate_frame=input_screen.coordinate_frame,
+    )
+
+
+def _is_in_intensifier_input_screen(
+    x_mm: float,
+    y_mm: float,
+    *,
+    input_screen: IntensifierInputScreen,
+) -> bool:
+    """Return whether a hit lies within the configured circular image circle."""
+
+    radius_mm = 0.5 * float(input_screen.image_circle_diameter_mm)
+    dx_mm = float(x_mm) - float(input_screen.center_x_mm)
+    dy_mm = float(y_mm) - float(input_screen.center_y_mm)
+    return (dx_mm * dx_mm) + (dy_mm * dy_mm) <= (radius_mm * radius_mm)
+
+
 def _transport_rows_chunk(
     photons_chunk: np.ndarray,
     tracer: PhotonTransportTracer,
     *,
     source_index_offset: int,
     photon_field_names: tuple[str, ...] | list[str],
+    input_screen: IntensifierInputScreen | None,
 ) -> tuple[np.ndarray, int]:
     """Build one output chunk for `/transported_photons`.
 
@@ -557,6 +624,7 @@ def _transport_rows_chunk(
     out["intensifier_hit_y_mm"] = np.nan
     out["intensifier_hit_z_mm"] = np.nan
     out["reached_intensifier"] = False
+    out["in_bounds"] = False
 
     transported_count = 0
     for index, photon in enumerate(photons_chunk):
@@ -593,6 +661,14 @@ def _transport_rows_chunk(
         out["intensifier_hit_y_mm"][index] = float(sensor_y)
         out["intensifier_hit_z_mm"][index] = float(sensor_z)
         out["reached_intensifier"][index] = True
+        if input_screen is None:
+            out["in_bounds"][index] = True
+        else:
+            out["in_bounds"][index] = _is_in_intensifier_input_screen(
+                sensor_x,
+                sensor_y,
+                input_screen=input_screen,
+            )
         transported_count += 1
 
     return out, transported_count
