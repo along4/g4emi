@@ -130,6 +130,23 @@ pixi run python examples/analysisLite/hdf5_lite_analyzer_example.py \
   data/CanonEF50mmf1p0L_run/simulatedPhotons/photon_optical_interface_hits.h5
 ```
 
+A separate timing-focused example is available in:
+
+```bash
+pixi run python examples/analysisLite/hdf5_timing_analyzer_example.py \
+  data/CanonEF50mmf1p0L_run/simulatedPhotons/photon_optical_interface_hits.h5
+```
+
+To fit a 3-component decay model and compare against the configured SimConfig
+time components:
+
+```bash
+pixi run python examples/analysisLite/hdf5_timing_analyzer_example.py \
+  data/CanonEF50mmf1p0L_run/simulatedPhotons/photon_optical_interface_hits.h5 \
+  --fit \
+  --sim-config-yaml examples/yamlFiles/CanonEF50mmf1p0L_example.yaml
+```
+
 Optional analyzer range controls:
 - `--sim-config-yaml <path>`: use scintillator XY extent from SimConfig for
   photon-origin/photon-exit plots.
