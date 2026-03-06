@@ -34,9 +34,11 @@ comparable.
 from transport HDF5 attributes (when present) to fix plot extent to the
 physical image-circle footprint and can overlay the circle boundary.
 
-`photon_origins_to_image(...)` and `photon_exit_to_image(...)` can use
-scintillator XY extents from SimConfig YAML (position + dimensions), with
-explicit override controls when a custom range is desired.
+`photon_origins_to_image(...)` and `photon_exit_to_image(...)` support three
+range modes (highest precedence first):
+- explicit user limits (`xy_range_override` / `--xy-limits`)
+- scintillator XY extent from SimConfig YAML
+- inferred bounds from HDF5 data (default fallback)
 
 ## Example usage
 

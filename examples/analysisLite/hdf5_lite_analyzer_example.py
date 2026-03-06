@@ -58,15 +58,19 @@ def _parse_args() -> argparse.Namespace:
         default=None,
         help=(
             "Optional SimConfig YAML path used to set photon-origin/exit plot "
-            "extents to scintillator XY size."
+            "extents to scintillator XY size. If omitted, bounds are inferred "
+            "from HDF5 data unless --xy-limits is provided."
         ),
     )
     parser.add_argument(
-        "--disable-scintillator-extent",
-        action="store_true",
+        "--xy-limits",
+        nargs=4,
+        type=float,
+        metavar=("X_MIN", "X_MAX", "Y_MIN", "Y_MAX"),
+        default=None,
         help=(
-            "Use legacy autoscaled/shared-range behavior for origin/exit plots "
-            "instead of SimConfig scintillator extents."
+            "Explicit XY limits for photon origin/exit plots in mm. "
+            "Takes precedence over --sim-config-yaml."
         ),
     )
     return parser.parse_args()
@@ -89,34 +93,6 @@ def _default_output_dir_from_input(hdf5_path: Path) -> Path:
     if hdf5_path.parent.name in stage_dir_names:
         return hdf5_path.parent.parent / "plots"
     return hdf5_path.parent / "plots"
-
-
-def _infer_sim_config_yaml_path(sim_hdf5_path: Path) -> Path | None:
-    """Best-effort infer `examples/yamlFiles/*.yaml` from run-root naming."""
-
-    if sim_hdf5_path.parent.name != "simulatedPhotons":
-        return None
-
-    run_id = sim_hdf5_path.parent.parent.name
-    repo_root = Path(__file__).resolve().parents[2]
-    yaml_dir = repo_root / "examples" / "yamlFiles"
-    candidates = [
-        yaml_dir / f"{run_id}.yaml",
-        yaml_dir / f"{run_id}_example.yaml",
-    ]
-    if run_id.endswith("_run"):
-        stem = run_id[: -len("_run")]
-        candidates.extend(
-            [
-                yaml_dir / f"{stem}.yaml",
-                yaml_dir / f"{stem}_example.yaml",
-            ]
-        )
-
-    for candidate in candidates:
-        if candidate.exists():
-            return candidate.resolve()
-    return None
 
 
 def main() -> None:
@@ -145,35 +121,40 @@ def main() -> None:
         if args.transport_hdf5_path is not None
         else _infer_transport_hdf5_path(hdf5_path)
     )
-    use_scintillator_extent = not args.disable_scintillator_extent
-    sim_config_yaml_path = None
-    if use_scintillator_extent:
-        sim_config_yaml_path = (
-            args.sim_config_yaml.expanduser().resolve()
-            if args.sim_config_yaml is not None
-            else _infer_sim_config_yaml_path(hdf5_path)
+    sim_config_yaml_path = (
+        args.sim_config_yaml.expanduser().resolve()
+        if args.sim_config_yaml is not None
+        else None
+    )
+    if sim_config_yaml_path is not None and not sim_config_yaml_path.exists():
+        raise FileNotFoundError(f"SimConfig YAML not found: {sim_config_yaml_path}")
+
+    xy_range_override = None
+    if args.xy_limits is not None:
+        x_min, x_max, y_min, y_max = [float(value) for value in args.xy_limits]
+        if not x_min < x_max:
+            raise ValueError("--xy-limits requires X_MIN < X_MAX.")
+        if not y_min < y_max:
+            raise ValueError("--xy-limits requires Y_MIN < Y_MAX.")
+        xy_range_override = (
+            (x_min, x_max),
+            (y_min, y_max),
         )
-        if sim_config_yaml_path is None:
-            raise FileNotFoundError(
-                "Could not infer SimConfig YAML for scintillator-based extents. "
-                "Pass `--sim-config-yaml <path>` or set "
-                "`--disable-scintillator-extent`."
-            )
-        if not sim_config_yaml_path.exists():
-            raise FileNotFoundError(f"SimConfig YAML not found: {sim_config_yaml_path}")
 
     neutron_hits_to_image(hdf5_path, output_path=neutron_png)
     photon_origins_to_image(
         hdf5_path,
         output_path=origins_png,
-        use_scintillator_extent=use_scintillator_extent,
+        use_scintillator_extent=(sim_config_yaml_path is not None),
         sim_config_yaml_path=sim_config_yaml_path,
+        xy_range_override=xy_range_override,
     )
     photon_exit_to_image(
         hdf5_path,
         output_path=exit_png,
-        use_scintillator_extent=use_scintillator_extent,
+        use_scintillator_extent=(sim_config_yaml_path is not None),
         sim_config_yaml_path=sim_config_yaml_path,
+        xy_range_override=xy_range_override,
     )
     optical_interface_photons_to_image(hdf5_path, output_path=interface_png)
     if transport_hdf5_path is not None and transport_hdf5_path.exists():
@@ -185,8 +166,12 @@ def main() -> None:
         intensifier_png = None
 
     print(f"Input HDF5: {hdf5_path}")
-    if use_scintillator_extent and sim_config_yaml_path is not None:
+    if xy_range_override is not None:
+        print(f"Origin/exit XY limits: {xy_range_override}")
+    elif sim_config_yaml_path is not None:
         print(f"SimConfig YAML (for origin/exit extent): {sim_config_yaml_path}")
+    else:
+        print("Origin/exit XY limits: inferred from HDF5 data bounds")
     print("Wrote images:")
     print(f"  - {neutron_png}")
     print(f"  - {origins_png}")
