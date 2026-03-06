@@ -77,7 +77,15 @@ def _load_configured_decay_components(
 ) -> tuple[str, tuple[ScintillationDecayComponent, ...]]:
     """Load the active configured scintillation decay components from SimConfig."""
 
-    from src.config.ConfigIO import from_yaml
+    try:
+        from src.config.ConfigIO import from_yaml
+    except ModuleNotFoundError as exc:
+        raise ModuleNotFoundError(
+            "Could not import `src.config.ConfigIO.from_yaml` required for "
+            "SimConfig-based timing overlays and fit initialization. Run in the "
+            "project environment (for example: `pixi run python "
+            "examples/analysisLite/hdf5_timing_analyzer_example.py ...`)."
+        ) from exc
 
     config = from_yaml(sim_config_yaml_path)
     profile_name, resolved_components = (
