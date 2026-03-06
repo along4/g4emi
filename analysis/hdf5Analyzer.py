@@ -6,6 +6,7 @@ analysis.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
@@ -21,8 +22,31 @@ from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.colors import LogNorm
 from matplotlib.figure import Figure
+try:
+    from scipy.optimize import least_squares
+except ModuleNotFoundError:
+    least_squares = None
 
 XYRange = tuple[tuple[float, float], tuple[float, float]]
+
+
+@dataclass(frozen=True)
+class ScintillationDecayComponent:
+    """One exponential decay component used for timing models."""
+
+    time_constant_ns: float
+    yield_fraction: float
+
+
+@dataclass
+class PhotonCreationDelayFitResult:
+    """Three-component exponential fit summary for photon creation delays."""
+
+    components: tuple[ScintillationDecayComponent, ...]
+    observed_counts: np.ndarray
+    fitted_counts: np.ndarray
+    bin_edges_ns: np.ndarray
+    rmse_counts: float
 
 
 def _read_structured_dataset(hdf5_path: str | Path, dataset_name: str) -> np.ndarray:
@@ -91,6 +115,17 @@ def _histogram_image(
     return np.histogram2d(x_mm, y_mm, bins=bins, range=xy_range)
 
 
+def _histogram_counts(
+    values: np.ndarray,
+    bins: int | Sequence[float],
+) -> tuple[np.ndarray, np.ndarray]:
+    """Build a 1D histogram and corresponding bin edges."""
+
+    if values.size == 0:
+        raise ValueError("No values available to plot.")
+    return np.histogram(values, bins=bins)
+
+
 def _intensifier_input_screen_from_attrs(
     attrs: dict[str, object],
 ) -> tuple[float, float, float] | None:
@@ -130,6 +165,20 @@ def _photon_exit_field_names(photons: np.ndarray) -> tuple[str, str]:
         "/photons is missing scintillator-exit fields. Expected either "
         "('photon_scint_exit_x_mm', 'photon_scint_exit_y_mm') or "
         "('scint_exit_x_mm', 'scint_exit_y_mm')."
+    )
+
+
+def _primary_interaction_time_field_name(primaries: np.ndarray) -> str:
+    """Resolve primary interaction-time field name across schema versions."""
+
+    names = set(primaries.dtype.names or ())
+    if "primary_interaction_time_ns" in names:
+        return "primary_interaction_time_ns"
+    if "primary_t0_time_ns" in names:
+        return "primary_t0_time_ns"
+    raise KeyError(
+        "/primaries is missing primary interaction-time field. Expected either "
+        "'primary_interaction_time_ns' or legacy 'primary_t0_time_ns'."
     )
 
 
@@ -264,6 +313,268 @@ def _plot_histogram(
         plt.show()
 
     return fig, ax
+
+
+def _plot_1d_histogram(
+    values: np.ndarray,
+    bins: int | Sequence[float],
+    *,
+    title: str,
+    x_label: str,
+    log_scale: bool,
+    output_path: str | Path | None,
+    show: bool,
+) -> tuple[Figure, Axes]:
+    """Render a 1D histogram to a matplotlib figure."""
+
+    fig, ax = plt.subplots(figsize=(7, 5))
+    counts, bin_edges = _histogram_counts(values, bins=bins)
+    ax.hist(
+        values,
+        bins=bin_edges,
+        color="#2f5d80",
+        edgecolor="black",
+        linewidth=0.5,
+        alpha=0.8,
+        label="Observed",
+    )
+    ax.set_title(title)
+    ax.set_xlabel(x_label)
+    ax.set_ylabel("counts")
+    if log_scale:
+        ax.set_yscale("log")
+    fig.tight_layout()
+
+    if output_path is not None:
+        fig.savefig(Path(output_path), dpi=150)
+
+    if show:
+        plt.show()
+
+    return fig, ax
+
+
+def photon_creation_delays_ns(hdf5_path: str | Path) -> np.ndarray:
+    """Return finite non-negative photon creation delays in nanoseconds."""
+
+    primaries = _read_structured_dataset(hdf5_path, "primaries")
+    photons = _read_structured_dataset(hdf5_path, "photons")
+    primary_required = {"gun_call_id", "primary_track_id"}
+    photon_required = {"gun_call_id", "primary_track_id", "photon_creation_time_ns"}
+    if not primary_required.issubset(set(primaries.dtype.names or ())):
+        raise KeyError(
+            f"/primaries is missing required fields: {sorted(primary_required)}"
+        )
+    if not photon_required.issubset(set(photons.dtype.names or ())):
+        raise KeyError(f"/photons is missing required fields: {sorted(photon_required)}")
+
+    interaction_field = _primary_interaction_time_field_name(primaries)
+    interaction_lookup = {
+        (int(gun_call_id), int(primary_track_id)): float(interaction_time_ns)
+        for gun_call_id, primary_track_id, interaction_time_ns in zip(
+            primaries["gun_call_id"],
+            primaries["primary_track_id"],
+            primaries[interaction_field],
+            strict=False,
+        )
+    }
+
+    delays_ns = []
+    for gun_call_id, primary_track_id, creation_time_ns in zip(
+        photons["gun_call_id"],
+        photons["primary_track_id"],
+        photons["photon_creation_time_ns"],
+        strict=False,
+    ):
+        interaction_time_ns = interaction_lookup.get(
+            (int(gun_call_id), int(primary_track_id))
+        )
+        if interaction_time_ns is None or not np.isfinite(interaction_time_ns):
+            continue
+        creation_time_ns = float(creation_time_ns)
+        if not np.isfinite(creation_time_ns):
+            continue
+        delay_ns = creation_time_ns - interaction_time_ns
+        if delay_ns >= 0.0:
+            delays_ns.append(delay_ns)
+
+    delay_array = np.asarray(delays_ns, dtype=float)
+    if delay_array.size == 0:
+        raise ValueError(
+            "No finite photon creation delays could be computed from the HDF5 data."
+        )
+    return delay_array
+
+
+def decay_model_bin_counts(
+    bin_edges_ns: Sequence[float],
+    total_count: float,
+    components: Sequence[ScintillationDecayComponent],
+) -> np.ndarray:
+    """Return expected histogram counts for a decay-component mixture."""
+
+    edges = np.asarray(bin_edges_ns, dtype=float)
+    if edges.ndim != 1 or edges.size < 2:
+        raise ValueError("bin_edges_ns must be a 1D sequence with at least 2 entries.")
+    if total_count <= 0.0:
+        raise ValueError("total_count must be positive.")
+
+    component_list = list(components)
+    if len(component_list) != 3:
+        raise ValueError("Exactly 3 decay components are required.")
+
+    yields = np.asarray(
+        [float(component.yield_fraction) for component in component_list],
+        dtype=float,
+    )
+    taus = np.asarray(
+        [float(component.time_constant_ns) for component in component_list],
+        dtype=float,
+    )
+    if np.any(yields < 0.0):
+        raise ValueError("Yield fractions must be non-negative.")
+    if not np.isfinite(yields).all() or not np.isfinite(taus).all():
+        raise ValueError("Decay components must be finite.")
+
+    total_yield = float(np.sum(yields))
+    if total_yield <= 0.0:
+        raise ValueError("At least one decay component must have positive yield.")
+    active_mask = yields > 0.0
+    if np.any(taus[active_mask] <= 0.0):
+        raise ValueError("Active decay time constants must be positive.")
+    normalized_yields = yields / total_yield
+    amplitudes = float(total_count) * normalized_yields
+    taus = np.where(active_mask, taus, 1.0)
+
+    left_edges = edges[:-1]
+    right_edges = edges[1:]
+    return np.sum(
+        amplitudes[None, :]
+        * (
+            np.exp(-left_edges[:, None] / taus[None, :])
+            - np.exp(-right_edges[:, None] / taus[None, :])
+        ),
+        axis=1,
+    )
+
+
+def fit_photon_creation_delay_histogram(
+    hdf5_path: str | Path,
+    bins: int | Sequence[float] = 256,
+    *,
+    initial_components: Sequence[ScintillationDecayComponent] | None = None,
+) -> PhotonCreationDelayFitResult:
+    """Fit a 3-component exponential mixture to the photon-creation histogram."""
+
+    if least_squares is None:
+        raise ModuleNotFoundError(
+            "scipy is required for timing fits. Install project dependencies with "
+            "`pixi install`."
+        )
+
+    delays_ns = photon_creation_delays_ns(hdf5_path)
+    observed_counts, bin_edges = _histogram_counts(delays_ns, bins=bins)
+    total_count = float(np.sum(observed_counts))
+    if total_count <= 0.0:
+        raise ValueError("Timing histogram is empty; cannot perform fit.")
+
+    max_delay_ns = float(bin_edges[-1])
+    min_tau_ns = max(max_delay_ns / 1.0e5, 1.0e-3)
+    max_tau_ns = max(max_delay_ns * 5.0, 1.0)
+    if initial_components is not None:
+        if len(initial_components) != 3:
+            raise ValueError("Exactly 3 initial decay components are required.")
+        amplitude_guess = total_count * np.asarray(
+            [component.yield_fraction for component in initial_components],
+            dtype=float,
+        )
+        tau_guess = np.asarray(
+            [component.time_constant_ns for component in initial_components],
+            dtype=float,
+        )
+    else:
+        amplitude_guess = total_count * np.array([0.7, 0.2, 0.1], dtype=float)
+        tau_guess = np.array(
+            [
+                max(max_delay_ns / 80.0, 0.2),
+                max(max_delay_ns / 12.0, 1.0),
+                max(max_delay_ns / 2.0, 5.0),
+            ],
+            dtype=float,
+        )
+
+    tau_guess = np.clip(tau_guess, min_tau_ns, max_tau_ns)
+    amplitude_guess = np.clip(amplitude_guess, 1.0e-6, max(total_count, 1.0))
+
+    def residuals(params: np.ndarray) -> np.ndarray:
+        amplitudes = params[:3]
+        taus = params[3:]
+        model_counts = np.sum(
+            amplitudes[None, :]
+            * (
+                np.exp(-bin_edges[:-1, None] / taus[None, :])
+                - np.exp(-bin_edges[1:, None] / taus[None, :])
+            ),
+            axis=1,
+        )
+        weights = np.sqrt(np.maximum(observed_counts, 1.0))
+        return (model_counts - observed_counts) / weights
+
+    initial_params = np.concatenate([amplitude_guess, tau_guess])
+    lower_bounds = np.concatenate(
+        [np.full(3, 1.0e-12, dtype=float), np.full(3, min_tau_ns, dtype=float)]
+    )
+    upper_bounds = np.concatenate(
+        [
+            np.full(3, max(total_count * 2.0, 1.0), dtype=float),
+            np.full(3, max_tau_ns, dtype=float),
+        ]
+    )
+
+    result = least_squares(
+        residuals,
+        initial_params,
+        bounds=(lower_bounds, upper_bounds),
+        max_nfev=20000,
+    )
+    if not result.success:
+        raise RuntimeError(f"Timing fit failed: {result.message}")
+
+    fitted_amplitudes = np.asarray(result.x[:3], dtype=float)
+    fitted_taus = np.asarray(result.x[3:], dtype=float)
+    order = np.argsort(fitted_taus)
+    fitted_amplitudes = fitted_amplitudes[order]
+    fitted_taus = fitted_taus[order]
+    fitted_counts = np.sum(
+        fitted_amplitudes[None, :]
+        * (
+            np.exp(-bin_edges[:-1, None] / fitted_taus[None, :])
+            - np.exp(-bin_edges[1:, None] / fitted_taus[None, :])
+        ),
+        axis=1,
+    )
+
+    amplitude_total = float(np.sum(fitted_amplitudes))
+    yield_fractions = fitted_amplitudes / amplitude_total
+    components = tuple(
+        ScintillationDecayComponent(
+            time_constant_ns=float(time_constant_ns),
+            yield_fraction=float(yield_fraction),
+        )
+        for time_constant_ns, yield_fraction in zip(
+            fitted_taus,
+            yield_fractions,
+            strict=False,
+        )
+    )
+    rmse_counts = float(np.sqrt(np.mean(np.square(fitted_counts - observed_counts))))
+    return PhotonCreationDelayFitResult(
+        components=components,
+        observed_counts=np.asarray(observed_counts, dtype=float),
+        fitted_counts=np.asarray(fitted_counts, dtype=float),
+        bin_edges_ns=np.asarray(bin_edges, dtype=float),
+        rmse_counts=rmse_counts,
+    )
 
 
 def neutron_hits_to_image(
@@ -549,10 +860,39 @@ def intensifier_photons_to_image(
     return fig, ax
 
 
+def photon_creation_delay_to_histogram(
+    hdf5_path: str | Path,
+    bins: int | Sequence[float] = 256,
+    *,
+    log_scale: bool = True,
+    output_path: str | Path | None = None,
+    show: bool = False,
+) -> tuple[Figure, Axes]:
+    """Plot photon creation delay relative to primary scintillator interaction."""
+
+    delay_array = photon_creation_delays_ns(hdf5_path)
+
+    return _plot_1d_histogram(
+        delay_array,
+        bins=bins,
+        title="Photon Creation Delay from Primary Interaction",
+        x_label="delay (ns)",
+        log_scale=log_scale,
+        output_path=output_path,
+        show=show,
+    )
+
+
 __all__ = [
+    "ScintillationDecayComponent",
+    "PhotonCreationDelayFitResult",
+    "decay_model_bin_counts",
+    "fit_photon_creation_delay_histogram",
+    "photon_creation_delays_ns",
     "neutron_hits_to_image",
     "photon_origins_to_image",
     "photon_exit_to_image",
     "optical_interface_photons_to_image",
     "intensifier_photons_to_image",
+    "photon_creation_delay_to_histogram",
 ]

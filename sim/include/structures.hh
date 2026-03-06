@@ -8,6 +8,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <string>
 
 namespace SimStructures {
@@ -24,8 +25,9 @@ namespace SimStructures {
  * - `primarySpecies`: compact species label (`n`, `p`, `g`, etc.).
  * - `primaryXmm`, `primaryYmm`: primary origin position in mm.
  * - `primaryEnergyMeV`: primary origin kinetic energy in MeV.
- * - `primaryT0TimeNs`: first primary scintillator interaction time in ns
- *   (fallback: primary source time when no interaction is recorded).
+ * - `primaryInteractionTimeNs`: first primary scintillator interaction time
+ *   in ns. Written as `NaN` when no scintillator interaction time was
+ *   recorded.
  * - `primaryCreatedSecondaryCount`: number of secondaries created in the
  *   scintillator and attributed to this primary ancestry.
  * - `primaryGeneratedOpticalPhotonCount`: number of created optical photons
@@ -40,7 +42,7 @@ struct PrimaryInfo {
   double primaryXmm = 0.0;
   double primaryYmm = 0.0;
   double primaryEnergyMeV = 0.0;
-  double primaryT0TimeNs = 0.0;
+  double primaryInteractionTimeNs = std::numeric_limits<double>::quiet_NaN();
   std::int64_t primaryCreatedSecondaryCount = 0;
   std::int64_t primaryGeneratedOpticalPhotonCount = 0;
   std::int64_t primaryDetectedOpticalInterfacePhotonCount = 0;
@@ -191,7 +193,7 @@ struct Hdf5PrimaryNativeRow {
   double primary_x_mm;
   double primary_y_mm;
   double primary_energy_MeV;
-  double primary_t0_time_ns;
+  double primary_interaction_time_ns;
   std::int64_t primary_created_secondary_count;
   std::int64_t primary_generated_optical_photon_count;
   std::int64_t primary_detected_optical_interface_photon_count;
