@@ -30,6 +30,16 @@ By default, `neutron_hits_to_image`, `photon_origins_to_image`, and
 `photon_exit_to_image` use a shared XY range so their image scale is directly
 comparable.
 
+`intensifier_photons_to_image(...)` uses the intensifier input-screen metadata
+from transport HDF5 attributes (when present) to fix plot extent to the
+physical image-circle footprint and can overlay the circle boundary.
+
+`photon_origins_to_image(...)` and `photon_exit_to_image(...)` support three
+range modes (highest precedence first):
+- explicit user limits (`xy_range_override` / `--xy-limits`)
+- scintillator XY extent from SimConfig YAML
+- inferred bounds from HDF5 data (default fallback)
+
 ## Example usage
 
 See:

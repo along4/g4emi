@@ -76,6 +76,9 @@ class OpticalTransportTests(unittest.TestCase):
         *,
         transport_chunk_rows: int | str | None = None,
         transport_chunk_target_mib: float | None = None,
+        include_intensifier_screen: bool = True,
+        image_circle_diameter_mm: float = 18.0,
+        center_mm: tuple[float, float] = (0.0, 0.0),
     ) -> object:
         """Construct a minimal valid SimConfig payload for transport tests."""
 
@@ -154,6 +157,16 @@ class OpticalTransportTests(unittest.TestCase):
                 },
             },
         }
+        if include_intensifier_screen:
+            payload["intensifier"] = {
+                "model": "Cricket2",
+                "input_screen": {
+                    "image_circle_diameter_mm": image_circle_diameter_mm,
+                    "center_mm": [float(center_mm[0]), float(center_mm[1])],
+                    "magnification": 1.0,
+                    "coordinate_frame": "intensifier_input_plane",
+                },
+            }
 
         return self.SimConfig.model_validate(payload)
 
@@ -271,6 +284,8 @@ class OpticalTransportTests(unittest.TestCase):
 
                 self.assertTrue(bool(rows["reached_intensifier"][0]))
                 self.assertFalse(bool(rows["reached_intensifier"][1]))
+                self.assertFalse(bool(rows["in_bounds"][0]))
+                self.assertFalse(bool(rows["in_bounds"][1]))
                 self.assertAlmostEqual(float(rows["intensifier_hit_x_mm"][0]), 11.5)
                 self.assertAlmostEqual(float(rows["intensifier_hit_y_mm"][0]), -3.0)
                 self.assertAlmostEqual(float(rows["intensifier_hit_z_mm"][0]), 42.0)
@@ -281,6 +296,15 @@ class OpticalTransportTests(unittest.TestCase):
                 self.assertEqual(handle.attrs["transport_engine"], "stub-tracer")
                 self.assertIn("source_hdf5", handle.attrs)
                 self.assertIn("lens_zmx_path", handle.attrs)
+                self.assertTrue(bool(handle.attrs["intensifier_input_screen_defined"]))
+                self.assertAlmostEqual(
+                    float(handle.attrs["intensifier_input_screen_diameter_mm"]),
+                    18.0,
+                )
+                self.np.testing.assert_allclose(
+                    self.np.asarray(handle.attrs["intensifier_input_screen_center_mm"]),
+                    self.np.array([0.0, 0.0]),
+                )
                 self.assertIn("generated_utc", handle.attrs)
 
     def test_transport_rejects_same_input_and_output_paths(self) -> None:
@@ -317,6 +341,31 @@ class OpticalTransportTests(unittest.TestCase):
                 rows = handle["transported_photons"]
                 self.assertEqual(rows.chunks, (1,))
                 self.assertEqual(int(handle.attrs["transport_chunk_rows"]), 1)
+
+    def test_transport_marks_reached_hits_in_bounds_without_screen_config(self) -> None:
+        """When no input-screen geometry is configured, reached hits are in-bounds."""
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = self._build_config(
+                Path(tmp_dir),
+                include_intensifier_screen=False,
+            )
+            resolved = self.resolve_transport_paths(config)
+            self._write_input_hdf5(resolved.input_hdf5)
+
+            summary = self.transport_from_sim_config(
+                config,
+                tracer=_StubTracer(),
+                overwrite=True,
+            )
+
+            with self.h5py.File(summary.output_hdf5, "r") as handle:
+                rows = handle["transported_photons"][:]
+                self.assertTrue(bool(rows["reached_intensifier"][0]))
+                self.assertTrue(bool(rows["in_bounds"][0]))
+                self.assertFalse(bool(rows["reached_intensifier"][1]))
+                self.assertFalse(bool(rows["in_bounds"][1]))
+                self.assertFalse(bool(handle.attrs["intensifier_input_screen_defined"]))
 
 
 if __name__ == "__main__":

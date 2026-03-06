@@ -52,6 +52,27 @@ def _parse_args() -> argparse.Namespace:
             "data/<run>/transportedPhotons/photons_intensifier_hits.h5."
         ),
     )
+    parser.add_argument(
+        "--sim-config-yaml",
+        type=Path,
+        default=None,
+        help=(
+            "Optional SimConfig YAML path used to set photon-origin/exit plot "
+            "extents to scintillator XY size. If omitted, bounds are inferred "
+            "from HDF5 data unless --xy-limits is provided."
+        ),
+    )
+    parser.add_argument(
+        "--xy-limits",
+        nargs=4,
+        type=float,
+        metavar=("X_MIN", "X_MAX", "Y_MIN", "Y_MAX"),
+        default=None,
+        help=(
+            "Explicit XY limits for photon origin/exit plots in mm. "
+            "Takes precedence over --sim-config-yaml."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -100,10 +121,41 @@ def main() -> None:
         if args.transport_hdf5_path is not None
         else _infer_transport_hdf5_path(hdf5_path)
     )
+    sim_config_yaml_path = (
+        args.sim_config_yaml.expanduser().resolve()
+        if args.sim_config_yaml is not None
+        else None
+    )
+    if sim_config_yaml_path is not None and not sim_config_yaml_path.exists():
+        raise FileNotFoundError(f"SimConfig YAML not found: {sim_config_yaml_path}")
+
+    xy_range_override = None
+    if args.xy_limits is not None:
+        x_min, x_max, y_min, y_max = [float(value) for value in args.xy_limits]
+        if not x_min < x_max:
+            raise ValueError("--xy-limits requires X_MIN < X_MAX.")
+        if not y_min < y_max:
+            raise ValueError("--xy-limits requires Y_MIN < Y_MAX.")
+        xy_range_override = (
+            (x_min, x_max),
+            (y_min, y_max),
+        )
 
     neutron_hits_to_image(hdf5_path, output_path=neutron_png)
-    photon_origins_to_image(hdf5_path, output_path=origins_png)
-    photon_exit_to_image(hdf5_path, output_path=exit_png)
+    photon_origins_to_image(
+        hdf5_path,
+        output_path=origins_png,
+        use_scintillator_extent=(sim_config_yaml_path is not None),
+        sim_config_yaml_path=sim_config_yaml_path,
+        xy_range_override=xy_range_override,
+    )
+    photon_exit_to_image(
+        hdf5_path,
+        output_path=exit_png,
+        use_scintillator_extent=(sim_config_yaml_path is not None),
+        sim_config_yaml_path=sim_config_yaml_path,
+        xy_range_override=xy_range_override,
+    )
     optical_interface_photons_to_image(hdf5_path, output_path=interface_png)
     if transport_hdf5_path is not None and transport_hdf5_path.exists():
         intensifier_photons_to_image(
@@ -114,6 +166,12 @@ def main() -> None:
         intensifier_png = None
 
     print(f"Input HDF5: {hdf5_path}")
+    if xy_range_override is not None:
+        print(f"Origin/exit XY limits: {xy_range_override}")
+    elif sim_config_yaml_path is not None:
+        print(f"SimConfig YAML (for origin/exit extent): {sim_config_yaml_path}")
+    else:
+        print("Origin/exit XY limits: inferred from HDF5 data bounds")
     print("Wrote images:")
     print(f"  - {neutron_png}")
     print(f"  - {origins_png}")

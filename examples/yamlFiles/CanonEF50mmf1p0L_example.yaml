@@ -64,6 +64,15 @@ optical:
     objectPlane: scintillator_back_face
     opticalInterfaceRepresents: lens_entrance_plane
 
+intensifier:
+  model: Cricket2
+  input_screen:
+    image_circle_diameter_mm: 18.0
+    center_mm: [0.0, 0.0]
+    magnification: 1.0
+    coordinate_frame: intensifier_input_plane
+    notes: Cricket2 nominal image-circle diameter and 1:1 magnification.
+
 simulation:
   numberOfParticles: 10000
   runtimeControls:

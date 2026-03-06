@@ -130,6 +130,13 @@ pixi run python examples/analysisLite/hdf5_lite_analyzer_example.py \
   data/CanonEF50mmf1p0L_run/simulatedPhotons/photon_optical_interface_hits.h5
 ```
 
+Optional analyzer range controls:
+- `--sim-config-yaml <path>`: use scintillator XY extent from SimConfig for
+  photon-origin/photon-exit plots.
+- `--xy-limits X_MIN X_MAX Y_MIN Y_MAX`: explicit XY limits (highest
+  precedence).
+- if neither is provided, bounds are inferred from HDF5 data.
+
 ### 2.6 Optical transport to lens back plane (SimConfig-driven)
 
 After generating simulation output (`/photons` optical-interface hits), run:
@@ -155,22 +162,45 @@ The output file contains:
 - copied `/primaries` and `/secondaries` datasets for linkage to source tracks
 - `/transported_photons` dataset with source track IDs and transported sensor
   coordinates (`intensifier_hit_*_mm`)
+- `reached_intensifier`: transport produced a finite intensifier-plane hit
+- `in_bounds`: when `intensifier_input_screen_defined == true`, this flags hits
+  inside the configured image circle; when
+  `intensifier_input_screen_defined == false`, reached hits are treated as
+  in-bounds by definition
 
 If a photon misses the lens/sensor in ray tracing, its
 `intensifier_hit_*_mm` values are written as `NaN` and
-  `reached_intensifier` is `False`.
+`reached_intensifier` is `False`.
+
+When `intensifier.input_screen` is present in `SimConfig`, transport also
+writes HDF5 attributes describing the active input screen
+(`intensifier_input_screen_defined`,
+`intensifier_input_screen_diameter_mm`,
+`intensifier_input_screen_center_mm`,
+`intensifier_input_screen_coordinate_frame`, and
+`intensifier_input_screen_magnification`) so downstream analysis can use fixed
+physical extents.
 
 ### 2.7 One-step YAML -> run simulation example
 
 To generate the macro and run `g4emi` from one script:
 
 ```bash
-pixi run python examples/RunSimulation/run_simulation_from_yaml.py \
+pixi run python examples/runSimulation/run_simulation_from_yaml.py \
   examples/yamlFiles/CanonEF50mmf1p0L_example.yaml
 ```
 
 Useful options:
 - `--dry-run`: write macro + print run command without launching Geant4.
+
+### 2.8 End-to-end YAML -> simulation -> transport
+
+To run the full pipeline (macro generation, simulation, then optical transport):
+
+```bash
+pixi run python examples/endToEnd/end_to_end_example.py \
+  examples/yamlFiles/CanonEF50mmf1p0L_example.yaml
+```
 
 ## 3. Simulation Output Structures
 
