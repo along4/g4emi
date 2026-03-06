@@ -132,6 +132,20 @@ class SimConfigIntensifierTests(unittest.TestCase):
         config = self.SimConfig.model_validate(payload)
         self.assertEqual(config.intensifier.input_screen.center_mm, (3.0, -1.0))
 
+    def test_intensifier_center_accepts_xy_mapping(self) -> None:
+        payload = self._base_payload()
+        payload["intensifier"] = {
+            "model": "CricketPro",
+            "input_screen": {
+                "image_circle_diameter_mm": 25.0,
+                "center_mm": {"x": 4.5, "y": -2.25},
+                "magnification": 1.0,
+            },
+        }
+
+        config = self.SimConfig.model_validate(payload)
+        self.assertEqual(config.intensifier.input_screen.center_mm, (4.5, -2.25))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -405,7 +405,8 @@ class IntensifierInputScreenConfig(StrictModel):
             if {"x", "y"}.issubset(keys):
                 return (float(value["x"]), float(value["y"]))
         raise ValueError(
-            "`center_mm` must be [x_mm, y_mm] or a mapping with `{x_mm, y_mm}`."
+            "`center_mm` must be [x_mm, y_mm], [x, y], "
+            "or a mapping with either `{x_mm, y_mm}` or `{x, y}`."
         )
 
 
