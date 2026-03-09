@@ -194,6 +194,9 @@ class OpticalTransportTests(unittest.TestCase):
                 ("secondary_origin_y_mm", self.np.float64),
                 ("secondary_origin_z_mm", self.np.float64),
                 ("secondary_origin_energy_MeV", self.np.float64),
+                ("secondary_end_x_mm", self.np.float64),
+                ("secondary_end_y_mm", self.np.float64),
+                ("secondary_end_z_mm", self.np.float64),
             ]
         )
         photons_dtype = self.np.dtype(
@@ -217,7 +220,7 @@ class OpticalTransportTests(unittest.TestCase):
             dtype=primaries_dtype,
         )
         secondaries = self.np.array(
-            [(0, 1, 10, b"proton", 0.1, 0.2, 0.3, 1.0)],
+            [(0, 1, 10, b"proton", 0.1, 0.2, 0.3, 1.0, 0.7, 0.8, 0.9)],
             dtype=secondaries_dtype,
         )
         photons = self.np.array(
@@ -269,6 +272,9 @@ class OpticalTransportTests(unittest.TestCase):
                 self.assertIn("primaries", handle)
                 self.assertIn("secondaries", handle)
                 self.assertIn("transported_photons", handle)
+                self.assertIn("secondary_end_x_mm", handle["secondaries"].dtype.names)
+                self.assertIn("secondary_end_y_mm", handle["secondaries"].dtype.names)
+                self.assertIn("secondary_end_z_mm", handle["secondaries"].dtype.names)
 
                 rows = handle["transported_photons"][:]
                 self.assertEqual(len(rows), 2)
