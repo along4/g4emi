@@ -187,8 +187,8 @@ bool EnsureReady(const std::string& hdf5Path, std::string* errorMessage) {
   H5Tinsert(s.primaryType, "primary_energy_MeV",
             HOFFSET(Hdf5PrimaryNativeRow, primary_energy_MeV),
             H5T_NATIVE_DOUBLE);
-  H5Tinsert(s.primaryType, "primary_t0_time_ns",
-            HOFFSET(Hdf5PrimaryNativeRow, primary_t0_time_ns),
+  H5Tinsert(s.primaryType, "primary_interaction_time_ns",
+            HOFFSET(Hdf5PrimaryNativeRow, primary_interaction_time_ns),
             H5T_NATIVE_DOUBLE);
   H5Tinsert(s.primaryType, "primary_created_secondary_count",
             HOFFSET(Hdf5PrimaryNativeRow, primary_created_secondary_count),
@@ -324,7 +324,7 @@ std::vector<Hdf5PrimaryNativeRow> ToNative(const std::vector<PrimaryInfo>& rows)
     native.primary_x_mm = row.primaryXmm;
     native.primary_y_mm = row.primaryYmm;
     native.primary_energy_MeV = row.primaryEnergyMeV;
-    native.primary_t0_time_ns = row.primaryT0TimeNs;
+    native.primary_interaction_time_ns = row.primaryInteractionTimeNs;
     native.primary_created_secondary_count = row.primaryCreatedSecondaryCount;
     native.primary_generated_optical_photon_count =
         row.primaryGeneratedOpticalPhotonCount;

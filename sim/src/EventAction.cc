@@ -54,7 +54,6 @@ void EventAction::BeginOfEventAction(const G4Event* event) {
   fPrimarySpecies = "unknown";
   fPrimaryPosition = G4ThreeVector();
   fPrimaryEnergy = -1.0;
-  fPrimaryT0Time = 0.0;
   fTrackInfo.clear();
   fPhotonCreationInfo.clear();
   fPendingPhotonOrigin.clear();
@@ -73,7 +72,6 @@ void EventAction::BeginOfEventAction(const G4Event* event) {
   }
 
   fPrimaryPosition = primaryVertex->GetPosition();
-  fPrimaryT0Time = primaryVertex->GetT0();
   const auto* primaryParticle = primaryVertex->GetPrimary();
   if (!primaryParticle) {
     return;
@@ -103,12 +101,12 @@ void EventAction::EndOfEventAction(const G4Event* event) {
   std::vector<SimIO::PrimaryInfo> primaryRows;
   std::vector<SimIO::SecondaryInfo> secondaryRows;
   std::vector<SimIO::PhotonInfo> photonRows;
-  const auto resolvePrimaryT0Ns = [this](G4int primaryTrackID) -> double {
+  const auto resolvePrimaryInteractionTimeNs = [this](G4int primaryTrackID) -> double {
     const auto it = fPrimaryScintillatorFirstInteractionTime.find(primaryTrackID);
     if (it != fPrimaryScintillatorFirstInteractionTime.end()) {
       return it->second / ns;
     }
-    return fPrimaryT0Time / ns;
+    return std::numeric_limits<double>::quiet_NaN();
   };
 
   // Include only primaries that created at least one secondary in scintillator.
@@ -135,7 +133,7 @@ void EventAction::EndOfEventAction(const G4Event* event) {
     row.primaryXmm = fPrimaryPosition.x() / mm;
     row.primaryYmm = fPrimaryPosition.y() / mm;
     row.primaryEnergyMeV = fPrimaryEnergy / MeV;
-    row.primaryT0TimeNs = resolvePrimaryT0Ns(primaryTrackID);
+    row.primaryInteractionTimeNs = resolvePrimaryInteractionTimeNs(primaryTrackID);
     row.primaryCreatedSecondaryCount = activity.createdSecondaryCount;
     row.primaryGeneratedOpticalPhotonCount = activity.generatedOpticalPhotonCount;
     row.primaryDetectedOpticalInterfacePhotonCount =

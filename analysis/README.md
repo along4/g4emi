@@ -22,9 +22,24 @@ module: `hdf5Analyzer.py`.
 - `photon_exit_to_image(...)`
 - `optical_interface_photons_to_image(...)`
 - `intensifier_photons_to_image(...)`
+- `photon_creation_delay_to_histogram(...)`
 
 These functions create 2D histogram images (`x` vs `y`) from the relevant
-HDF5 datasets.
+HDF5 datasets, plus a 1D timing histogram for photon creation delay.
+
+`photon_creation_delay_to_histogram(...)` computes:
+
+- `photon_creation_time_ns - primary_interaction_time_ns`
+
+It reads `/primaries` and `/photons`, matches rows by
+`(gun_call_id, primary_track_id)`, and skips rows where the primary
+interaction time is missing (`NaN`). For backward compatibility with older
+files, it also accepts the legacy `/primaries.primary_t0_time_ns` field name.
+
+`fit_photon_creation_delay_histogram(...)` performs a bounded 3-component
+exponential fit against histogram bin counts and returns fitted decay
+constants and yield fractions. This is intended as a lightweight exploratory
+tool, not a full statistical inference pipeline.
 
 By default, `neutron_hits_to_image`, `photon_origins_to_image`, and
 `photon_exit_to_image` use a shared XY range so their image scale is directly
@@ -42,8 +57,11 @@ range modes (highest precedence first):
 
 ## Example usage
 
-See:
+Quick-look spatial example:
 - `examples/analysisLite/hdf5_lite_analyzer_example.py`
+
+Timing-focused example:
+- `examples/analysisLite/hdf5_timing_analyzer_example.py`
 
 Run from repo root:
 
@@ -52,7 +70,7 @@ pixi run python examples/analysisLite/hdf5_lite_analyzer_example.py \
   data/CanonEF50mmf1p0L_run/simulatedPhotons/photon_optical_interface_hits.h5
 ```
 
-The script uses an existing simulation output HDF5 file and writes PNGs to
+The lite analyzer script uses an existing simulation output HDF5 file and writes PNGs to
 `<run_root>/plots/` by default (for example:
 `data/CanonEF50mmf1p0L_run/plots/`).
 
@@ -64,3 +82,25 @@ the script also writes `photons_intensifier_hits.png`.
 You can also pass an explicit transport file via:
 
 `--transport-hdf5-path <path/to/photons_intensifier_hits.h5>`
+
+Run the timing-only example from repo root:
+
+```bash
+pixi run python examples/analysisLite/hdf5_timing_analyzer_example.py \
+  data/CanonEF50mmf1p0L_run/simulatedPhotons/photon_optical_interface_hits.h5
+```
+
+This writes `photon_creation_delay.png` to the same default output directory.
+
+To overlay the configured decay model and fit the histogram:
+
+```bash
+pixi run python examples/analysisLite/hdf5_timing_analyzer_example.py \
+  data/CanonEF50mmf1p0L_run/simulatedPhotons/photon_optical_interface_hits.h5 \
+  --fit \
+  --sim-config-yaml examples/yamlFiles/CanonEF50mmf1p0L_example.yaml
+```
+
+When `--sim-config-yaml` is provided, the script loads the active 3-component
+profile selected for the configured source particle, overlays that model on
+the histogram, and uses it as the initial guess for fitting.
