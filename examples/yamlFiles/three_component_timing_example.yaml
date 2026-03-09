@@ -1,0 +1,99 @@
+# Three-component timing-analysis example configuration.
+#
+# Intended workflow:
+# - Run with `examples/endToEnd/end_to_end_example.py`
+# - Analyze with `examples/analysisLite/hdf5_timing_analyzer_example.py`
+
+scintillator:
+  position_mm:
+    x_mm: 0.0
+    y_mm: 0.0
+    z_mm: 0.0
+  dimension_mm:
+    x_mm: 100.0
+    y_mm: 100.0
+    z_mm: 20.0
+  maskRadius: 18.0
+  properties:
+    name: EJ200_three_component_timing
+    photonEnergy: [2.8, 3.0, 3.2]
+    rIndex: [1.58, 1.59, 1.60]
+    nKEntries: 3
+    timeComponents:
+      default:
+        - timeConstant: 2.0
+          yieldFraction: 0.55
+        - timeConstant: 12.0
+          yieldFraction: 0.30
+        - timeConstant: 60.0
+          yieldFraction: 0.15
+
+source:
+  gps:
+    particle: neutron
+    position:
+      type: Plane
+      shape: Circle
+      centerMm:
+        x_mm: 0.0
+        y_mm: 0.0
+        z_mm: -100.0
+      radiusMm: 10.0
+    angular:
+      type: beam2d
+      rot1: {x: 1.0, y: 0.0, z: 0.0}
+      rot2: {x: 0.0, y: 1.0, z: 0.0}
+      direction: {x: 0.0, y: 0.0, z: 1.0}
+    energy:
+      type: Mono
+      monoMeV: 6.0
+
+optical:
+  lenses:
+    - catalogId: CanonEF50mmf1.0L
+      primary: true
+  geometry:
+    entranceDiameter: 60.55
+    sensorMaxWidth: 36.0
+  sensitiveDetectorConfig:
+    position_mm:
+      x_mm: 0.0
+      y_mm: 0.0
+      z_mm: 210.05
+    shape: circle
+    diameterRule: min(entranceDiameter,sensorMaxWidth)
+  transportAssumptions:
+    objectPlane: scintillator_back_face
+    opticalInterfaceRepresents: lens_entrance_plane
+
+intensifier:
+  model: Cricket2
+  input_screen:
+    image_circle_diameter_mm: 18.0
+    center_mm: [0.0, 0.0]
+    magnification: 1.0
+    coordinate_frame: intensifier_input_plane
+    notes: Cricket2 nominal image-circle diameter and 1:1 magnification.
+
+simulation:
+  numberOfParticles: 10000
+  runtimeControls:
+    controlVerbose: 0
+    runVerbose: 0
+    eventVerbose: 0
+    trackingVerbose: 0
+    printProgress: 1000
+
+Metadata:
+  author: Alex Long
+  date: 2026-03-09
+  version: ScintPiX v0.1
+  description: Canon/lens end-to-end example with 3 active scintillation timing components.
+  RunEnvironment:
+    SimulationRunID: three_component_timing_run
+    WorkingDirectory: data
+    MacroDirectory: macros
+    LogDirectory: logs
+    OutputInfo:
+      SimulatedPhotonsDirectory: simulatedPhotons
+      TransportedPhotonsDirectory: transportedPhotons

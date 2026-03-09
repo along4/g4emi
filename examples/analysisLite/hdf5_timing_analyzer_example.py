@@ -120,6 +120,57 @@ def _format_components(
     return lines
 
 
+def _plot_component_summary(
+    ax,
+    *,
+    configured_profile_name: str | None,
+    configured_components: tuple[ScintillationDecayComponent, ...] | None,
+    fitted_components: tuple[ScintillationDecayComponent, ...] | None,
+    fit_rmse_counts: float | None,
+) -> None:
+    """Render configured/fitted timing-component values onto the plot."""
+
+    lines: list[str] = []
+    if configured_components is not None:
+        profile_suffix = (
+            f" ({configured_profile_name})" if configured_profile_name is not None else ""
+        )
+        lines.append(f"Configured{profile_suffix}:")
+        for index, component in enumerate(configured_components, start=1):
+            lines.append(
+                f"  C{index}: {component.time_constant_ns:.3f} ns, {component.yield_fraction:.4f}"
+            )
+    if fitted_components is not None:
+        if lines:
+            lines.append("")
+        lines.append("Fitted:")
+        for index, component in enumerate(fitted_components, start=1):
+            lines.append(
+                f"  F{index}: {component.time_constant_ns:.3f} ns, {component.yield_fraction:.4f}"
+            )
+        if fit_rmse_counts is not None:
+            lines.append(f"  RMSE: {fit_rmse_counts:.3f}")
+    if not lines:
+        return
+
+    ax.text(
+        0.98,
+        0.98,
+        "\n".join(lines),
+        transform=ax.transAxes,
+        ha="right",
+        va="top",
+        fontsize=8,
+        family="monospace",
+        bbox={
+            "boxstyle": "round,pad=0.35",
+            "facecolor": "white",
+            "alpha": 0.85,
+            "edgecolor": "#666666",
+        },
+    )
+
+
 def main() -> None:
     """Generate photon creation-delay timing plots from a simulation HDF5 file."""
 
@@ -205,6 +256,14 @@ def main() -> None:
         ax.legend()
     elif configured_components is not None:
         ax.legend()
+
+    _plot_component_summary(
+        ax,
+        configured_profile_name=configured_profile_name,
+        configured_components=configured_components,
+        fitted_components=(fit_result.components if fit_result is not None else None),
+        fit_rmse_counts=(fit_result.rmse_counts if fit_result is not None else None),
+    )
 
     fig.savefig(creation_delay_png, dpi=150)
 
