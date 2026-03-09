@@ -182,6 +182,38 @@ def _primary_interaction_time_field_name(primaries: np.ndarray) -> str:
     )
 
 
+def _secondary_endpoint_field_names(secondaries: np.ndarray) -> tuple[str, str, str]:
+    """Resolve secondary endpoint field names across schema versions."""
+
+    names = set(secondaries.dtype.names or ())
+    if {
+        "secondary_end_x_mm",
+        "secondary_end_y_mm",
+        "secondary_end_z_mm",
+    }.issubset(names):
+        return (
+            "secondary_end_x_mm",
+            "secondary_end_y_mm",
+            "secondary_end_z_mm",
+        )
+    if {
+        "secondary_stop_x_mm",
+        "secondary_stop_y_mm",
+        "secondary_stop_z_mm",
+    }.issubset(names):
+        return (
+            "secondary_stop_x_mm",
+            "secondary_stop_y_mm",
+            "secondary_stop_z_mm",
+        )
+    raise KeyError(
+        "/secondaries is missing endpoint fields. Expected either "
+        "('secondary_end_x_mm', 'secondary_end_y_mm', 'secondary_end_z_mm') or "
+        "legacy "
+        "('secondary_stop_x_mm', 'secondary_stop_y_mm', 'secondary_stop_z_mm')."
+    )
+
+
 def _shared_xy_range(
     hdf5_path: str | Path,
     neutron_labels: Sequence[str],
@@ -354,6 +386,16 @@ def _plot_1d_histogram(
     return fig, ax
 
 
+def _overlay_histogram_colors(count: int) -> list[str]:
+    """Return at least `count` histogram colors from the active style cycle."""
+
+    cycle = plt.rcParams.get("axes.prop_cycle")
+    colors = list(cycle.by_key().get("color", [])) if cycle is not None else []
+    if not colors:
+        colors = ["#4c78a8", "#f58518", "#54a24b", "#e45756", "#72b7b2"]
+    return [colors[index % len(colors)] for index in range(count)]
+
+
 def photon_creation_delays_ns(hdf5_path: str | Path) -> np.ndarray:
     """Return finite non-negative photon creation delays in nanoseconds."""
 
@@ -422,6 +464,62 @@ def photon_creation_delays_ns(hdf5_path: str | Path) -> np.ndarray:
             "No finite photon creation delays could be computed from the HDF5 data."
         )
     return delay_array
+
+
+def secondary_track_lengths_by_species_mm(
+    hdf5_path: str | Path,
+    *,
+    secondary_species: Sequence[str] | None = None,
+) -> dict[str, np.ndarray]:
+    """Return secondary origin-to-end lengths grouped by species."""
+
+    secondaries = _read_structured_dataset(hdf5_path, "secondaries")
+    required = {
+        "secondary_species",
+        "secondary_origin_x_mm",
+        "secondary_origin_y_mm",
+        "secondary_origin_z_mm",
+    }
+    if not required.issubset(set(secondaries.dtype.names or ())):
+        raise KeyError(f"/secondaries is missing required fields: {sorted(required)}")
+
+    end_x_field, end_y_field, end_z_field = _secondary_endpoint_field_names(secondaries)
+    labels = _decode_species(secondaries["secondary_species"])
+    delta_x_mm = np.asarray(secondaries[end_x_field], dtype=float) - np.asarray(
+        secondaries["secondary_origin_x_mm"],
+        dtype=float,
+    )
+    delta_y_mm = np.asarray(secondaries[end_y_field], dtype=float) - np.asarray(
+        secondaries["secondary_origin_y_mm"],
+        dtype=float,
+    )
+    delta_z_mm = np.asarray(secondaries[end_z_field], dtype=float) - np.asarray(
+        secondaries["secondary_origin_z_mm"],
+        dtype=float,
+    )
+    track_lengths_mm = np.sqrt(
+        np.square(delta_x_mm) + np.square(delta_y_mm) + np.square(delta_z_mm)
+    )
+    finite_mask = np.isfinite(track_lengths_mm) & (track_lengths_mm >= 0.0)
+    labels = labels[finite_mask]
+    track_lengths_mm = track_lengths_mm[finite_mask]
+
+    if secondary_species is not None:
+        selected = {label.lower() for label in secondary_species}
+        selection_mask = np.isin(labels, list(selected))
+        labels = labels[selection_mask]
+        track_lengths_mm = track_lengths_mm[selection_mask]
+
+    if track_lengths_mm.size == 0:
+        raise ValueError(
+            "No finite non-negative secondary track lengths were found in the HDF5 data."
+        )
+
+    grouped: dict[str, np.ndarray] = {}
+    for species in sorted(set(labels.tolist())):
+        species_mask = labels == species
+        grouped[species] = np.asarray(track_lengths_mm[species_mask], dtype=float)
+    return grouped
 
 
 def decay_model_bin_counts(
@@ -913,16 +1011,83 @@ def photon_creation_delay_to_histogram(
     )
 
 
+def secondary_track_lengths_overlay_to_histogram(
+    hdf5_path: str | Path,
+    bins: int | Sequence[float] = 128,
+    *,
+    secondary_species: Sequence[str] | None = None,
+    alpha: float = 0.45,
+    log_scale: bool = True,
+    x_max: float | None = None,
+    output_path: str | Path | None = None,
+    show: bool = False,
+) -> tuple[Figure, Axes]:
+    """Overlay secondary track-length histograms by species."""
+
+    if not 0.0 < alpha <= 1.0:
+        raise ValueError("alpha must satisfy 0 < alpha <= 1.")
+    if x_max is not None and x_max <= 0.0:
+        raise ValueError("x_max must be positive when provided.")
+
+    grouped_lengths_mm = secondary_track_lengths_by_species_mm(
+        hdf5_path,
+        secondary_species=secondary_species,
+    )
+    all_lengths_mm = np.concatenate(list(grouped_lengths_mm.values()))
+    if isinstance(bins, int) and x_max is not None:
+        _, bin_edges = np.histogram(all_lengths_mm, bins=bins, range=(0.0, x_max))
+    else:
+        _, bin_edges = _histogram_counts(all_lengths_mm, bins=bins)
+
+    fig, ax = plt.subplots(figsize=(8, 5.5))
+    colors = _overlay_histogram_colors(len(grouped_lengths_mm))
+    for color, (species, lengths_mm) in zip(
+        colors,
+        grouped_lengths_mm.items(),
+        strict=False,
+    ):
+        ax.hist(
+            lengths_mm,
+            bins=bin_edges,
+            histtype="stepfilled",
+            alpha=alpha,
+            color=color,
+            edgecolor=color,
+            linewidth=1.0,
+            label=f"{species} (n={len(lengths_mm)})",
+        )
+
+    ax.set_title("Secondary Track Lengths by Species")
+    ax.set_xlabel("track length (mm)")
+    ax.set_ylabel("counts")
+    if log_scale:
+        ax.set_yscale("log")
+    if x_max is not None:
+        ax.set_xlim(0.0, x_max)
+    ax.legend()
+    fig.tight_layout()
+
+    if output_path is not None:
+        fig.savefig(Path(output_path), dpi=150)
+
+    if show:
+        plt.show()
+
+    return fig, ax
+
+
 __all__ = [
     "ScintillationDecayComponent",
     "PhotonCreationDelayFitResult",
     "decay_model_bin_counts",
     "fit_photon_creation_delay_histogram",
     "photon_creation_delays_ns",
+    "secondary_track_lengths_by_species_mm",
     "neutron_hits_to_image",
     "photon_origins_to_image",
     "photon_exit_to_image",
     "optical_interface_photons_to_image",
     "intensifier_photons_to_image",
     "photon_creation_delay_to_histogram",
+    "secondary_track_lengths_overlay_to_histogram",
 ]

@@ -44,6 +44,8 @@ class IntensifierPlotTests(unittest.TestCase):
                 photon_creation_delay_to_histogram,
                 photon_exit_to_image,
                 photon_origins_to_image,
+                secondary_track_lengths_by_species_mm,
+                secondary_track_lengths_overlay_to_histogram,
             )
             import analysis.hdf5Analyzer as analyzer_module
         except ModuleNotFoundError as exc:
@@ -71,6 +73,12 @@ class IntensifierPlotTests(unittest.TestCase):
         )
         cls.photon_origins_to_image = staticmethod(photon_origins_to_image)
         cls.photon_exit_to_image = staticmethod(photon_exit_to_image)
+        cls.secondary_track_lengths_by_species_mm = staticmethod(
+            secondary_track_lengths_by_species_mm
+        )
+        cls.secondary_track_lengths_overlay_to_histogram = staticmethod(
+            secondary_track_lengths_overlay_to_histogram
+        )
         cls.analyzer_module = analyzer_module
 
     def _write_transport_hdf5(self, path: Path) -> None:
@@ -161,6 +169,31 @@ class IntensifierPlotTests(unittest.TestCase):
         with self.h5py.File(path, "w") as handle:
             handle.create_dataset("primaries", data=primary_rows)
             handle.create_dataset("photons", data=photon_rows)
+
+    def _write_secondaries_hdf5(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        secondaries_dtype = self.np.dtype(
+            [
+                ("secondary_species", "S16"),
+                ("secondary_origin_x_mm", self.np.float64),
+                ("secondary_origin_y_mm", self.np.float64),
+                ("secondary_origin_z_mm", self.np.float64),
+                ("secondary_end_x_mm", self.np.float64),
+                ("secondary_end_y_mm", self.np.float64),
+                ("secondary_end_z_mm", self.np.float64),
+            ]
+        )
+        secondary_rows = self.np.array(
+            [
+                (b"proton", 0.0, 0.0, 0.0, 3.0, 4.0, 0.0),
+                (b"proton", 1.0, 2.0, 3.0, 1.0, 2.0, 9.0),
+                (b"alpha", 0.0, 0.0, 0.0, 0.0, 6.0, 8.0),
+                (b"alpha", 0.0, 0.0, 0.0, self.np.nan, 1.0, 1.0),
+            ],
+            dtype=secondaries_dtype,
+        )
+        with self.h5py.File(path, "w") as handle:
+            handle.create_dataset("secondaries", data=secondary_rows)
 
     def _write_delay_sample_hdf5(self, path: Path, delays_ns: np.ndarray) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -260,6 +293,51 @@ class IntensifierPlotTests(unittest.TestCase):
             self.assertEqual(ax.get_xlabel(), "delay (ns)")
             self.assertEqual(ax.get_ylabel(), "counts")
             self.assertIn("Primary Interaction", ax.get_title())
+            self.plt.close(fig)
+
+    def test_secondary_track_lengths_are_grouped_by_species(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            hdf5_path = Path(tmp_dir) / "photon_optical_interface_hits.h5"
+            self._write_secondaries_hdf5(hdf5_path)
+
+            grouped = self.secondary_track_lengths_by_species_mm(hdf5_path)
+
+            self.assertEqual(sorted(grouped.keys()), ["alpha", "proton"])
+            self.assertTrue(
+                self.np.allclose(grouped["proton"], self.np.array([5.0, 6.0]))
+            )
+            self.assertTrue(self.np.allclose(grouped["alpha"], self.np.array([10.0])))
+
+    def test_secondary_track_length_overlay_uses_requested_alpha(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            hdf5_path = Path(tmp_dir) / "photon_optical_interface_hits.h5"
+            self._write_secondaries_hdf5(hdf5_path)
+
+            fig, ax = self.secondary_track_lengths_overlay_to_histogram(
+                hdf5_path,
+                bins=[0.0, 4.0, 8.0, 12.0],
+                alpha=0.35,
+                x_max=8.0,
+                show=False,
+            )
+
+            self.assertEqual(ax.get_xlabel(), "track length (mm)")
+            self.assertEqual(ax.get_ylabel(), "counts")
+            self.assertIn("Track Lengths", ax.get_title())
+            self.assertEqual(ax.get_yscale(), "log")
+            self.assertAlmostEqual(float(ax.get_xlim()[0]), 0.0)
+            self.assertAlmostEqual(float(ax.get_xlim()[1]), 8.0)
+            self.assertEqual(len(ax.patches), 2)
+            self.assertTrue(
+                all(
+                    abs(float(patch.get_alpha()) - 0.35) < 1.0e-9
+                    for patch in ax.patches
+                )
+            )
+            legend = ax.get_legend()
+            self.assertIsNotNone(legend)
+            legend_labels = [text.get_text() for text in legend.get_texts()]
+            self.assertEqual(legend_labels, ["alpha (n=1)", "proton (n=2)"])
             self.plt.close(fig)
 
     def test_photon_creation_delays_extract_expected_values(self) -> None:
