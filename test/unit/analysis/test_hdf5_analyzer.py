@@ -262,6 +262,20 @@ class IntensifierPlotTests(unittest.TestCase):
             self.assertIn("Primary Interaction", ax.get_title())
             self.plt.close(fig)
 
+    def test_photon_creation_delays_extract_expected_values(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            hdf5_path = Path(tmp_dir) / "photon_optical_interface_hits.h5"
+            self._write_timing_hdf5(hdf5_path, legacy_field_name=False)
+
+            delays_ns = self.photon_creation_delays_ns(hdf5_path)
+
+            self.assertTrue(
+                self.np.allclose(
+                    self.np.sort(delays_ns),
+                    self.np.array([2.0, 5.0], dtype=float),
+                )
+            )
+
     def test_photon_creation_delay_histogram_accepts_legacy_primary_time_field(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             hdf5_path = Path(tmp_dir) / "photon_optical_interface_hits.h5"

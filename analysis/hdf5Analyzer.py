@@ -369,36 +369,54 @@ def photon_creation_delays_ns(hdf5_path: str | Path) -> np.ndarray:
         raise KeyError(f"/photons is missing required fields: {sorted(photon_required)}")
 
     interaction_field = _primary_interaction_time_field_name(primaries)
-    interaction_lookup = {
-        (int(gun_call_id), int(primary_track_id)): float(interaction_time_ns)
-        for gun_call_id, primary_track_id, interaction_time_ns in zip(
-            primaries["gun_call_id"],
-            primaries["primary_track_id"],
-            primaries[interaction_field],
-            strict=False,
-        )
-    }
-
-    delays_ns = []
-    for gun_call_id, primary_track_id, creation_time_ns in zip(
-        photons["gun_call_id"],
+    key_dtype = np.dtype(
+        [
+            ("gun_call_id", np.int64),
+            ("primary_track_id", np.int32),
+        ]
+    )
+    primary_keys = np.empty(len(primaries), dtype=key_dtype)
+    primary_keys["gun_call_id"] = np.asarray(primaries["gun_call_id"], dtype=np.int64)
+    primary_keys["primary_track_id"] = np.asarray(
+        primaries["primary_track_id"],
+        dtype=np.int32,
+    )
+    photon_keys = np.empty(len(photons), dtype=key_dtype)
+    photon_keys["gun_call_id"] = np.asarray(photons["gun_call_id"], dtype=np.int64)
+    photon_keys["primary_track_id"] = np.asarray(
         photons["primary_track_id"],
-        photons["photon_creation_time_ns"],
-        strict=False,
-    ):
-        interaction_time_ns = interaction_lookup.get(
-            (int(gun_call_id), int(primary_track_id))
-        )
-        if interaction_time_ns is None or not np.isfinite(interaction_time_ns):
-            continue
-        creation_time_ns = float(creation_time_ns)
-        if not np.isfinite(creation_time_ns):
-            continue
-        delay_ns = creation_time_ns - interaction_time_ns
-        if delay_ns >= 0.0:
-            delays_ns.append(delay_ns)
+        dtype=np.int32,
+    )
 
-    delay_array = np.asarray(delays_ns, dtype=float)
+    sort_idx = np.argsort(primary_keys, order=("gun_call_id", "primary_track_id"))
+    sorted_primary_keys = primary_keys[sort_idx]
+    sorted_interaction_times_ns = np.asarray(primaries[interaction_field], dtype=float)[
+        sort_idx
+    ]
+    photon_creation_times_ns = np.asarray(photons["photon_creation_time_ns"], dtype=float)
+
+    match_idx = np.searchsorted(sorted_primary_keys, photon_keys, side="left")
+    in_range_mask = match_idx < len(sorted_primary_keys)
+    matched_mask = np.zeros(len(photons), dtype=bool)
+    if np.any(in_range_mask):
+        matched_mask[in_range_mask] = (
+            sorted_primary_keys[match_idx[in_range_mask]] == photon_keys[in_range_mask]
+        )
+
+    if not np.any(matched_mask):
+        raise ValueError(
+            "No finite photon creation delays could be computed from the HDF5 data."
+        )
+
+    matched_interaction_times_ns = sorted_interaction_times_ns[match_idx[matched_mask]]
+    matched_creation_times_ns = photon_creation_times_ns[matched_mask]
+    finite_mask = np.isfinite(matched_interaction_times_ns) & np.isfinite(
+        matched_creation_times_ns
+    )
+    delay_array = matched_creation_times_ns[finite_mask] - matched_interaction_times_ns[
+        finite_mask
+    ]
+    delay_array = delay_array[delay_array >= 0.0]
     if delay_array.size == 0:
         raise ValueError(
             "No finite photon creation delays could be computed from the HDF5 data."
