@@ -419,6 +419,34 @@ def decay_model_bin_counts(
     if total_count <= 0.0:
         raise ValueError("total_count must be positive.")
 
+    amplitudes, taus = _component_amplitudes_and_taus(
+        components,
+        total_count=total_count,
+        validate_total_yield=True,
+    )
+
+    active_mask = amplitudes > 0.0
+    taus = np.where(active_mask, taus, 1.0)
+    left_edges = edges[:-1]
+    right_edges = edges[1:]
+    return np.sum(
+        amplitudes[None, :]
+        * (
+            np.exp(-left_edges[:, None] / taus[None, :])
+            - np.exp(-right_edges[:, None] / taus[None, :])
+        ),
+        axis=1,
+    )
+
+
+def _component_amplitudes_and_taus(
+    components: Sequence[ScintillationDecayComponent],
+    *,
+    total_count: float,
+    validate_total_yield: bool,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Validate decay components and convert them into amplitudes/times."""
+
     component_list = list(components)
     if len(component_list) != 3:
         raise ValueError("Exactly 3 decay components are required.")
@@ -431,31 +459,20 @@ def decay_model_bin_counts(
         [float(component.time_constant_ns) for component in component_list],
         dtype=float,
     )
-    if np.any(yields < 0.0):
-        raise ValueError("Yield fractions must be non-negative.")
     if not np.isfinite(yields).all() or not np.isfinite(taus).all():
         raise ValueError("Decay components must be finite.")
-
-    total_yield = float(np.sum(yields))
-    if total_yield <= 0.0:
-        raise ValueError("At least one decay component must have positive yield.")
+    if np.any(yields < 0.0):
+        raise ValueError("Yield fractions must be non-negative.")
     active_mask = yields > 0.0
     if np.any(taus[active_mask] <= 0.0):
         raise ValueError("Active decay time constants must be positive.")
+
+    total_yield = float(np.sum(yields))
+    if validate_total_yield and total_yield <= 0.0:
+        raise ValueError("At least one decay component must have positive yield.")
     normalized_yields = yields / total_yield
     amplitudes = float(total_count) * normalized_yields
-    taus = np.where(active_mask, taus, 1.0)
-
-    left_edges = edges[:-1]
-    right_edges = edges[1:]
-    return np.sum(
-        amplitudes[None, :]
-        * (
-            np.exp(-left_edges[:, None] / taus[None, :])
-            - np.exp(-right_edges[:, None] / taus[None, :])
-        ),
-        axis=1,
-    )
+    return amplitudes, taus
 
 
 def fit_photon_creation_delay_histogram(
@@ -482,15 +499,10 @@ def fit_photon_creation_delay_histogram(
     min_tau_ns = max(max_delay_ns / 1.0e5, 1.0e-3)
     max_tau_ns = max(max_delay_ns * 5.0, 1.0)
     if initial_components is not None:
-        if len(initial_components) != 3:
-            raise ValueError("Exactly 3 initial decay components are required.")
-        amplitude_guess = total_count * np.asarray(
-            [component.yield_fraction for component in initial_components],
-            dtype=float,
-        )
-        tau_guess = np.asarray(
-            [component.time_constant_ns for component in initial_components],
-            dtype=float,
+        amplitude_guess, tau_guess = _component_amplitudes_and_taus(
+            initial_components,
+            total_count=total_count,
+            validate_total_yield=True,
         )
     else:
         amplitude_guess = total_count * np.array([0.7, 0.2, 0.1], dtype=float)

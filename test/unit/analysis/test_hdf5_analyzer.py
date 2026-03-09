@@ -353,6 +353,28 @@ class IntensifierPlotTests(unittest.TestCase):
         self.assertEqual(len(counts), 2)
         self.assertTrue(self.np.all(counts >= 0.0))
 
+    def test_timing_fit_rejects_invalid_initial_components(self) -> None:
+        if not self.scipy_available:
+            raise unittest.SkipTest(
+                "scipy is unavailable; skipping timing-fit validation test."
+            )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            hdf5_path = Path(tmp_dir) / "photon_optical_interface_hits.h5"
+            self._write_timing_hdf5(hdf5_path, legacy_field_name=False)
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "Yield fractions must be non-negative.",
+            ):
+                self.fit_photon_creation_delay_histogram(
+                    hdf5_path,
+                    initial_components=(
+                        self.ScintillationDecayComponent(1.0, 0.8),
+                        self.ScintillationDecayComponent(2.0, -0.1),
+                        self.ScintillationDecayComponent(3.0, 0.3),
+                    ),
+                )
+
 
 if __name__ == "__main__":
     unittest.main()
