@@ -38,6 +38,7 @@ class IntensifierPlotTests(unittest.TestCase):
             from analysis.hdf5Analyzer import (
                 ScintillationDecayComponent,
                 decay_model_bin_counts,
+                event_recoil_paths_to_image,
                 fit_photon_creation_delay_histogram,
                 intensifier_photons_to_image,
                 photon_creation_delays_ns,
@@ -63,6 +64,7 @@ class IntensifierPlotTests(unittest.TestCase):
         cls.ScintillationDecayComponent = ScintillationDecayComponent
         cls.scipy_available = analyzer_module.least_squares is not None
         cls.decay_model_bin_counts = staticmethod(decay_model_bin_counts)
+        cls.event_recoil_paths_to_image = staticmethod(event_recoil_paths_to_image)
         cls.fit_photon_creation_delay_histogram = staticmethod(
             fit_photon_creation_delay_histogram
         )
@@ -220,6 +222,51 @@ class IntensifierPlotTests(unittest.TestCase):
             handle.create_dataset("primaries", data=primary_rows)
             handle.create_dataset("photons", data=photon_rows)
 
+    def _write_event_recoil_hdf5(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        secondaries_dtype = self.np.dtype(
+            [
+                ("gun_call_id", self.np.int64),
+                ("secondary_track_id", self.np.int32),
+                ("secondary_species", "S16"),
+                ("secondary_origin_x_mm", self.np.float64),
+                ("secondary_origin_y_mm", self.np.float64),
+                ("secondary_origin_z_mm", self.np.float64),
+                ("secondary_end_x_mm", self.np.float64),
+                ("secondary_end_y_mm", self.np.float64),
+                ("secondary_end_z_mm", self.np.float64),
+            ]
+        )
+        photons_dtype = self.np.dtype(
+            [
+                ("gun_call_id", self.np.int64),
+                ("secondary_track_id", self.np.int32),
+                ("photon_origin_x_mm", self.np.float64),
+                ("photon_origin_y_mm", self.np.float64),
+                ("photon_origin_z_mm", self.np.float64),
+            ]
+        )
+        secondary_rows = self.np.array(
+            [
+                (7, 21, b"proton", 0.0, 0.0, 0.0, 5.0, 1.0, 0.0),
+                (7, 22, b"alpha", 1.0, 3.0, 0.0, 1.0, 8.0, 2.0),
+                (8, 31, b"proton", -1.0, -1.0, 0.0, -2.0, -2.0, 0.0),
+            ],
+            dtype=secondaries_dtype,
+        )
+        photon_rows = self.np.array(
+            [
+                (7, 21, 1.0, 0.2, 0.0),
+                (7, 21, 3.5, 0.8, 0.0),
+                (7, 22, 1.1, 5.5, 1.0),
+                (8, 31, -1.5, -1.5, 0.0),
+            ],
+            dtype=photons_dtype,
+        )
+        with self.h5py.File(path, "w") as handle:
+            handle.create_dataset("secondaries", data=secondary_rows)
+            handle.create_dataset("photons", data=photon_rows)
+
     def test_intensifier_plot_uses_image_circle_extent_and_reports_oob(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             hdf5_path = Path(tmp_dir) / "photons_intensifier_hits.h5"
@@ -338,6 +385,32 @@ class IntensifierPlotTests(unittest.TestCase):
             self.assertIsNotNone(legend)
             legend_labels = [text.get_text() for text in legend.get_texts()]
             self.assertEqual(legend_labels, ["alpha (n=1)", "proton (n=2)"])
+            self.plt.close(fig)
+
+    def test_event_recoil_paths_plot_selected_event_in_requested_plane(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            hdf5_path = Path(tmp_dir) / "photon_optical_interface_hits.h5"
+            self._write_event_recoil_hdf5(hdf5_path)
+
+            fig, ax = self.event_recoil_paths_to_image(
+                hdf5_path,
+                7,
+                plane="xy",
+                show=False,
+            )
+
+            self.assertEqual(ax.get_xlabel(), "x (mm)")
+            self.assertEqual(ax.get_ylabel(), "y (mm)")
+            self.assertIn("event 7", ax.get_title())
+            self.assertEqual(len(ax.lines), 2)
+            self.assertEqual(len(ax.collections), 2)
+            legend = ax.get_legend()
+            self.assertIsNotNone(legend)
+            legend_labels = [text.get_text() for text in legend.get_texts()]
+            self.assertEqual(
+                legend_labels,
+                ["proton #21 (photons=2)", "alpha #22 (photons=1)"],
+            )
             self.plt.close(fig)
 
     def test_photon_creation_delays_extract_expected_values(self) -> None:

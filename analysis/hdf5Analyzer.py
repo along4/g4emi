@@ -396,6 +396,15 @@ def _overlay_histogram_colors(count: int) -> list[str]:
     return [colors[index % len(colors)] for index in range(count)]
 
 
+def _projection_axes(plane: str) -> tuple[str, str]:
+    """Return the in-plane axis labels for a requested 2D projection."""
+
+    normalized = plane.strip().lower()
+    if normalized not in {"xy", "xz", "yz"}:
+        raise ValueError("plane must be one of: 'xy', 'xz', 'yz'.")
+    return normalized[0], normalized[1]
+
+
 def photon_creation_delays_ns(hdf5_path: str | Path) -> np.ndarray:
     """Return finite non-negative photon creation delays in nanoseconds."""
 
@@ -484,6 +493,11 @@ def secondary_track_lengths_by_species_mm(
         raise KeyError(f"/secondaries is missing required fields: {sorted(required)}")
 
     end_x_field, end_y_field, end_z_field = _secondary_endpoint_field_names(secondaries)
+    end_field_by_axis = {
+        "x": end_x_field,
+        "y": end_y_field,
+        "z": end_z_field,
+    }
     labels = _decode_species(secondaries["secondary_species"])
     delta_x_mm = np.asarray(secondaries[end_x_field], dtype=float) - np.asarray(
         secondaries["secondary_origin_x_mm"],
@@ -1076,6 +1090,137 @@ def secondary_track_lengths_overlay_to_histogram(
     return fig, ax
 
 
+def event_recoil_paths_to_image(
+    hdf5_path: str | Path,
+    gun_call_id: int,
+    *,
+    plane: str = "xy",
+    output_path: str | Path | None = None,
+    show: bool = False,
+) -> tuple[Figure, Axes]:
+    """Plot recoil paths and linked photon origins for one event in 2D."""
+
+    secondaries = _read_structured_dataset(hdf5_path, "secondaries")
+    photons = _read_structured_dataset(hdf5_path, "photons")
+    secondary_required = {
+        "gun_call_id",
+        "secondary_track_id",
+        "secondary_species",
+        "secondary_origin_x_mm",
+        "secondary_origin_y_mm",
+        "secondary_origin_z_mm",
+    }
+    photon_required = {
+        "gun_call_id",
+        "secondary_track_id",
+        "photon_origin_x_mm",
+        "photon_origin_y_mm",
+        "photon_origin_z_mm",
+    }
+    if not secondary_required.issubset(set(secondaries.dtype.names or ())):
+        raise KeyError(
+            f"/secondaries is missing required fields: {sorted(secondary_required)}"
+        )
+    if not photon_required.issubset(set(photons.dtype.names or ())):
+        raise KeyError(f"/photons is missing required fields: {sorted(photon_required)}")
+
+    end_x_field, end_y_field, end_z_field = _secondary_endpoint_field_names(secondaries)
+    end_field_by_axis = {
+        "x": end_x_field,
+        "y": end_y_field,
+        "z": end_z_field,
+    }
+    axis_1, axis_2 = _projection_axes(plane)
+    secondary_mask = np.asarray(secondaries["gun_call_id"], dtype=np.int64) == int(
+        gun_call_id
+    )
+    photon_mask = np.asarray(photons["gun_call_id"], dtype=np.int64) == int(gun_call_id)
+    event_secondaries = secondaries[secondary_mask]
+    event_photons = photons[photon_mask]
+
+    if len(event_secondaries) == 0:
+        raise ValueError(f"No /secondaries rows found for gun_call_id={gun_call_id}.")
+
+    fig, ax = plt.subplots(figsize=(7, 6))
+    colors = _overlay_histogram_colors(len(event_secondaries))
+    all_x_mm: list[np.ndarray] = []
+    all_y_mm: list[np.ndarray] = []
+    species_labels = _decode_species(event_secondaries["secondary_species"])
+    secondary_track_ids = np.asarray(event_secondaries["secondary_track_id"], dtype=np.int32)
+    photon_secondary_ids = np.asarray(event_photons["secondary_track_id"], dtype=np.int32)
+
+    for color, species, secondary_track_id, row in zip(
+        colors,
+        species_labels,
+        secondary_track_ids,
+        event_secondaries,
+        strict=False,
+    ):
+        origin_x = float(row[f"secondary_origin_{axis_1}_mm"])
+        origin_y = float(row[f"secondary_origin_{axis_2}_mm"])
+        end_x = float(row[end_field_by_axis[axis_1]])
+        end_y = float(row[end_field_by_axis[axis_2]])
+        all_x_mm.append(np.array([origin_x, end_x], dtype=float))
+        all_y_mm.append(np.array([origin_y, end_y], dtype=float))
+
+        secondary_photon_mask = photon_secondary_ids == secondary_track_id
+        photon_x_mm = np.asarray(
+            event_photons[f"photon_origin_{axis_1}_mm"][secondary_photon_mask],
+            dtype=float,
+        )
+        photon_y_mm = np.asarray(
+            event_photons[f"photon_origin_{axis_2}_mm"][secondary_photon_mask],
+            dtype=float,
+        )
+        finite_photon_mask = np.isfinite(photon_x_mm) & np.isfinite(photon_y_mm)
+        photon_x_mm = photon_x_mm[finite_photon_mask]
+        photon_y_mm = photon_y_mm[finite_photon_mask]
+        if photon_x_mm.size > 0:
+            all_x_mm.append(photon_x_mm)
+            all_y_mm.append(photon_y_mm)
+
+        ax.plot(
+            [origin_x, end_x],
+            [origin_y, end_y],
+            color=color,
+            linewidth=2.0,
+            label=f"{species} #{secondary_track_id} (photons={len(photon_x_mm)})",
+        )
+        ax.scatter(
+            photon_x_mm,
+            photon_y_mm,
+            color=color,
+            alpha=0.65,
+            s=18.0,
+        )
+
+    x_values = np.concatenate([values for values in all_x_mm if values.size > 0])
+    y_values = np.concatenate([values for values in all_y_mm if values.size > 0])
+    x_min = float(np.min(x_values))
+    x_max = float(np.max(x_values))
+    y_min = float(np.min(y_values))
+    y_max = float(np.max(y_values))
+    x_pad = max(0.05 * (x_max - x_min), 0.5)
+    y_pad = max(0.05 * (y_max - y_min), 0.5)
+
+    ax.set_title(f"Recoil Paths and Photon Origins (event {gun_call_id}, {plane.lower()})")
+    ax.set_xlabel(f"{axis_1} (mm)")
+    ax.set_ylabel(f"{axis_2} (mm)")
+    ax.set_xlim(x_min - x_pad, x_max + x_pad)
+    ax.set_ylim(y_min - y_pad, y_max + y_pad)
+    ax.set_aspect("equal", adjustable="box")
+    ax.legend()
+    fig.tight_layout()
+
+    if output_path is not None:
+        fig.savefig(Path(output_path), dpi=150)
+
+    if show:
+        plt.show()
+
+    return fig, ax
+
+
 __all__ = [
     "ScintillationDecayComponent",
     "PhotonCreationDelayFitResult",
@@ -1090,4 +1235,5 @@ __all__ = [
     "intensifier_photons_to_image",
     "photon_creation_delay_to_histogram",
     "secondary_track_lengths_overlay_to_histogram",
+    "event_recoil_paths_to_image",
 ]
