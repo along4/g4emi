@@ -92,6 +92,9 @@ pixi run g4emi data/CanonEF50mmf1p0L_run/macros/CanonEF50mmf1p0L_run.mac
 - targeted manual overrides in `scintillator.properties` (e.g. `absLength`, `timeComponents`, `scintYield`).
 - `examples/yamlFiles/EJ276D.yaml`
   demonstrates explicit 3-entry `timeComponents` schema usage.
+- simulation forwards `timeComponents[0..2]` into Geant4 scintillation components
+  `1..3`; inactive components remain present with zero yield, and all timing
+  components share the configured scintillation emission spectrum.
 
 For an actual run, use the Python generator first so output subdirectories
 (`data/<SimulationRunID>/simulatedPhotons`) are created before Geant4 writes:

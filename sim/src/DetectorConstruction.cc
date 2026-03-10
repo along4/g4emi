@@ -18,6 +18,7 @@
 #include "G4VisAttributes.hh"
 #include "G4ios.hh"
 
+#include <array>
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -27,6 +28,7 @@
 namespace {
 // Shared optical tabulation size for fixed-size property tables.
 constexpr G4int kNEntries = 5;
+constexpr std::size_t kScintillationComponentCount = 3;
 
 G4double PositiveOrDefault(G4double value, G4double fallback) {
   return (value > 0.0) ? value : fallback;
@@ -44,8 +46,10 @@ struct ScintillatorMaterialConfig {
   std::vector<G4double> scintSpectrum = {0.05, 0.35, 1.00, 0.45, 0.08};
   G4double scintYieldPerMeV = 10000.0;
   G4double resolutionScale = 1.0;
-  G4double timeConstant = 2.1 * ns;
-  G4double yield1 = 1.0;
+  std::array<G4double, kScintillationComponentCount> timeConstants = {
+      2.1 * ns, 0.0, 0.0};
+  std::array<G4double, kScintillationComponentCount> yieldFractions = {
+      1.0, 0.0, 0.0};
   G4int version = 0;
 };
 
@@ -68,8 +72,11 @@ ScintillatorMaterialConfig ResolveScintillatorMaterialConfig(const Config* confi
   out.scintSpectrum = config->GetScintSpectrum();
   out.scintYieldPerMeV = config->GetScintYield();
   out.resolutionScale = config->GetScintResolutionScale();
-  out.timeConstant = config->GetScintTimeConstant();
-  out.yield1 = config->GetScintYield1();
+  for (std::size_t i = 0; i < kScintillationComponentCount; ++i) {
+    const auto componentIndex = static_cast<G4int>(i + 1);
+    out.timeConstants[i] = config->GetScintTimeConstant(componentIndex);
+    out.yieldFractions[i] = config->GetScintYieldFraction(componentIndex);
+  }
   out.version = config->GetScintMaterialVersion();
 
   const auto defaults = DefaultScintillatorMaterialConfig();
@@ -78,8 +85,12 @@ ScintillatorMaterialConfig ResolveScintillatorMaterialConfig(const Config* confi
   out.hydrogenAtoms = (out.hydrogenAtoms > 0) ? out.hydrogenAtoms : defaults.hydrogenAtoms;
   out.scintYieldPerMeV = PositiveOrDefault(out.scintYieldPerMeV, defaults.scintYieldPerMeV);
   out.resolutionScale = PositiveOrDefault(out.resolutionScale, defaults.resolutionScale);
-  out.timeConstant = PositiveOrDefault(out.timeConstant, defaults.timeConstant);
-  out.yield1 = (out.yield1 >= 0.0) ? out.yield1 : defaults.yield1;
+  for (std::size_t i = 0; i < kScintillationComponentCount; ++i) {
+    out.timeConstants[i] = (out.timeConstants[i] >= 0.0) ? out.timeConstants[i]
+                                                         : defaults.timeConstants[i];
+    out.yieldFractions[i] = (out.yieldFractions[i] >= 0.0) ? out.yieldFractions[i]
+                                                            : defaults.yieldFractions[i];
+  }
 
   const std::size_t nEntries = out.photonEnergy.size();
   if (nEntries == 0 || out.rIndex.size() != nEntries || out.absLength.size() != nEntries ||
@@ -114,12 +125,20 @@ G4Material* BuildOrGetEJ200(G4NistManager* nist, const Config* config) {
   auto* mpt = new G4MaterialPropertiesTable();
   mpt->AddProperty("RINDEX", settings.photonEnergy, settings.rIndex);
   mpt->AddProperty("ABSLENGTH", settings.photonEnergy, settings.absLength);
-  mpt->AddProperty("SCINTILLATIONCOMPONENT1", settings.photonEnergy,
-                   settings.scintSpectrum);
   mpt->AddConstProperty("SCINTILLATIONYIELD", settings.scintYieldPerMeV / MeV);
   mpt->AddConstProperty("RESOLUTIONSCALE", settings.resolutionScale);
-  mpt->AddConstProperty("SCINTILLATIONTIMECONSTANT1", settings.timeConstant);
-  mpt->AddConstProperty("SCINTILLATIONYIELD1", settings.yield1);
+
+  // All configured decay components share the same emission spectrum; timing
+  // differences come from the per-component decay constants and yield fractions.
+  mpt->AddProperty("SCINTILLATIONCOMPONENT1", settings.photonEnergy, settings.scintSpectrum);
+  mpt->AddConstProperty("SCINTILLATIONTIMECONSTANT1", settings.timeConstants[0]);
+  mpt->AddConstProperty("SCINTILLATIONYIELD1", settings.yieldFractions[0]);
+  mpt->AddProperty("SCINTILLATIONCOMPONENT2", settings.photonEnergy, settings.scintSpectrum);
+  mpt->AddConstProperty("SCINTILLATIONTIMECONSTANT2", settings.timeConstants[1]);
+  mpt->AddConstProperty("SCINTILLATIONYIELD2", settings.yieldFractions[1]);
+  mpt->AddProperty("SCINTILLATIONCOMPONENT3", settings.photonEnergy, settings.scintSpectrum);
+  mpt->AddConstProperty("SCINTILLATIONTIMECONSTANT3", settings.timeConstants[2]);
+  mpt->AddConstProperty("SCINTILLATIONYIELD3", settings.yieldFractions[2]);
   scintMaterial->SetMaterialPropertiesTable(mpt);
 
   return scintMaterial;
