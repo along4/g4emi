@@ -18,5 +18,13 @@ Optional flags:
 
 - `--beam-on <N>`: override `simulation.numberOfParticles`
 - `--dry-run`: print paths/commands only
-- `--g4emi-binary <path-or-name>`: custom Geant4 executable
+- `--g4emi-binary <path-or-name>`: override `runner.binary` for this invocation
 - `--no-overwrite-transport`: fail if transport HDF5 already exists
+
+The example YAML files now include a top-level `runner` block:
+
+```yaml
+runner:
+  binary: g4emi
+  verifyOutput: true
+```

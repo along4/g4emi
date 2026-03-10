@@ -85,6 +85,18 @@ Run it with:
 pixi run g4emi data/CanonEF50mmf1p0L_run/macros/CanonEF50mmf1p0L_run.mac
 ```
 
+The example YAML files now include a top-level `runner` block for Python-side
+launch behavior, for example:
+
+```yaml
+runner:
+  binary: g4emi
+  verifyOutput: true
+```
+
+`simulation` remains the Geant4 macro/run-command section, while `runner`
+controls how Python launch helpers execute and verify the run.
+
 ### 2.4 Catalog-based scintillator override example
 
 `examples/yamlFiles/EJ200.yaml` demonstrates:
@@ -213,6 +225,9 @@ pixi run python examples/runSimulation/run_simulation_from_yaml.py \
 Useful options:
 - `--dry-run`: write macro + print run command without launching Geant4.
 
+By default, the script uses `runner.binary` from the YAML. The script still
+accepts `--beam-on` as a temporary override for `simulation.numberOfParticles`.
+
 ### 2.8 End-to-end YAML -> simulation -> transport
 
 To run the full pipeline (macro generation, simulation, then optical transport):
@@ -221,6 +236,9 @@ To run the full pipeline (macro generation, simulation, then optical transport):
 pixi run python examples/endToEnd/end_to_end_example.py \
   examples/yamlFiles/CanonEF50mmf1p0L_example.yaml
 ```
+
+This script also uses the YAML `runner.binary` by default. Passing
+`--g4emi-binary <path-or-name>` overrides `runner.binary` for that invocation.
 
 ## 3. Simulation Output Structures
 

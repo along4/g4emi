@@ -82,6 +82,10 @@ simulation:
     trackingVerbose: 0
     printProgress: 1000
 
+runner:
+  binary: g4emi
+  verifyOutput: true
+
 Metadata:
   author: Alex Long
   date: 2026-02-19
