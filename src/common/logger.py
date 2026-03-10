@@ -82,7 +82,7 @@ def configure_run_logger(
         log_path,
         level=file_level,
         format=_FILE_FORMAT,
-        mode="w",
+        mode="a",
         encoding="utf-8",
         backtrace=False,
         diagnose=False,

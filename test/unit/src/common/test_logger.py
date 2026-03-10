@@ -119,6 +119,21 @@ class RunLoggerTests(unittest.TestCase):
             finally:
                 logger.remove(external_handler_id)
 
+    def test_reconfigure_appends_to_existing_run_log(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = self._build_config(Path(temp_dir))
+            logger = self.get_logger()
+
+            log_path = self.configure_run_logger(config, screen_sink=io.StringIO())
+            logger.info("simulation stage")
+
+            self.configure_run_logger(config, screen_sink=io.StringIO())
+            logger.info("transport stage")
+
+            file_output = log_path.read_text(encoding="utf-8")
+            self.assertIn("simulation stage", file_output)
+            self.assertIn("transport stage", file_output)
+
 
 if __name__ == "__main__":
     unittest.main()
