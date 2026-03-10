@@ -100,12 +100,16 @@ class ScintillationTimeComponentsByExcitation(StrictModel):
             raise ValueError(
                 f"`timeComponents.{profile_name}` yield fractions must sum to ~1.0."
             )
-        for index, component in enumerate(components, start=1):
-            if component.yield_fraction > 0.0 and component.time_constant <= 0.0:
-                raise ValueError(
-                    "Active time component must have positive `timeConstant` "
-                    f"(profile={profile_name}, component={index})."
-                )
+        active_component_count = sum(
+            1
+            for component in components
+            if component.yield_fraction > 0.0 and component.time_constant > 0.0
+        )
+        if active_component_count == 0:
+            raise ValueError(
+                f"`timeComponents.{profile_name}` must define at least one active "
+                "component (`yieldFraction > 0` and `timeConstant > 0`)."
+            )
 
     @model_validator(mode="after")
     def validate_profiles(self) -> "ScintillationTimeComponentsByExcitation":
