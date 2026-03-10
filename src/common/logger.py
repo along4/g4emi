@@ -17,6 +17,8 @@ _SCREEN_FORMAT = "<level>{level: <8}</level> | {message}"
 _FILE_FORMAT = "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}"
 _RUN_LOGGER_CONFIGURED = False
 _RUN_LOG_PATH: Path | None = None
+_RUN_SCREEN_HANDLER_ID: int | None = None
+_RUN_FILE_HANDLER_ID: int | None = None
 
 
 def _require_loguru():
@@ -60,14 +62,14 @@ def configure_run_logger(
 ) -> Path:
     """Configure terminal and file sinks for the current run."""
 
-    global _RUN_LOGGER_CONFIGURED, _RUN_LOG_PATH
+    global _RUN_FILE_HANDLER_ID, _RUN_LOGGER_CONFIGURED, _RUN_LOG_PATH, _RUN_SCREEN_HANDLER_ID
 
     logger = _require_loguru()
     log_path = resolve_run_log_path(config, filename=filename)
     sink = sys.stderr if screen_sink is None else screen_sink
 
-    logger.remove()
-    logger.add(
+    _remove_owned_handlers(logger)
+    _RUN_SCREEN_HANDLER_ID = logger.add(
         sink,
         level=screen_level,
         format=_SCREEN_FORMAT,
@@ -76,7 +78,7 @@ def configure_run_logger(
         diagnose=False,
         enqueue=False,
     )
-    logger.add(
+    _RUN_FILE_HANDLER_ID = logger.add(
         log_path,
         level=file_level,
         format=_FILE_FORMAT,
@@ -125,3 +127,19 @@ def get_logger():
     """Return the shared loguru logger."""
 
     return _require_loguru()
+
+
+def _remove_owned_handlers(logger: object) -> None:
+    """Remove only the handler IDs created by this module."""
+
+    global _RUN_FILE_HANDLER_ID, _RUN_SCREEN_HANDLER_ID
+
+    for handler_id_name in ("_RUN_SCREEN_HANDLER_ID", "_RUN_FILE_HANDLER_ID"):
+        handler_id = globals()[handler_id_name]
+        if handler_id is None:
+            continue
+        try:
+            logger.remove(handler_id)
+        except ValueError:
+            pass
+        globals()[handler_id_name] = None

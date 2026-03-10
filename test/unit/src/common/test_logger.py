@@ -96,6 +96,29 @@ class RunLoggerTests(unittest.TestCase):
             self.assertIn("major info", file_output)
             self.assertIn("major warning", file_output)
 
+    def test_reconfigure_preserves_unrelated_loguru_handlers(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = self._build_config(Path(temp_dir))
+            logger = self.get_logger()
+            external_capture = io.StringIO()
+            external_handler_id = logger.add(
+                external_capture,
+                level="INFO",
+                format="{message}",
+            )
+            try:
+                self.configure_run_logger(config, screen_sink=io.StringIO())
+                logger.info("first message")
+
+                self.configure_run_logger(config, screen_sink=io.StringIO())
+                logger.info("second message")
+
+                external_output = external_capture.getvalue()
+                self.assertIn("first message", external_output)
+                self.assertIn("second message", external_output)
+            finally:
+                logger.remove(external_handler_id)
+
 
 if __name__ == "__main__":
     unittest.main()
