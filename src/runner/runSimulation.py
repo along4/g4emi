@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 import shlex
 import subprocess
 import sys
@@ -24,6 +25,9 @@ except ModuleNotFoundError:
     from src.config.SimConfig import SimConfig
 
 
+_SIMULATED_EVENTS_PATTERN = re.compile(r"Simulated\s+(\d+)\s+events\b")
+
+
 def _simulation_command(config: SimConfig, macro_path: Path) -> list[str]:
     """Build subprocess command tokens from `config.runner.binary` + macro."""
 
@@ -36,6 +40,43 @@ def _simulation_command(config: SimConfig, macro_path: Path) -> list[str]:
     if not tokens:
         raise ValueError("`runner.binary` did not resolve to an executable command.")
     return [*tokens, str(macro_path)]
+
+
+def _simulation_total_events(config: SimConfig) -> int | None:
+    """Return total configured events for progress display, if available."""
+
+    if config.simulation is None:
+        return None
+    return config.simulation.number_of_particles
+
+
+def _parse_simulated_events(line: str) -> int | None:
+    """Extract aggregate simulated-event count from a Geant4 status line."""
+
+    match = _SIMULATED_EVENTS_PATTERN.search(line)
+    if match is None:
+        return None
+    return int(match.group(1))
+
+
+def _write_progress(current: int, total: int) -> None:
+    """Render a simple in-terminal simulation progress bar."""
+
+    if total <= 0:
+        return
+    clamped = min(current, total)
+    width = 30
+    fraction = clamped / total
+    filled = int(width * fraction)
+    bar = f"[{'#' * filled}{'-' * (width - filled)}]"
+    percent = int(fraction * 100)
+    sys.stderr.write(
+        f"\rSimulation {bar} {percent:3d}% ({clamped}/{total} events)"
+    )
+    sys.stderr.flush()
+    if clamped >= total:
+        sys.stderr.write("\n")
+        sys.stderr.flush()
 
 
 def run(
@@ -72,18 +113,46 @@ def run(
     # Resolve the canonical log path for consistency with caller reporting.
     log_path = resolve_run_log_path(config)
     command = _simulation_command(config, macro_path)
+    total_events = _simulation_total_events(config)
 
     if dry_run:
         return None
 
+    last_progress = 0
+    displayed_progress = False
     with log_path.open("a", encoding="utf-8") as log_file:
-        completed = subprocess.run(
+        with subprocess.Popen(
             command,
-            check=True,
-            text=True,
-            stdout=log_file,
+            stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-        )
+            text=True,
+            bufsize=1,
+        ) as process:
+            if process.stdout is None:
+                raise RuntimeError("Simulation process did not expose a stdout stream.")
+
+            for line in process.stdout:
+                log_file.write(line)
+                log_file.flush()
+
+                if total_events is None:
+                    continue
+                progress = _parse_simulated_events(line)
+                if progress is None or progress < last_progress:
+                    continue
+                last_progress = progress
+                displayed_progress = True
+                _write_progress(progress, total_events)
+
+            return_code = process.wait()
+
+    if displayed_progress and total_events is not None and last_progress < total_events:
+        sys.stderr.write("\n")
+        sys.stderr.flush()
+    if return_code != 0:
+        raise subprocess.CalledProcessError(return_code, command)
+
+    completed = subprocess.CompletedProcess(command, return_code)
     if config.runner.verify_output and not output_hdf5.exists():
         raise FileNotFoundError(
             "Simulation finished but expected HDF5 was not found: "
