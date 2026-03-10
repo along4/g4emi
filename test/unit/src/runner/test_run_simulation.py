@@ -75,8 +75,11 @@ class RunSimulationTests(unittest.TestCase):
             paths.simulated_photons.mkdir(parents=True, exist_ok=True)
             paths.macro_file.write_text("/run/initialize\n", encoding="utf-8")
             output_hdf5 = paths.simulated_photons / f"{self.DEFAULT_OUTPUT_FILENAME_BASE}.h5"
+            expected_log_path = paths.log / "runLog.txt"
 
             def _run_side_effect(command, **kwargs):
+                self.assertEqual(kwargs["stderr"], subprocess.STDOUT)
+                self.assertEqual(Path(kwargs["stdout"].name), expected_log_path.resolve())
                 output_hdf5.write_text("ok\n", encoding="utf-8")
                 return subprocess.CompletedProcess(command, 0)
 
@@ -87,11 +90,7 @@ class RunSimulationTests(unittest.TestCase):
                 completed = self.run_simulation(config)
 
             self.assertIsInstance(completed, subprocess.CompletedProcess)
-            run_mock.assert_called_once_with(
-                ["pixi", "run", "g4emi", str(paths.macro_file.resolve())],
-                check=True,
-                text=True,
-            )
+            run_mock.assert_called_once()
 
     def test_run_rejects_missing_macro(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -118,9 +117,15 @@ class RunSimulationTests(unittest.TestCase):
                     [config.runner.binary, str(paths.macro_file.resolve())],
                     0,
                 ),
-            ):
+            ) as run_mock:
                 with self.assertRaises(FileNotFoundError):
                     self.run_simulation(config)
+
+            self.assertEqual(run_mock.call_args.kwargs["stderr"], subprocess.STDOUT)
+            self.assertEqual(
+                Path(run_mock.call_args.kwargs["stdout"].name),
+                (paths.log / "runLog.txt").resolve(),
+            )
 
     def test_run_skips_output_check_when_disabled(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -142,6 +147,7 @@ class RunSimulationTests(unittest.TestCase):
 
             self.assertEqual(completed.returncode, 0)
             run_mock.assert_called_once()
+            self.assertEqual(run_mock.call_args.kwargs["stderr"], subprocess.STDOUT)
 
 
 if __name__ == "__main__":

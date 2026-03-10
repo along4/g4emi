@@ -70,13 +70,20 @@ def run(
         )
 
     # Resolve the canonical log path for consistency with caller reporting.
-    resolve_run_log_path(config)
+    log_path = resolve_run_log_path(config)
     command = _simulation_command(config, macro_path)
 
     if dry_run:
         return None
 
-    completed = subprocess.run(command, check=True, text=True)
+    with log_path.open("a", encoding="utf-8") as log_file:
+        completed = subprocess.run(
+            command,
+            check=True,
+            text=True,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+        )
     if config.runner.verify_output and not output_hdf5.exists():
         raise FileNotFoundError(
             "Simulation finished but expected HDF5 was not found: "
