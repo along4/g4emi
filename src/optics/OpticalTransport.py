@@ -523,8 +523,9 @@ def transport_from_sim_config(
                 # Persist this slice immediately to keep peak memory bounded.
                 transported_ds[start:stop] = out_chunk
                 transported_count += hit_count
-                displayed_progress = True
-                _write_transport_progress(stop, total)
+                if config.optical.show_transport_progress:
+                    displayed_progress = True
+                    _write_transport_progress(stop, total)
         if displayed_progress and transported_count >= 0 and total > 0:
             # Ensure subsequent logger output starts on a fresh line even if
             # stderr buffering or terminal behavior suppresses the final flush.

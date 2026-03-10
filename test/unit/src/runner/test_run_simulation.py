@@ -133,6 +133,32 @@ class RunSimulationTests(unittest.TestCase):
                 expected_log_path.read_text(encoding="utf-8"),
             )
 
+    def test_run_suppresses_terminal_progress_when_disabled(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            config = self._config_for_tmp(tmp_path)
+            config.runner.show_progress = False
+            paths = self.resolve_run_environment_paths(config)
+            paths.macro.mkdir(parents=True, exist_ok=True)
+            paths.simulated_photons.mkdir(parents=True, exist_ok=True)
+            paths.macro_file.write_text("/run/initialize\n", encoding="utf-8")
+            output_hdf5 = paths.simulated_photons / f"{self.DEFAULT_OUTPUT_FILENAME_BASE}.h5"
+            output_hdf5.write_text("ok\n", encoding="utf-8")
+
+            with patch(
+                "src.runner.runSimulation.subprocess.Popen",
+                return_value=self._FakeProcess(
+                    ["G4WT10 > Simulated 10000 events\n"],
+                    returncode=0,
+                ),
+            ), patch(
+                "src.runner.runSimulation.sys.stderr",
+                new=io.StringIO(),
+            ) as stderr_capture:
+                self.run_simulation(config)
+
+            self.assertEqual(stderr_capture.getvalue(), "")
+
     def test_run_rejects_missing_macro(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)

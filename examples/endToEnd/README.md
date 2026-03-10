@@ -24,7 +24,11 @@ Optional flags:
 The example YAML files now include a top-level `runner` block:
 
 ```yaml
+optical:
+  showTransportProgress: true
+
 runner:
   binary: g4emi
+  showProgress: true
   verifyOutput: true
 ```

@@ -89,13 +89,18 @@ The example YAML files now include a top-level `runner` block for Python-side
 launch behavior, for example:
 
 ```yaml
+optical:
+  showTransportProgress: true
+
 runner:
   binary: g4emi
+  showProgress: true
   verifyOutput: true
 ```
 
 `simulation` remains the Geant4 macro/run-command section, while `runner`
-controls how Python launch helpers execute and verify the run.
+controls how Python launch helpers execute and verify the run. Transport-side
+progress display is controlled separately by `optical.showTransportProgress`.
 
 ### 2.4 Catalog-based scintillator override example
 

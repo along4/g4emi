@@ -432,6 +432,30 @@ class OpticalTransportTests(unittest.TestCase):
             self.assertIn("(2/2 photons)", terminal_output)
             self.assertIn("100%", terminal_output)
 
+    def test_transport_suppresses_terminal_progress_when_disabled(self) -> None:
+        """Transport should not emit progress-bar lines when disabled in config."""
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = self._build_config(Path(tmp_dir), transport_chunk_rows=1)
+            config.optical.show_transport_progress = False
+            resolved = self.resolve_transport_paths(config)
+            self._write_input_hdf5(resolved.input_hdf5)
+
+            with patch(
+                "src.optics.OpticalTransport.sys.stderr",
+                new=io.StringIO(),
+            ) as stderr_capture:
+                summary = self.transport_from_sim_config(
+                    config,
+                    tracer=_StubTracer(),
+                    overwrite=True,
+                )
+
+            terminal_output = stderr_capture.getvalue()
+            self.assertEqual(summary.total_photons, 2)
+            self.assertNotIn("(1/2 photons)", terminal_output)
+            self.assertNotIn("(2/2 photons)", terminal_output)
+
 
 if __name__ == "__main__":
     unittest.main()

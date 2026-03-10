@@ -438,6 +438,14 @@ class OpticalConfig(StrictModel):
     sensitive_detector_config: SensitiveDetectorConfig = Field(
         alias="sensitiveDetectorConfig"
     )
+    show_transport_progress: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "showTransportProgress",
+            "show_transport_progress",
+        ),
+        serialization_alias="showTransportProgress",
+    )
     transport_assumptions: OpticalTransportAssumptionsConfig = Field(
         default_factory=OpticalTransportAssumptionsConfig,
         alias="transportAssumptions",
@@ -689,6 +697,7 @@ class RunnerConfig(StrictModel):
     """
 
     binary: str = Field(min_length=1, default="g4emi")
+    show_progress: bool = Field(default=True, alias="showProgress")
     verify_output: bool = Field(default=True, alias="verifyOutput")
 
     @field_validator("binary")
@@ -797,6 +806,7 @@ def default_sim_config() -> SimConfig:
                     "shape": "circle",
                     "diameterRule": "min(entranceDiameter,sensorMaxWidth)",
                 },
+                "showTransportProgress": True,
                 "transportAssumptions": {
                     "objectPlane": "scintillator_back_face",
                     "opticalInterfaceRepresents": "lens_entrance_plane",
@@ -817,6 +827,7 @@ def default_sim_config() -> SimConfig:
             },
             "runner": {
                 "binary": "g4emi",
+                "showProgress": True,
                 "verifyOutput": True,
             },
             "Metadata": {

@@ -110,28 +110,42 @@ class SimConfigRunnerTests(unittest.TestCase):
         config = self.SimConfig.model_validate(payload)
 
         self.assertEqual(config.runner.binary, "g4emi")
+        self.assertTrue(config.runner.show_progress)
         self.assertTrue(config.runner.verify_output)
+        self.assertTrue(config.optical.show_transport_progress)
 
     def test_runner_accepts_verify_output_alias_and_serializes_by_alias(self) -> None:
         payload = self._base_payload()
-        payload["runner"] = {"binary": "pixi run g4emi", "verifyOutput": False}
+        payload["runner"] = {
+            "binary": "pixi run g4emi",
+            "showProgress": False,
+            "verifyOutput": False,
+        }
+        payload["optical"]["showTransportProgress"] = False
 
         config = self.SimConfig.model_validate(payload)
         dumped = config.model_dump(mode="python", by_alias=True)
 
         self.assertEqual(config.runner.binary, "pixi run g4emi")
+        self.assertFalse(config.runner.show_progress)
         self.assertFalse(config.runner.verify_output)
         self.assertEqual(dumped["runner"]["binary"], "pixi run g4emi")
+        self.assertFalse(dumped["runner"]["showProgress"])
         self.assertFalse(dumped["runner"]["verifyOutput"])
+        self.assertFalse(dumped["optical"]["showTransportProgress"])
+        self.assertNotIn("show_progress", dumped["runner"])
         self.assertNotIn("verify_output", dumped["runner"])
 
     def test_runner_accepts_field_name_for_verify_output(self) -> None:
         payload = self._base_payload()
-        payload["runner"] = {"verify_output": False}
+        payload["runner"] = {"show_progress": False, "verify_output": False}
+        payload["optical"]["show_transport_progress"] = False
 
         config = self.SimConfig.model_validate(payload)
 
+        self.assertFalse(config.runner.show_progress)
         self.assertFalse(config.runner.verify_output)
+        self.assertFalse(config.optical.show_transport_progress)
 
     def test_runner_rejects_blank_binary(self) -> None:
         payload = self._base_payload()

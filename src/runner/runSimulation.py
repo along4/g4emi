@@ -113,7 +113,9 @@ def run(
     # Resolve the canonical log path for consistency with caller reporting.
     log_path = resolve_run_log_path(config)
     command = _simulation_command(config, macro_path)
-    total_events = _simulation_total_events(config)
+    total_events = (
+        _simulation_total_events(config) if config.runner.show_progress else None
+    )
 
     if dry_run:
         return None

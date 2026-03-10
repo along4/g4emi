@@ -65,6 +65,7 @@ optical:
       z_mm: 210.05
     shape: circle
     diameterRule: min(entranceDiameter,sensorMaxWidth)
+  showTransportProgress: true
 
 simulation:
   numberOfParticles: 5000
@@ -77,6 +78,7 @@ simulation:
 
 runner:
   binary: g4emi
+  showProgress: true
   verifyOutput: true
 
 Metadata:

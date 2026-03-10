@@ -60,6 +60,7 @@ optical:
       z_mm: 210.05
     shape: circle
     diameterRule: min(entranceDiameter,sensorMaxWidth)
+  showTransportProgress: true
   transportAssumptions:
     objectPlane: scintillator_back_face
     opticalInterfaceRepresents: lens_entrance_plane
@@ -84,6 +85,7 @@ simulation:
 
 runner:
   binary: g4emi
+  showProgress: true
   verifyOutput: true
 
 Metadata:
