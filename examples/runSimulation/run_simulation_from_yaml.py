@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-import subprocess
 import sys
 
 # Ensure repository root is importable when this file is run directly.
@@ -14,6 +13,7 @@ sys.path.append(str(REPO_ROOT))
 from src.common.logger import configure_run_logger, get_logger  # noqa: E402
 from src.config.ConfigIO import from_yaml, resolve_run_environment_paths, write_macro  # noqa: E402
 from src.config.SimConfig import SimulationConfig  # noqa: E402
+from src.runner import run  # noqa: E402
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -70,19 +70,18 @@ def main() -> None:
     macro_path = paths.macro_file.resolve()
     output_hdf5 = (paths.simulated_photons / "photon_optical_interface_hits.h5").resolve()
 
-    command = ["g4emi", str(macro_path)]
-
     logger.info(f"Run log: {log_path}")
     logger.info(f"YAML: {yaml_path}")
     logger.info(f"Macro: {macro_path}")
     logger.info(f"Expected HDF5: {output_hdf5}")
-    logger.info(f"Command: {' '.join(command)}")
+    logger.info(f"Binary: {config.runner.binary}")
 
-    if args.dry_run:
+    completed = run(config, dry_run=args.dry_run)
+
+    if completed is None:
         logger.info("Dry run requested; skipping g4emi launch.")
         return
 
-    subprocess.run(command, check=True)
     logger.info("Simulation finished.")
 
 
