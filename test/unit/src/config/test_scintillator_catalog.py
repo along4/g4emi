@@ -213,6 +213,59 @@ class ScintillatorCatalogTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self._load_scintillator_definition("TEST", catalog_path=root / "catalog.yaml")
 
+    def test_time_components_schema_rejects_profiles_with_no_active_components(self) -> None:
+        """Schema should reject profiles whose components are all inactive."""
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            (root / "materials").mkdir(parents=True, exist_ok=True)
+
+            (root / "catalog.yaml").write_text(
+                textwrap.dedent(
+                    """
+                    version: 1
+                    default: TEST
+                    materials:
+                      TEST: materials/TEST.yaml
+                    """
+                ).strip()
+                + "\n",
+                encoding="utf-8",
+            )
+
+            (root / "materials" / "TEST.yaml").write_text(
+                textwrap.dedent(
+                    """
+                    id: TEST
+                    name: Test Material
+                    composition:
+                      density: {value: 1.0, unit: g/cm3}
+                      atoms: {C: 1}
+                    optical:
+                      curves:
+                        rIndex: {path: curves/TEST/rindex.csv, xUnit: eV, yUnit: unitless}
+                        absLength: {path: curves/TEST/abs.csv, xUnit: eV, yUnit: cm}
+                        scintSpectrum: {path: curves/TEST/scint.csv, xUnit: eV, yUnit: unitless}
+                      constants:
+                        scintYield: {value: 1000.0, unit: 1/MeV}
+                        resolutionScale: 1.0
+                        timeComponents:
+                          default:
+                            - timeConstant: {value: 0.0, unit: ns}
+                              yieldFraction: 1.0
+                            - timeConstant: {value: 0.0, unit: ns}
+                              yieldFraction: 0.0
+                            - timeConstant: {value: 0.0, unit: ns}
+                              yieldFraction: 0.0
+                    """
+                ).strip()
+                + "\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(ValueError):
+                self._load_scintillator_definition("TEST", catalog_path=root / "catalog.yaml")
+
     def test_load_ej276_variants(self) -> None:
         """EJ-276D/G entries should resolve with expected SSLG4 constants."""
 

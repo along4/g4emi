@@ -146,6 +146,17 @@ class SimConfigIntensifierTests(unittest.TestCase):
         config = self.SimConfig.model_validate(payload)
         self.assertEqual(config.intensifier.input_screen.center_mm, (4.5, -2.25))
 
+    def test_rejects_profiles_with_no_active_time_components(self) -> None:
+        payload = self._base_payload()
+        payload["scintillator"]["properties"]["timeComponents"]["default"] = [
+            {"timeConstant": 0.0, "yieldFraction": 1.0},
+            {"timeConstant": 0.0, "yieldFraction": 0.0},
+            {"timeConstant": 0.0, "yieldFraction": 0.0},
+        ]
+
+        with self.assertRaises(ValueError):
+            self.SimConfig.model_validate(payload)
+
 
 if __name__ == "__main__":
     unittest.main()
