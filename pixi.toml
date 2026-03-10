@@ -23,6 +23,7 @@ pyyaml = ">=6.0,<7"
 [pypi-dependencies]
 rayoptics = ">=0.9,<1"
 pytest = ">=9.0.2, <10"
+loguru = ">=0.7,<1"
 
 [tasks]
 check-enviornment = "python -c \"import importlib.util, os; from pathlib import Path; prefix = Path(os.environ['CONDA_PREFIX']); cfg = prefix / 'lib/cmake/Geant4/Geant4Config.cmake'; has_ro = importlib.util.find_spec('rayoptics') is not None; print(f'Geant4 CMake config: {cfg} (exists={cfg.exists()})'); print(f'rayoptics import OK={has_ro}'); raise SystemExit(0 if cfg.exists() and has_ro else 1)\""
