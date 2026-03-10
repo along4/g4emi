@@ -83,6 +83,12 @@ void SteppingAction::UserSteppingAction(const G4Step* step) {
     }
   }
 
+  if (track && postStepPoint && track->GetParentID() > 0 &&
+      track->GetParticleDefinition() != opticalPhoton) {
+    fEventAction->RecordSecondaryScintillatorEndpoint(track->GetTrackID(),
+                                                      postStepPoint->GetPosition());
+  }
+
   const auto* secondaries = step->GetSecondaryInCurrentStep();
   if (!secondaries || secondaries->empty()) {
     return;

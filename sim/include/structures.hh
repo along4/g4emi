@@ -63,6 +63,9 @@ struct SecondaryInfo {
   double secondaryOriginYmm = 0.0;
   double secondaryOriginZmm = 0.0;
   double secondaryOriginEnergyMeV = 0.0;
+  double secondaryEndXmm = std::numeric_limits<double>::quiet_NaN();
+  double secondaryEndYmm = std::numeric_limits<double>::quiet_NaN();
+  double secondaryEndZmm = std::numeric_limits<double>::quiet_NaN();
 };
 
 /**
@@ -211,6 +214,9 @@ struct Hdf5SecondaryNativeRow {
   double secondary_origin_y_mm;
   double secondary_origin_z_mm;
   double secondary_origin_energy_MeV;
+  double secondary_end_x_mm;
+  double secondary_end_y_mm;
+  double secondary_end_z_mm;
 };
 
 /**

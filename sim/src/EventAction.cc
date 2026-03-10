@@ -58,6 +58,7 @@ void EventAction::BeginOfEventAction(const G4Event* event) {
   fPhotonCreationInfo.clear();
   fPendingPhotonOrigin.clear();
   fPhotonScintillatorExit.clear();
+  fSecondaryScintillatorEndpoint.clear();
   fPrimaryScintillatorFirstInteractionTime.clear();
   fPrimaryActivity.clear();
   fPhotonHits.clear();
@@ -162,6 +163,11 @@ void EventAction::EndOfEventAction(const G4Event* event) {
     row.secondaryOriginYmm = hit.secondaryOriginPosition.y() / mm;
     row.secondaryOriginZmm = hit.secondaryOriginPosition.z() / mm;
     row.secondaryOriginEnergyMeV = hit.secondaryOriginEnergy / MeV;
+    G4ThreeVector endpoint = hit.secondaryOriginPosition;
+    FindSecondaryScintillatorEndpoint(hit.secondaryID, &endpoint);
+    row.secondaryEndXmm = endpoint.x() / mm;
+    row.secondaryEndYmm = endpoint.y() / mm;
+    row.secondaryEndZmm = endpoint.z() / mm;
     secondaryRows.push_back(row);
   }
 
@@ -264,6 +270,23 @@ bool EventAction::ConsumePhotonScintillatorExit(G4int photonTrackID,
     *position = it->second;
   }
   fPhotonScintillatorExit.erase(it);
+  return true;
+}
+
+void EventAction::RecordSecondaryScintillatorEndpoint(
+    G4int secondaryTrackID, const G4ThreeVector& position) {
+  fSecondaryScintillatorEndpoint[secondaryTrackID] = position;
+}
+
+bool EventAction::FindSecondaryScintillatorEndpoint(
+    G4int secondaryTrackID, G4ThreeVector* position) const {
+  const auto it = fSecondaryScintillatorEndpoint.find(secondaryTrackID);
+  if (it == fSecondaryScintillatorEndpoint.end()) {
+    return false;
+  }
+  if (position) {
+    *position = it->second;
+  }
   return true;
 }
 

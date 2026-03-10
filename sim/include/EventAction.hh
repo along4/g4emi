@@ -44,6 +44,10 @@ class EventAction : public G4UserEventAction {
                                     const G4ThreeVector& position);
   bool ConsumePhotonScintillatorExit(G4int photonTrackID,
                                      G4ThreeVector* position);
+  void RecordSecondaryScintillatorEndpoint(G4int secondaryTrackID,
+                                           const G4ThreeVector& position);
+  bool FindSecondaryScintillatorEndpoint(G4int secondaryTrackID,
+                                         G4ThreeVector* position) const;
 
   void RecordPhotonHit(const PhotonHitRecord& hit);
   const std::string& GetPrimarySpecies() const { return fPrimarySpecies; }
@@ -68,6 +72,7 @@ class EventAction : public G4UserEventAction {
   std::unordered_map<G4int, PhotonCreationInfo> fPhotonCreationInfo;
   std::unordered_map<const void*, G4ThreeVector> fPendingPhotonOrigin;
   std::unordered_map<G4int, G4ThreeVector> fPhotonScintillatorExit;
+  std::unordered_map<G4int, G4ThreeVector> fSecondaryScintillatorEndpoint;
   std::unordered_map<G4int, G4double> fPrimaryScintillatorFirstInteractionTime;
   std::unordered_map<G4int, PrimaryActivity> fPrimaryActivity;
   std::vector<PhotonHitRecord> fPhotonHits;

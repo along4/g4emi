@@ -38,12 +38,15 @@ class IntensifierPlotTests(unittest.TestCase):
             from analysis.hdf5Analyzer import (
                 ScintillationDecayComponent,
                 decay_model_bin_counts,
+                event_recoil_paths_to_image,
                 fit_photon_creation_delay_histogram,
                 intensifier_photons_to_image,
                 photon_creation_delays_ns,
                 photon_creation_delay_to_histogram,
                 photon_exit_to_image,
                 photon_origins_to_image,
+                secondary_track_lengths_by_species_mm,
+                secondary_track_lengths_overlay_to_histogram,
             )
             import analysis.hdf5Analyzer as analyzer_module
         except ModuleNotFoundError as exc:
@@ -61,6 +64,7 @@ class IntensifierPlotTests(unittest.TestCase):
         cls.ScintillationDecayComponent = ScintillationDecayComponent
         cls.scipy_available = analyzer_module.least_squares is not None
         cls.decay_model_bin_counts = staticmethod(decay_model_bin_counts)
+        cls.event_recoil_paths_to_image = staticmethod(event_recoil_paths_to_image)
         cls.fit_photon_creation_delay_histogram = staticmethod(
             fit_photon_creation_delay_histogram
         )
@@ -71,6 +75,12 @@ class IntensifierPlotTests(unittest.TestCase):
         )
         cls.photon_origins_to_image = staticmethod(photon_origins_to_image)
         cls.photon_exit_to_image = staticmethod(photon_exit_to_image)
+        cls.secondary_track_lengths_by_species_mm = staticmethod(
+            secondary_track_lengths_by_species_mm
+        )
+        cls.secondary_track_lengths_overlay_to_histogram = staticmethod(
+            secondary_track_lengths_overlay_to_histogram
+        )
         cls.analyzer_module = analyzer_module
 
     def _write_transport_hdf5(self, path: Path) -> None:
@@ -162,6 +172,31 @@ class IntensifierPlotTests(unittest.TestCase):
             handle.create_dataset("primaries", data=primary_rows)
             handle.create_dataset("photons", data=photon_rows)
 
+    def _write_secondaries_hdf5(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        secondaries_dtype = self.np.dtype(
+            [
+                ("secondary_species", "S16"),
+                ("secondary_origin_x_mm", self.np.float64),
+                ("secondary_origin_y_mm", self.np.float64),
+                ("secondary_origin_z_mm", self.np.float64),
+                ("secondary_end_x_mm", self.np.float64),
+                ("secondary_end_y_mm", self.np.float64),
+                ("secondary_end_z_mm", self.np.float64),
+            ]
+        )
+        secondary_rows = self.np.array(
+            [
+                (b"proton", 0.0, 0.0, 0.0, 3.0, 4.0, 0.0),
+                (b"proton", 1.0, 2.0, 3.0, 1.0, 2.0, 9.0),
+                (b"alpha", 0.0, 0.0, 0.0, 0.0, 6.0, 8.0),
+                (b"alpha", 0.0, 0.0, 0.0, self.np.nan, 1.0, 1.0),
+            ],
+            dtype=secondaries_dtype,
+        )
+        with self.h5py.File(path, "w") as handle:
+            handle.create_dataset("secondaries", data=secondary_rows)
+
     def _write_delay_sample_hdf5(self, path: Path, delays_ns: np.ndarray) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         primaries_dtype = self.np.dtype(
@@ -185,6 +220,54 @@ class IntensifierPlotTests(unittest.TestCase):
         )
         with self.h5py.File(path, "w") as handle:
             handle.create_dataset("primaries", data=primary_rows)
+            handle.create_dataset("photons", data=photon_rows)
+
+    def _write_event_recoil_hdf5(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        secondaries_dtype = self.np.dtype(
+            [
+                ("gun_call_id", self.np.int64),
+                ("secondary_track_id", self.np.int32),
+                ("secondary_species", "S16"),
+                ("secondary_origin_x_mm", self.np.float64),
+                ("secondary_origin_y_mm", self.np.float64),
+                ("secondary_origin_z_mm", self.np.float64),
+                ("secondary_end_x_mm", self.np.float64),
+                ("secondary_end_y_mm", self.np.float64),
+                ("secondary_end_z_mm", self.np.float64),
+            ]
+        )
+        photons_dtype = self.np.dtype(
+            [
+                ("gun_call_id", self.np.int64),
+                ("secondary_track_id", self.np.int32),
+                ("photon_origin_x_mm", self.np.float64),
+                ("photon_origin_y_mm", self.np.float64),
+                ("photon_origin_z_mm", self.np.float64),
+            ]
+        )
+        secondary_rows = self.np.array(
+            [
+                (7, 21, b"proton", 0.0, 0.0, 0.0, 5.0, 1.0, 0.0),
+                (7, 22, b"alpha", 1.0, 3.0, 0.0, 1.0, 8.0, 2.0),
+                (9, 41, b"proton", 2.0, 2.0, 0.0, self.np.nan, 4.0, 0.0),
+                (8, 31, b"proton", -1.0, -1.0, 0.0, -2.0, -2.0, 0.0),
+            ],
+            dtype=secondaries_dtype,
+        )
+        photon_rows = self.np.array(
+            [
+                (7, 21, 1.0, 0.2, 0.0),
+                (7, 21, 3.5, 0.8, 0.0),
+                (7, 22, 1.1, 5.5, 1.0),
+                (9, 41, 2.3, 2.2, 0.0),
+                (9, 41, 2.7, 2.9, 0.0),
+                (8, 31, -1.5, -1.5, 0.0),
+            ],
+            dtype=photons_dtype,
+        )
+        with self.h5py.File(path, "w") as handle:
+            handle.create_dataset("secondaries", data=secondary_rows)
             handle.create_dataset("photons", data=photon_rows)
 
     def test_intensifier_plot_uses_image_circle_extent_and_reports_oob(self) -> None:
@@ -260,6 +343,120 @@ class IntensifierPlotTests(unittest.TestCase):
             self.assertEqual(ax.get_xlabel(), "delay (ns)")
             self.assertEqual(ax.get_ylabel(), "counts")
             self.assertIn("Primary Interaction", ax.get_title())
+            self.plt.close(fig)
+
+    def test_secondary_track_lengths_are_grouped_by_species(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            hdf5_path = Path(tmp_dir) / "photon_optical_interface_hits.h5"
+            self._write_secondaries_hdf5(hdf5_path)
+
+            grouped = self.secondary_track_lengths_by_species_mm(hdf5_path)
+
+            self.assertEqual(sorted(grouped.keys()), ["alpha", "proton"])
+            self.assertTrue(
+                self.np.allclose(grouped["proton"], self.np.array([5.0, 6.0]))
+            )
+            self.assertTrue(self.np.allclose(grouped["alpha"], self.np.array([10.0])))
+
+    def test_secondary_track_length_overlay_uses_requested_alpha(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            hdf5_path = Path(tmp_dir) / "photon_optical_interface_hits.h5"
+            self._write_secondaries_hdf5(hdf5_path)
+
+            fig, ax = self.secondary_track_lengths_overlay_to_histogram(
+                hdf5_path,
+                bins=[0.0, 4.0, 8.0, 12.0],
+                alpha=0.35,
+                x_max=8.0,
+                show=False,
+            )
+
+            self.assertEqual(ax.get_xlabel(), "track length (mm)")
+            self.assertEqual(ax.get_ylabel(), "counts")
+            self.assertIn("Track Lengths", ax.get_title())
+            self.assertEqual(ax.get_yscale(), "log")
+            self.assertAlmostEqual(float(ax.get_xlim()[0]), 0.0)
+            self.assertAlmostEqual(float(ax.get_xlim()[1]), 8.0)
+            self.assertEqual(len(ax.patches), 2)
+            self.assertTrue(
+                all(
+                    abs(float(patch.get_alpha()) - 0.35) < 1.0e-9
+                    for patch in ax.patches
+                )
+            )
+            legend = ax.get_legend()
+            self.assertIsNotNone(legend)
+            legend_labels = [text.get_text() for text in legend.get_texts()]
+            self.assertEqual(legend_labels, ["alpha (n=1)", "proton (n=2)"])
+            self.plt.close(fig)
+
+    def test_secondary_track_length_overlay_accepts_precomputed_grouped_lengths(self) -> None:
+        grouped_lengths = {
+            "alpha": self.np.array([2.0, 3.0], dtype=float),
+            "proton": self.np.array([1.0, 4.0, 5.0], dtype=float),
+        }
+
+        fig, ax = self.secondary_track_lengths_overlay_to_histogram(
+            grouped_lengths_mm=grouped_lengths,
+            bins=[0.0, 2.0, 4.0, 6.0],
+            alpha=0.4,
+            log_scale=False,
+            show=False,
+        )
+
+        legend = ax.get_legend()
+        self.assertIsNotNone(legend)
+        legend_labels = [text.get_text() for text in legend.get_texts()]
+        self.assertEqual(legend_labels, ["alpha (n=2)", "proton (n=3)"])
+        self.assertEqual(ax.get_yscale(), "linear")
+        self.plt.close(fig)
+
+    def test_event_recoil_paths_plot_selected_event_in_requested_plane(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            hdf5_path = Path(tmp_dir) / "photon_optical_interface_hits.h5"
+            self._write_event_recoil_hdf5(hdf5_path)
+
+            fig, ax = self.event_recoil_paths_to_image(
+                hdf5_path,
+                7,
+                plane="xy",
+                show=False,
+            )
+
+            self.assertEqual(ax.get_xlabel(), "x (mm)")
+            self.assertEqual(ax.get_ylabel(), "y (mm)")
+            self.assertIn("event 7", ax.get_title())
+            self.assertEqual(len(ax.lines), 2)
+            self.assertEqual(len(ax.collections), 2)
+            legend = ax.get_legend()
+            self.assertIsNotNone(legend)
+            legend_labels = [text.get_text() for text in legend.get_texts()]
+            self.assertEqual(
+                legend_labels,
+                ["proton #21 (photons=2)", "alpha #22 (photons=1)"],
+            )
+            self.plt.close(fig)
+
+    def test_event_recoil_paths_ignores_nan_endpoints_when_setting_limits(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            hdf5_path = Path(tmp_dir) / "photon_optical_interface_hits.h5"
+            self._write_event_recoil_hdf5(hdf5_path)
+
+            fig, ax = self.event_recoil_paths_to_image(
+                hdf5_path,
+                9,
+                plane="xy",
+                show=False,
+            )
+
+            self.assertEqual(len(ax.lines), 0)
+            self.assertEqual(len(ax.collections), 1)
+            self.assertTrue(self.np.all(self.np.isfinite(self.np.asarray(ax.get_xlim()))))
+            self.assertTrue(self.np.all(self.np.isfinite(self.np.asarray(ax.get_ylim()))))
+            legend = ax.get_legend()
+            self.assertIsNotNone(legend)
+            legend_labels = [text.get_text() for text in legend.get_texts()]
+            self.assertEqual(legend_labels, ["proton #41 (photons=2)"])
             self.plt.close(fig)
 
     def test_photon_creation_delays_extract_expected_values(self) -> None:

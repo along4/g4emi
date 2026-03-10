@@ -223,6 +223,15 @@ bool EnsureReady(const std::string& hdf5Path, std::string* errorMessage) {
   H5Tinsert(s.secondaryType, "secondary_origin_energy_MeV",
             HOFFSET(Hdf5SecondaryNativeRow, secondary_origin_energy_MeV),
             H5T_NATIVE_DOUBLE);
+  H5Tinsert(s.secondaryType, "secondary_end_x_mm",
+            HOFFSET(Hdf5SecondaryNativeRow, secondary_end_x_mm),
+            H5T_NATIVE_DOUBLE);
+  H5Tinsert(s.secondaryType, "secondary_end_y_mm",
+            HOFFSET(Hdf5SecondaryNativeRow, secondary_end_y_mm),
+            H5T_NATIVE_DOUBLE);
+  H5Tinsert(s.secondaryType, "secondary_end_z_mm",
+            HOFFSET(Hdf5SecondaryNativeRow, secondary_end_z_mm),
+            H5T_NATIVE_DOUBLE);
 
   s.photonType = H5Tcreate(H5T_COMPOUND, sizeof(Hdf5PhotonNativeRow));
   H5Tinsert(s.photonType, "gun_call_id",
@@ -348,6 +357,9 @@ std::vector<Hdf5SecondaryNativeRow> ToNative(const std::vector<SecondaryInfo>& r
     native.secondary_origin_y_mm = row.secondaryOriginYmm;
     native.secondary_origin_z_mm = row.secondaryOriginZmm;
     native.secondary_origin_energy_MeV = row.secondaryOriginEnergyMeV;
+    native.secondary_end_x_mm = row.secondaryEndXmm;
+    native.secondary_end_y_mm = row.secondaryEndYmm;
+    native.secondary_end_z_mm = row.secondaryEndZmm;
     out.push_back(native);
   }
   return out;
