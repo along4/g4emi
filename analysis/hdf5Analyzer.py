@@ -493,11 +493,6 @@ def secondary_track_lengths_by_species_mm(
         raise KeyError(f"/secondaries is missing required fields: {sorted(required)}")
 
     end_x_field, end_y_field, end_z_field = _secondary_endpoint_field_names(secondaries)
-    end_field_by_axis = {
-        "x": end_x_field,
-        "y": end_y_field,
-        "z": end_z_field,
-    }
     labels = _decode_species(secondaries["secondary_species"])
     delta_x_mm = np.asarray(secondaries[end_x_field], dtype=float) - np.asarray(
         secondaries["secondary_origin_x_mm"],
@@ -1026,10 +1021,11 @@ def photon_creation_delay_to_histogram(
 
 
 def secondary_track_lengths_overlay_to_histogram(
-    hdf5_path: str | Path,
+    hdf5_path: str | Path | None = None,
     bins: int | Sequence[float] = 128,
     *,
     secondary_species: Sequence[str] | None = None,
+    grouped_lengths_mm: dict[str, np.ndarray] | None = None,
     alpha: float = 0.45,
     log_scale: bool = True,
     x_max: float | None = None,
@@ -1042,11 +1038,20 @@ def secondary_track_lengths_overlay_to_histogram(
         raise ValueError("alpha must satisfy 0 < alpha <= 1.")
     if x_max is not None and x_max <= 0.0:
         raise ValueError("x_max must be positive when provided.")
+    if grouped_lengths_mm is None:
+        if hdf5_path is None:
+            raise ValueError("hdf5_path is required when grouped_lengths_mm is not provided.")
+        grouped_lengths_mm = secondary_track_lengths_by_species_mm(
+            hdf5_path,
+            secondary_species=secondary_species,
+        )
+    elif secondary_species is not None:
+        raise ValueError(
+            "secondary_species cannot be used when grouped_lengths_mm is provided."
+        )
+    if len(grouped_lengths_mm) == 0:
+        raise ValueError("grouped_lengths_mm must contain at least one species.")
 
-    grouped_lengths_mm = secondary_track_lengths_by_species_mm(
-        hdf5_path,
-        secondary_species=secondary_species,
-    )
     all_lengths_mm = np.concatenate(list(grouped_lengths_mm.values()))
     if isinstance(bins, int) and x_max is not None:
         _, bin_edges = np.histogram(all_lengths_mm, bins=bins, range=(0.0, x_max))
@@ -1160,8 +1165,15 @@ def event_recoil_paths_to_image(
         origin_y = float(row[f"secondary_origin_{axis_2}_mm"])
         end_x = float(row[end_field_by_axis[axis_1]])
         end_y = float(row[end_field_by_axis[axis_2]])
-        all_x_mm.append(np.array([origin_x, end_x], dtype=float))
-        all_y_mm.append(np.array([origin_y, end_y], dtype=float))
+        line_is_finite = bool(
+            np.isfinite(origin_x)
+            and np.isfinite(origin_y)
+            and np.isfinite(end_x)
+            and np.isfinite(end_y)
+        )
+        if line_is_finite:
+            all_x_mm.append(np.array([origin_x, end_x], dtype=float))
+            all_y_mm.append(np.array([origin_y, end_y], dtype=float))
 
         secondary_photon_mask = photon_secondary_ids == secondary_track_id
         photon_x_mm = np.asarray(
@@ -1179,23 +1191,34 @@ def event_recoil_paths_to_image(
             all_x_mm.append(photon_x_mm)
             all_y_mm.append(photon_y_mm)
 
-        ax.plot(
-            [origin_x, end_x],
-            [origin_y, end_y],
-            color=color,
-            linewidth=2.0,
-            label=f"{species} #{secondary_track_id} (photons={len(photon_x_mm)})",
-        )
-        ax.scatter(
-            photon_x_mm,
-            photon_y_mm,
-            color=color,
-            alpha=0.65,
-            s=18.0,
-        )
+        label = f"{species} #{secondary_track_id} (photons={len(photon_x_mm)})"
+        if line_is_finite:
+            ax.plot(
+                [origin_x, end_x],
+                [origin_y, end_y],
+                color=color,
+                linewidth=2.0,
+                label=label,
+            )
+        if photon_x_mm.size > 0:
+            ax.scatter(
+                photon_x_mm,
+                photon_y_mm,
+                color=color,
+                alpha=0.65,
+                s=18.0,
+                label=None if line_is_finite else label,
+            )
 
-    x_values = np.concatenate([values for values in all_x_mm if values.size > 0])
-    y_values = np.concatenate([values for values in all_y_mm if values.size > 0])
+    finite_x_values = [values for values in all_x_mm if values.size > 0]
+    finite_y_values = [values for values in all_y_mm if values.size > 0]
+    if not finite_x_values or not finite_y_values:
+        raise ValueError(
+            "No finite recoil-path or photon-origin coordinates were found "
+            f"for gun_call_id={gun_call_id}."
+        )
+    x_values = np.concatenate(finite_x_values)
+    y_values = np.concatenate(finite_y_values)
     x_min = float(np.min(x_values))
     x_max = float(np.max(x_values))
     y_min = float(np.min(y_values))

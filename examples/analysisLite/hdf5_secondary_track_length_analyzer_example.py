@@ -93,9 +93,8 @@ def main() -> None:
         secondary_species=args.species,
     )
     secondary_track_lengths_overlay_to_histogram(
-        hdf5_path,
         bins=args.bins,
-        secondary_species=args.species,
+        grouped_lengths_mm=grouped_lengths,
         alpha=args.alpha,
         log_scale=not args.linear_y,
         x_max=args.x_max,

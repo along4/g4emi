@@ -250,6 +250,7 @@ class IntensifierPlotTests(unittest.TestCase):
             [
                 (7, 21, b"proton", 0.0, 0.0, 0.0, 5.0, 1.0, 0.0),
                 (7, 22, b"alpha", 1.0, 3.0, 0.0, 1.0, 8.0, 2.0),
+                (9, 41, b"proton", 2.0, 2.0, 0.0, self.np.nan, 4.0, 0.0),
                 (8, 31, b"proton", -1.0, -1.0, 0.0, -2.0, -2.0, 0.0),
             ],
             dtype=secondaries_dtype,
@@ -259,6 +260,8 @@ class IntensifierPlotTests(unittest.TestCase):
                 (7, 21, 1.0, 0.2, 0.0),
                 (7, 21, 3.5, 0.8, 0.0),
                 (7, 22, 1.1, 5.5, 1.0),
+                (9, 41, 2.3, 2.2, 0.0),
+                (9, 41, 2.7, 2.9, 0.0),
                 (8, 31, -1.5, -1.5, 0.0),
             ],
             dtype=photons_dtype,
@@ -387,6 +390,27 @@ class IntensifierPlotTests(unittest.TestCase):
             self.assertEqual(legend_labels, ["alpha (n=1)", "proton (n=2)"])
             self.plt.close(fig)
 
+    def test_secondary_track_length_overlay_accepts_precomputed_grouped_lengths(self) -> None:
+        grouped_lengths = {
+            "alpha": self.np.array([2.0, 3.0], dtype=float),
+            "proton": self.np.array([1.0, 4.0, 5.0], dtype=float),
+        }
+
+        fig, ax = self.secondary_track_lengths_overlay_to_histogram(
+            grouped_lengths_mm=grouped_lengths,
+            bins=[0.0, 2.0, 4.0, 6.0],
+            alpha=0.4,
+            log_scale=False,
+            show=False,
+        )
+
+        legend = ax.get_legend()
+        self.assertIsNotNone(legend)
+        legend_labels = [text.get_text() for text in legend.get_texts()]
+        self.assertEqual(legend_labels, ["alpha (n=2)", "proton (n=3)"])
+        self.assertEqual(ax.get_yscale(), "linear")
+        self.plt.close(fig)
+
     def test_event_recoil_paths_plot_selected_event_in_requested_plane(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             hdf5_path = Path(tmp_dir) / "photon_optical_interface_hits.h5"
@@ -411,6 +435,28 @@ class IntensifierPlotTests(unittest.TestCase):
                 legend_labels,
                 ["proton #21 (photons=2)", "alpha #22 (photons=1)"],
             )
+            self.plt.close(fig)
+
+    def test_event_recoil_paths_ignores_nan_endpoints_when_setting_limits(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            hdf5_path = Path(tmp_dir) / "photon_optical_interface_hits.h5"
+            self._write_event_recoil_hdf5(hdf5_path)
+
+            fig, ax = self.event_recoil_paths_to_image(
+                hdf5_path,
+                9,
+                plane="xy",
+                show=False,
+            )
+
+            self.assertEqual(len(ax.lines), 0)
+            self.assertEqual(len(ax.collections), 1)
+            self.assertTrue(self.np.all(self.np.isfinite(self.np.asarray(ax.get_xlim()))))
+            self.assertTrue(self.np.all(self.np.isfinite(self.np.asarray(ax.get_ylim()))))
+            legend = ax.get_legend()
+            self.assertIsNotNone(legend)
+            legend_labels = [text.get_text() for text in legend.get_texts()]
+            self.assertEqual(legend_labels, ["proton #41 (photons=2)"])
             self.plt.close(fig)
 
     def test_photon_creation_delays_extract_expected_values(self) -> None:
