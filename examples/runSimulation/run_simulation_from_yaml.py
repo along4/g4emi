@@ -11,6 +11,7 @@ import sys
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.append(str(REPO_ROOT))
 
+from src.common.logger import configure_run_logger, get_logger  # noqa: E402
 from src.config.ConfigIO import from_yaml, resolve_run_environment_paths, write_macro  # noqa: E402
 from src.config.SimConfig import SimulationConfig  # noqa: E402
 
@@ -57,6 +58,8 @@ def main() -> None:
             config.simulation = SimulationConfig(number_of_particles=args.beam_on)
         else:
             config.simulation.number_of_particles = args.beam_on
+    log_path = configure_run_logger(config)
+    logger = get_logger()
 
     write_macro(
         config,
@@ -69,16 +72,18 @@ def main() -> None:
 
     command = ["g4emi", str(macro_path)]
 
-    print(f"YAML: {yaml_path}")
-    print(f"Macro: {macro_path}")
-    print(f"Expected HDF5: {output_hdf5}")
-    print(f"Command: {' '.join(command)}")
+    logger.info(f"Run log: {log_path}")
+    logger.info(f"YAML: {yaml_path}")
+    logger.info(f"Macro: {macro_path}")
+    logger.info(f"Expected HDF5: {output_hdf5}")
+    logger.info(f"Command: {' '.join(command)}")
 
     if args.dry_run:
+        logger.info("Dry run requested; skipping g4emi launch.")
         return
 
     subprocess.run(command, check=True)
-    print("Simulation finished.")
+    logger.info("Simulation finished.")
 
 
 if __name__ == "__main__":

@@ -26,6 +26,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover - dependency availability
 import numpy as np
 
 try:
+    from src.common.logger import ensure_run_logger, get_logger
     from src.config.ConfigIO import (
         DEFAULT_OUTPUT_FILENAME_BASE,
         from_yaml,
@@ -37,6 +38,7 @@ try:
 except ModuleNotFoundError:
     # Support direct execution when repository root is not on sys.path.
     sys.path.append(str(Path(__file__).resolve().parents[2]))
+    from src.common.logger import ensure_run_logger, get_logger
     from src.config.ConfigIO import (
         DEFAULT_OUTPUT_FILENAME_BASE,
         from_yaml,
@@ -413,6 +415,8 @@ def transport_from_sim_config(
     defaults = resolve_transport_paths(config)
     run_paths = resolve_run_environment_paths(config)
     run_paths.log.mkdir(parents=True, exist_ok=True)
+    log_path = ensure_run_logger(config)
+    logger = get_logger()
     input_path = (
         Path(input_hdf5_path).resolve()
         if input_hdf5_path is not None
@@ -432,6 +436,13 @@ def transport_from_sim_config(
         raise FileExistsError(f"Refusing to overwrite existing file: {output_path}")
 
     lens, smx_path = _primary_lens_model(config)
+    logger.info(f"Run log: {log_path}")
+    logger.info(f"Starting optical transport for run '{config.metadata.run_environment.simulation_run_id}'.")
+    logger.info(f"Transport input HDF5: {input_path}")
+    logger.info(f"Transport output HDF5: {output_path}")
+    logger.debug(f"Transport log directory: {run_paths.log}")
+    logger.debug(f"Transport overwrite enabled: {overwrite}")
+    logger.info(f"Primary lens: {lens.name} ({lens.zmx_path})")
     tracer_impl = (
         tracer
         if tracer is not None
@@ -457,6 +468,7 @@ def transport_from_sim_config(
         _require_photon_fields(photon_field_names, _REQUIRED_PHOTON_FIELDS)
 
         total = len(photons_ds)
+        logger.info(f"Loaded {total} photons for transport.")
         # Resolve effective row chunking from config.
         # - explicit integer uses caller-provided chunk rows
         # - "auto" derives rows from target MiB and row byte sizes
@@ -466,6 +478,7 @@ def transport_from_sim_config(
             input_row_nbytes=photons_ds.dtype.itemsize,
             output_row_nbytes=_TRANSPORT_DTYPE.itemsize,
         )
+        logger.debug(f"Transport chunk rows: {chunk_rows}")
         # Create one fixed-size output dataset (not resizable) so row i always
         # corresponds to source photon i. Missed photons keep NaN hit values.
         transported_ds = _create_transported_dataset(
@@ -528,7 +541,7 @@ def transport_from_sim_config(
             dst.attrs["intensifier_input_screen_defined"] = False
         dst.attrs["generated_utc"] = datetime.now(timezone.utc).isoformat()
 
-    return TransportSummary(
+    summary = TransportSummary(
         input_hdf5=input_path,
         output_hdf5=output_path,
         lens_name=lens.name,
@@ -539,6 +552,15 @@ def transport_from_sim_config(
         transported_photons=transported_count,
         missed_photons=total - transported_count,
     )
+    logger.info(
+        "Transport finished: "
+        f"total={summary.total_photons}, "
+        f"transported={summary.transported_photons}, "
+        f"missed={summary.missed_photons}."
+    )
+    logger.info(f"Transport engine: {summary.ray_engine}")
+    logger.info(f"Transport output: {summary.output_hdf5}")
+    return summary
 
 
 def _primary_lens_model(config: SimConfig) -> tuple[LensModel, Path | None]:

@@ -9,6 +9,7 @@ import sys
 # Ensure repository root is importable when this file is run directly.
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
+from src.common.logger import configure_run_logger, get_logger  # noqa: E402
 from src.config.ConfigIO import from_yaml  # noqa: E402
 from src.optics.OpticalTransport import transport_from_sim_config  # noqa: E402
 
@@ -54,6 +55,8 @@ def main() -> None:
         raise FileNotFoundError(f"SimConfig YAML not found: {yaml_path}")
 
     config = from_yaml(yaml_path)
+    log_path = configure_run_logger(config)
+    logger = get_logger()
     summary = transport_from_sim_config(
         config,
         input_hdf5_path=args.input_hdf5,
@@ -61,12 +64,13 @@ def main() -> None:
         overwrite=not args.no_overwrite,
     )
 
-    print(f"YAML: {yaml_path}")
-    print(f"Input HDF5: {summary.input_hdf5}")
-    print(f"Output HDF5: {summary.output_hdf5}")
-    print(f"Lens: {summary.lens_name} ({summary.lens_zmx_path})")
-    print(f"Ray engine: {summary.ray_engine}")
-    print(
+    logger.info(f"Run log: {log_path}")
+    logger.info(f"YAML: {yaml_path}")
+    logger.info(f"Input HDF5: {summary.input_hdf5}")
+    logger.info(f"Output HDF5: {summary.output_hdf5}")
+    logger.info(f"Lens: {summary.lens_name} ({summary.lens_zmx_path})")
+    logger.info(f"Ray engine: {summary.ray_engine}")
+    logger.info(
         "Photons: "
         f"total={summary.total_photons}, "
         f"transported={summary.transported_photons}, "
