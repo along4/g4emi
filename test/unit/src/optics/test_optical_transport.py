@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import importlib.util
+import io
 from pathlib import Path
 import sys
 import tempfile
@@ -51,6 +53,7 @@ class OpticalTransportTests(unittest.TestCase):
             import numpy as np
 
             from src.config.SimConfig import SimConfig
+            from src.common.logger import configure_run_logger
             from src.optics.OpticalTransport import (
                 resolve_transport_paths,
                 transport_from_sim_config,
@@ -67,6 +70,7 @@ class OpticalTransportTests(unittest.TestCase):
         cls.h5py = h5py
         cls.np = np
         cls.SimConfig = SimConfig
+        cls.configure_run_logger = staticmethod(configure_run_logger)
         cls.resolve_transport_paths = staticmethod(resolve_transport_paths)
         cls.transport_from_sim_config = staticmethod(transport_from_sim_config)
 
@@ -372,6 +376,35 @@ class OpticalTransportTests(unittest.TestCase):
                 self.assertFalse(bool(rows["reached_intensifier"][1]))
                 self.assertFalse(bool(rows["in_bounds"][1]))
                 self.assertFalse(bool(handle.attrs["intensifier_input_screen_defined"]))
+
+    def test_transport_logs_summary_to_run_log_when_logger_configured(self) -> None:
+        """Transport should append major summary messages to the canonical run log."""
+
+        if importlib.util.find_spec("loguru") is None:
+            raise unittest.SkipTest("loguru is not installed in this test environment.")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = self._build_config(Path(tmp_dir))
+            resolved = self.resolve_transport_paths(config)
+            self._write_input_hdf5(resolved.input_hdf5)
+
+            screen_capture = io.StringIO()
+            log_path = self.configure_run_logger(config, screen_sink=screen_capture)
+            summary = self.transport_from_sim_config(
+                config,
+                tracer=_StubTracer(),
+                overwrite=True,
+            )
+
+            screen_output = screen_capture.getvalue()
+            file_output = log_path.read_text(encoding="utf-8")
+
+            self.assertIn("Starting optical transport", screen_output)
+            self.assertIn("Transport finished", screen_output)
+            self.assertIn(str(summary.output_hdf5), screen_output)
+            self.assertIn("Loaded 2 photons for transport.", file_output)
+            self.assertIn("Transport chunk rows:", file_output)
+            self.assertIn(str(summary.output_hdf5), file_output)
 
 
 if __name__ == "__main__":

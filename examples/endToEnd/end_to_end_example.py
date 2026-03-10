@@ -11,6 +11,7 @@ import sys
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.append(str(REPO_ROOT))
 
+from src.common.logger import configure_run_logger, get_logger  # noqa: E402
 from src.config.ConfigIO import (  # noqa: E402
     DEFAULT_OUTPUT_FILENAME_BASE,
     from_yaml,
@@ -79,6 +80,8 @@ def main() -> None:
             config.simulation = SimulationConfig(number_of_particles=args.beam_on)
         else:
             config.simulation.number_of_particles = args.beam_on
+    log_path = configure_run_logger(config)
+    logger = get_logger()
 
     write_macro(
         config,
@@ -95,13 +98,15 @@ def main() -> None:
 
     simulation_command = [args.g4emi_binary, str(macro_path)]
 
-    print(f"YAML: {yaml_path}")
-    print(f"Macro: {macro_path}")
-    print(f"Simulation command: {' '.join(simulation_command)}")
-    print(f"Expected simulated HDF5: {simulated_hdf5}")
-    print(f"Expected transport HDF5: {transported_hdf5}")
+    logger.info(f"Run log: {log_path}")
+    logger.info(f"YAML: {yaml_path}")
+    logger.info(f"Macro: {macro_path}")
+    logger.info(f"Simulation command: {' '.join(simulation_command)}")
+    logger.info(f"Expected simulated HDF5: {simulated_hdf5}")
+    logger.info(f"Expected transport HDF5: {transported_hdf5}")
 
     if args.dry_run:
+        logger.info("Dry run requested; skipping simulation and transport.")
         return
 
     subprocess.run(simulation_command, check=True)
@@ -117,15 +122,15 @@ def main() -> None:
         output_hdf5_path=transported_hdf5,
         overwrite=not args.no_overwrite_transport,
     )
-    print("Transport finished.")
-    print(f"Transport engine: {summary.ray_engine}")
-    print(
+    logger.info("Transport finished.")
+    logger.info(f"Transport engine: {summary.ray_engine}")
+    logger.info(
         "Photons: "
         f"total={summary.total_photons}, "
         f"transported={summary.transported_photons}, "
         f"missed={summary.missed_photons}"
     )
-    print(f"Transport output: {summary.output_hdf5}")
+    logger.info(f"Transport output: {summary.output_hdf5}")
 
 
 if __name__ == "__main__":

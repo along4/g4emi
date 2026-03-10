@@ -14,6 +14,7 @@ import sys
 # Ensure repository root is importable when this file is run directly.
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
+from src.common.logger import configure_run_logger, get_logger  # noqa: E402
 from src.config.ConfigIO import (  # noqa: E402
     append_macro_line,
     from_yaml,
@@ -42,6 +43,8 @@ def main() -> None:
     """
 
     config = from_yaml(EXAMPLE_YAML_PATH.resolve())
+    log_path = configure_run_logger(config)
+    logger = get_logger()
 
     write_macro(
         config,
@@ -90,19 +93,20 @@ def main() -> None:
     append_macro_line(mask_vis_macro_path, "/vis/viewer/rebuild")
     append_macro_line(mask_vis_macro_path, "/vis/viewer/refresh")
 
-    print(f"Loaded YAML: {EXAMPLE_YAML_PATH.resolve()}")
-    print(f"Wrote batch macro: {batch_macro_path}")
-    print(f"Wrote mask-vis macro: {mask_vis_macro_path}")
-    print(f"Mask radius (mm): {config.scintillator.mask_radius_mm:g}")
-    print(f"Output stage directory: {paths.simulated_photons}")
-    print(
+    logger.info(f"Run log: {log_path}")
+    logger.info(f"Loaded YAML: {EXAMPLE_YAML_PATH.resolve()}")
+    logger.info(f"Wrote batch macro: {batch_macro_path}")
+    logger.info(f"Wrote mask-vis macro: {mask_vis_macro_path}")
+    logger.info(f"Mask radius (mm): {config.scintillator.mask_radius_mm:g}")
+    logger.info(f"Output stage directory: {paths.simulated_photons}")
+    logger.info(
         "Expected HDF5 target: "
         f"{paths.simulated_photons / 'photon_optical_interface_hits.h5'}"
     )
-    print("Start Geant4 interactively:")
-    print("  pixi run g4emi")
-    print("Then in the Geant4 prompt execute:")
-    print(f"  /control/execute {mask_vis_macro_path}")
+    logger.info("Start Geant4 interactively:")
+    logger.info("  pixi run g4emi")
+    logger.info("Then in the Geant4 prompt execute:")
+    logger.info(f"  /control/execute {mask_vis_macro_path}")
 
 
 if __name__ == "__main__":
