@@ -680,6 +680,28 @@ class SimulationConfig(StrictModel):
         return self
 
 
+class RunnerConfig(StrictModel):
+    """Python-side simulation launch settings consumed by `src.runner`.
+
+    These values are intentionally separate from :class:`SimulationConfig`,
+    which maps to GEANT4 macro commands. `RunnerConfig` captures how Python
+    should launch and verify a simulation that has already been configured.
+    """
+
+    binary: str = Field(min_length=1, default="g4emi")
+    verify_output: bool = Field(default=True, alias="verifyOutput")
+
+    @field_validator("binary")
+    @classmethod
+    def require_non_blank_binary(cls, value: str) -> str:
+        """Reject blank/whitespace-only executable names."""
+
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("`runner.binary` must not be blank.")
+        return normalized
+
+
 class SimConfig(StrictModel):
     """Top-level simulation configuration root.
 
@@ -693,6 +715,7 @@ class SimConfig(StrictModel):
     optical: OpticalConfig
     intensifier: IntensifierConfig | None = None
     simulation: SimulationConfig | None = None
+    runner: RunnerConfig = Field(default_factory=RunnerConfig)
     metadata: MetadataConfig = Field(
         validation_alias=AliasChoices("Metadata", "metadata"),
         serialization_alias="Metadata",
@@ -791,6 +814,10 @@ def default_sim_config() -> SimConfig:
             },
             "simulation": {
                 "numberOfParticles": 10000,
+            },
+            "runner": {
+                "binary": "g4emi",
+                "verifyOutput": True,
             },
             "Metadata": {
                 "author": "Your Name",
