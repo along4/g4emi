@@ -8,6 +8,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 
 def _repo_root() -> Path:
@@ -405,6 +406,31 @@ class OpticalTransportTests(unittest.TestCase):
             self.assertIn("Loaded 2 photons for transport.", file_output)
             self.assertIn("Transport chunk rows:", file_output)
             self.assertIn(str(summary.output_hdf5), file_output)
+
+    def test_transport_writes_terminal_progress_bar_by_processed_photons(self) -> None:
+        """Transport should render a chunk-based terminal progress bar."""
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = self._build_config(Path(tmp_dir), transport_chunk_rows=1)
+            resolved = self.resolve_transport_paths(config)
+            self._write_input_hdf5(resolved.input_hdf5)
+
+            with patch(
+                "src.optics.OpticalTransport.sys.stderr",
+                new=io.StringIO(),
+            ) as stderr_capture:
+                summary = self.transport_from_sim_config(
+                    config,
+                    tracer=_StubTracer(),
+                    overwrite=True,
+                )
+
+            terminal_output = stderr_capture.getvalue()
+            self.assertEqual(summary.total_photons, 2)
+            self.assertIn("Transport", terminal_output)
+            self.assertIn("(1/2 photons)", terminal_output)
+            self.assertIn("(2/2 photons)", terminal_output)
+            self.assertIn("100%", terminal_output)
 
 
 if __name__ == "__main__":
