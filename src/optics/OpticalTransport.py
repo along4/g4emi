@@ -414,7 +414,6 @@ def transport_from_sim_config(
     input_screen = _resolve_intensifier_input_screen(config)
     defaults = resolve_transport_paths(config)
     run_paths = resolve_run_environment_paths(config)
-    run_paths.log.mkdir(parents=True, exist_ok=True)
     log_path = ensure_run_logger(config)
     logger = get_logger()
     input_path = (
