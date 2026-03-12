@@ -48,8 +48,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--g4emi-binary",
         type=str,
-        default="g4emi",
-        help="Executable name/path for Geant4 simulation binary (default: g4emi).",
+        default=None,
+        help="Optional override for `runner.binary` from the YAML config.",
     )
     parser.add_argument(
         "--dry-run",
@@ -80,7 +80,8 @@ def main() -> None:
             config.simulation = SimulationConfig(number_of_particles=args.beam_on)
         else:
             config.simulation.number_of_particles = args.beam_on
-    config.runner.binary = args.g4emi_binary
+    if args.g4emi_binary is not None:
+        config.runner.binary = args.g4emi_binary
     log_path = configure_run_logger(config)
     logger = get_logger()
 
