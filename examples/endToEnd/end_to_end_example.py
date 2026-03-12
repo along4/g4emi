@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-import subprocess
 import sys
 
 # Ensure repository root is importable when this file is run directly.
@@ -23,6 +22,7 @@ from src.optics.OpticalTransport import (  # noqa: E402
     DEFAULT_TRANSPORT_OUTPUT_FILENAME,
     transport_from_sim_config,
 )
+from src.runner import run  # noqa: E402
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -48,8 +48,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--g4emi-binary",
         type=str,
-        default="g4emi",
-        help="Executable name/path for Geant4 simulation binary (default: g4emi).",
+        default=None,
+        help="Optional override for `runner.binary` from the YAML config.",
     )
     parser.add_argument(
         "--dry-run",
@@ -80,6 +80,8 @@ def main() -> None:
             config.simulation = SimulationConfig(number_of_particles=args.beam_on)
         else:
             config.simulation.number_of_particles = args.beam_on
+    if args.g4emi_binary is not None:
+        config.runner.binary = args.g4emi_binary
     log_path = configure_run_logger(config)
     logger = get_logger()
 
@@ -96,20 +98,19 @@ def main() -> None:
         paths.transported_photons / DEFAULT_TRANSPORT_OUTPUT_FILENAME
     ).resolve()
 
-    simulation_command = [args.g4emi_binary, str(macro_path)]
-
     logger.info(f"Run log: {log_path}")
     logger.info(f"YAML: {yaml_path}")
     logger.info(f"Macro: {macro_path}")
-    logger.info(f"Simulation command: {' '.join(simulation_command)}")
+    logger.info(f"Simulation binary: {config.runner.binary}")
     logger.info(f"Expected simulated HDF5: {simulated_hdf5}")
     logger.info(f"Expected transport HDF5: {transported_hdf5}")
 
-    if args.dry_run:
+    completed = run(config, dry_run=args.dry_run)
+
+    if completed is None:
         logger.info("Dry run requested; skipping simulation and transport.")
         return
 
-    subprocess.run(simulation_command, check=True)
     if not simulated_hdf5.exists():
         raise FileNotFoundError(
             "Simulation finished but expected HDF5 was not found: "

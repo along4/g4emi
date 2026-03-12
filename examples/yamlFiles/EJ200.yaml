@@ -65,6 +65,7 @@ optical:
       z_mm: 210.05
     shape: circle
     diameterRule: min(entranceDiameter,sensorMaxWidth)
+  showTransportProgress: true
 
 simulation:
   numberOfParticles: 5000
@@ -74,6 +75,11 @@ simulation:
     eventVerbose: 0
     trackingVerbose: 0
     printProgress: 500
+
+runner:
+  binary: g4emi
+  showProgress: true
+  verifyOutput: true
 
 Metadata:
   author: Alex Long
