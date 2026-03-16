@@ -30,13 +30,13 @@ def _build_parser() -> argparse.ArgumentParser:
         help="SimConfig YAML path (default: Canon example under examples/yamlFiles).",
     )
     parser.add_argument(
-        "--sub-runs",
+        "--sub-run-count",
         type=int,
         default=2,
         help="Number of sequential sub-runs to execute (default: 2).",
     )
     parser.add_argument(
-        "--start-sub-run",
+        "--first-sub-run-number",
         type=int,
         default=0,
         help="Starting sub-run number (default: 0).",
@@ -99,15 +99,15 @@ def main() -> None:
     parser = _build_parser()
     args = parser.parse_args()
 
-    if args.sub_runs <= 0:
-        raise ValueError("--sub-runs must be > 0.")
-    if args.start_sub_run < 0:
-        raise ValueError("--start-sub-run must be >= 0.")
+    if args.sub_run_count <= 0:
+        raise ValueError("--sub-run-count must be > 0.")
+    if args.first_sub_run_number < 0:
+        raise ValueError("--first-sub-run-number must be >= 0.")
 
     base_config = _base_config_from_args(args)
 
-    for offset in range(args.sub_runs):
-        sub_run_number = args.start_sub_run + offset
+    for offset in range(args.sub_run_count):
+        sub_run_number = args.first_sub_run_number + offset
         config = _config_for_sub_run(
             base_config,
             sub_run_number=sub_run_number,
