@@ -22,6 +22,8 @@ from src.common.logger import configure_run_logger, get_logger  # noqa: E402
 from src.config.ConfigIO import (  # noqa: E402
     from_yaml,
     resolve_run_environment_paths,
+    simulated_output_filename,
+    transport_output_filename,
     write_macro,
 )
 
@@ -79,11 +81,11 @@ def main() -> None:
     logger.info(f"Transport stage directory: {paths.transported_photons}")
     logger.info(
         "Expected HDF5 target: "
-        f"{paths.simulated_photons / 'photon_optical_interface_hits.h5'}"
+        f"{paths.simulated_photons / simulated_output_filename(config)}"
     )
     logger.info(
         "Expected transport target: "
-        f"{paths.transported_photons / 'photons_intensifier_hits.h5'}"
+        f"{paths.transported_photons / transport_output_filename(config)}"
     )
     logger.info(f"Run with: pixi run g4emi {macro_path}")
 

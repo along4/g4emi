@@ -12,9 +12,9 @@ sys.path.append(str(REPO_ROOT))
 
 from src.common.logger import configure_run_logger, get_logger  # noqa: E402
 from src.config.ConfigIO import (  # noqa: E402
-    DEFAULT_OUTPUT_FILENAME_BASE,
     from_yaml,
     resolve_run_environment_paths,
+    simulated_output_filename,
     write_macro,
 )
 from src.config.SimConfig import SimulationConfig  # noqa: E402
@@ -73,9 +73,7 @@ def main() -> None:
     )
     paths = resolve_run_environment_paths(config)
     macro_path = paths.macro_file.resolve()
-    output_hdf5 = (
-        paths.simulated_photons / f"{DEFAULT_OUTPUT_FILENAME_BASE}.h5"
-    ).resolve()
+    output_hdf5 = (paths.simulated_photons / simulated_output_filename(config)).resolve()
 
     logger.info(f"Run log: {log_path}")
     logger.info(f"YAML: {yaml_path}")
