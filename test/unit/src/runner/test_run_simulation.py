@@ -31,12 +31,13 @@ class RunSimulationTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         try:
             from src.config.ConfigIO import (
+                prepare_simulation_run,
                 resolve_run_environment_paths,
                 run_log_filename,
                 simulated_output_filename,
             )
             from src.config.SimConfig import default_sim_config
-            from src.runner import run
+            from src.runner.runSimulation import run, run_simulation
             from src.runner.runSimulation import _parse_simulated_events
         except ModuleNotFoundError as exc:
             missing = (getattr(exc, "name", "") or "").lower()
@@ -47,11 +48,13 @@ class RunSimulationTests(unittest.TestCase):
                 ) from exc
             raise
         cls.default_sim_config = staticmethod(default_sim_config)
+        cls.prepare_simulation_run = staticmethod(prepare_simulation_run)
         cls.resolve_run_environment_paths = staticmethod(resolve_run_environment_paths)
         cls.run_log_filename = staticmethod(run_log_filename)
         cls.simulated_output_filename = staticmethod(simulated_output_filename)
         cls.parse_simulated_events = staticmethod(_parse_simulated_events)
-        cls.run_simulation = staticmethod(run)
+        cls.run = staticmethod(run)
+        cls.run_simulation = staticmethod(run_simulation)
 
     class _FakeProcess:
         def __init__(self, lines: list[str], returncode: int = 0):
@@ -171,7 +174,7 @@ class RunSimulationTests(unittest.TestCase):
 
             with patch("src.runner.runSimulation.subprocess.Popen") as popen_mock:
                 with self.assertRaises(FileNotFoundError):
-                    self.run_simulation(config)
+                    self.run(config)
 
             popen_mock.assert_not_called()
 
@@ -194,7 +197,7 @@ class RunSimulationTests(unittest.TestCase):
                 new=io.StringIO(),
             ):
                 with self.assertRaises(FileNotFoundError):
-                    self.run_simulation(config)
+                    self.run(config)
 
             popen_mock.assert_called_once()
 
@@ -217,9 +220,51 @@ class RunSimulationTests(unittest.TestCase):
                 "src.runner.runSimulation.sys.stderr",
                 new=io.StringIO(),
             ):
+                completed = self.run(config)
+
+            self.assertEqual(completed.returncode, 0)
+            popen_mock.assert_called_once()
+
+    def test_prepare_simulation_run_writes_macro_and_configures_log(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            config = self._config_for_tmp(tmp_path)
+
+            prepared = self.prepare_simulation_run(config)
+            paths = self.resolve_run_environment_paths(config)
+
+            self.assertTrue(prepared)
+            self.assertTrue(paths.macro_file.exists())
+            self.assertTrue((paths.log / self.run_log_filename(config)).exists())
+
+    def test_run_simulation_prepares_then_executes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            config = self._config_for_tmp(tmp_path)
+            output_hdf5 = (
+                self.resolve_run_environment_paths(config).simulated_photons
+                / self.simulated_output_filename(config)
+            )
+
+            def _popen_side_effect(*args, **kwargs):
+                output_hdf5.parent.mkdir(parents=True, exist_ok=True)
+                output_hdf5.write_text("ok\n", encoding="utf-8")
+                return self._FakeProcess(
+                    ["G4WT10 > Simulated 10000 events\n"],
+                    returncode=0,
+                )
+
+            with patch(
+                "src.runner.runSimulation.subprocess.Popen",
+                side_effect=_popen_side_effect,
+            ) as popen_mock, patch(
+                "src.runner.runSimulation.sys.stderr",
+                new=io.StringIO(),
+            ):
                 completed = self.run_simulation(config)
 
             self.assertEqual(completed.returncode, 0)
+            self.assertTrue(self.resolve_run_environment_paths(config).macro_file.exists())
             popen_mock.assert_called_once()
 
 
