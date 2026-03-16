@@ -30,7 +30,11 @@ class RunSimulationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         try:
-            from src.config.ConfigIO import DEFAULT_OUTPUT_FILENAME_BASE, resolve_run_environment_paths
+            from src.config.ConfigIO import (
+                resolve_run_environment_paths,
+                run_log_filename,
+                simulated_output_filename,
+            )
             from src.config.SimConfig import default_sim_config
             from src.runner import run
             from src.runner.runSimulation import _parse_simulated_events
@@ -42,9 +46,10 @@ class RunSimulationTests(unittest.TestCase):
                     "Run in the project environment (for example: pixi run test-python)."
                 ) from exc
             raise
-        cls.DEFAULT_OUTPUT_FILENAME_BASE = DEFAULT_OUTPUT_FILENAME_BASE
         cls.default_sim_config = staticmethod(default_sim_config)
         cls.resolve_run_environment_paths = staticmethod(resolve_run_environment_paths)
+        cls.run_log_filename = staticmethod(run_log_filename)
+        cls.simulated_output_filename = staticmethod(simulated_output_filename)
         cls.parse_simulated_events = staticmethod(_parse_simulated_events)
         cls.run_simulation = staticmethod(run)
 
@@ -103,8 +108,8 @@ class RunSimulationTests(unittest.TestCase):
             paths.macro.mkdir(parents=True, exist_ok=True)
             paths.simulated_photons.mkdir(parents=True, exist_ok=True)
             paths.macro_file.write_text("/run/initialize\n", encoding="utf-8")
-            output_hdf5 = paths.simulated_photons / f"{self.DEFAULT_OUTPUT_FILENAME_BASE}.h5"
-            expected_log_path = paths.log / "runLog.txt"
+            output_hdf5 = paths.simulated_photons / self.simulated_output_filename(config)
+            expected_log_path = paths.log / self.run_log_filename(config)
             output_hdf5.parent.mkdir(parents=True, exist_ok=True)
             output_hdf5.write_text("ok\n", encoding="utf-8")
 
@@ -142,7 +147,7 @@ class RunSimulationTests(unittest.TestCase):
             paths.macro.mkdir(parents=True, exist_ok=True)
             paths.simulated_photons.mkdir(parents=True, exist_ok=True)
             paths.macro_file.write_text("/run/initialize\n", encoding="utf-8")
-            output_hdf5 = paths.simulated_photons / f"{self.DEFAULT_OUTPUT_FILENAME_BASE}.h5"
+            output_hdf5 = paths.simulated_photons / self.simulated_output_filename(config)
             output_hdf5.write_text("ok\n", encoding="utf-8")
 
             with patch(

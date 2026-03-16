@@ -71,7 +71,7 @@ class RunLoggerTests(unittest.TestCase):
 
             self.assertEqual(
                 log_path,
-                (Path(temp_dir) / "logger_unit_test" / "logs" / "runLog.txt").resolve(),
+                (Path(temp_dir) / "logger_unit_test" / "logs" / "runLog_0000.txt").resolve(),
             )
             self.assertTrue(log_path.parent.is_dir())
 
