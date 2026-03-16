@@ -1439,6 +1439,45 @@ def write_macro(
     path.write_text(payload + "\n", encoding="utf-8")
 
 
+def prepare_simulation_run(config: SimConfig) -> bool:
+    """Prepare one simulation run for execution.
+
+    This is the configuration-layer orchestration step before process launch:
+    it configures the canonical run logger, writes the macro, resolves the
+    canonical run paths, and logs the main run artifacts.
+
+    Returns ``True`` on success and raises on failure.
+    """
+
+    try:
+        from src.common.logger import ensure_run_logger, get_logger
+    except ModuleNotFoundError:
+        sys.path.append(str(Path(__file__).resolve().parents[2]))
+        from src.common.logger import ensure_run_logger, get_logger
+
+    log_path = ensure_run_logger(config)
+    write_macro(
+        config,
+        include_output=True,
+        include_run_initialize=True,
+        overwrite=True,
+    )
+    paths = resolve_run_environment_paths(config)
+    logger = get_logger()
+    output_hdf5 = (paths.simulated_photons / simulated_output_filename(config)).resolve()
+
+    logger.info(
+        "Preparing simulation run "
+        f"'{config.metadata.run_environment.simulation_run_id}' "
+        f"sub-run {config.metadata.run_environment.sub_run_number:0{SUB_RUN_NUMBER_WIDTH}d}."
+    )
+    logger.info(f"Run log: {log_path}")
+    logger.info(f"Macro: {paths.macro_file.resolve()}")
+    logger.info(f"Expected HDF5: {output_hdf5}")
+    logger.info(f"Binary: {config.runner.binary}")
+    return True
+
+
 def append_macro_line(macro_file: str | Path, string_to_append: str) -> None:
     """Append one command/comment line to an existing macro file.
 

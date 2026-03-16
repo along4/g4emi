@@ -9,7 +9,8 @@ import subprocess
 import sys
 
 try:
-    from src.common.logger import resolve_run_log_path
+    from src.common.logger import get_logger, resolve_run_log_path
+    from src.config.ConfigIO import prepare_simulation_run
     from src.config.ConfigIO import (
         resolve_run_environment_paths,
         simulated_output_filename,
@@ -17,7 +18,8 @@ try:
     from src.config.SimConfig import SimConfig
 except ModuleNotFoundError:
     sys.path.append(str(Path(__file__).resolve().parents[2]))
-    from src.common.logger import resolve_run_log_path
+    from src.common.logger import get_logger, resolve_run_log_path
+    from src.config.ConfigIO import prepare_simulation_run
     from src.config.ConfigIO import (
         resolve_run_environment_paths,
         simulated_output_filename,
@@ -158,4 +160,21 @@ def run(
             "Simulation finished but expected HDF5 was not found: "
             f"{output_hdf5}"
         )
+    return completed
+
+
+def run_simulation(
+    config: SimConfig,
+    *,
+    dry_run: bool = False,
+) -> subprocess.CompletedProcess[str] | None:
+    """Prepare and launch one simulation from validated config."""
+
+    prepare_simulation_run(config)
+    completed = run(config, dry_run=dry_run)
+    logger = get_logger()
+    if completed is None:
+        logger.info("Dry run requested; skipping g4emi launch.")
+        return None
+    logger.info("Simulation finished.")
     return completed
