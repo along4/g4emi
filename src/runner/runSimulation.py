@@ -11,16 +11,16 @@ import sys
 try:
     from src.common.logger import resolve_run_log_path
     from src.config.ConfigIO import (
-        DEFAULT_OUTPUT_FILENAME_BASE,
         resolve_run_environment_paths,
+        simulated_output_filename,
     )
     from src.config.SimConfig import SimConfig
 except ModuleNotFoundError:
     sys.path.append(str(Path(__file__).resolve().parents[2]))
     from src.common.logger import resolve_run_log_path
     from src.config.ConfigIO import (
-        DEFAULT_OUTPUT_FILENAME_BASE,
         resolve_run_environment_paths,
+        simulated_output_filename,
     )
     from src.config.SimConfig import SimConfig
 
@@ -95,9 +95,7 @@ def run(
 
     run_paths = resolve_run_environment_paths(config)
     macro_path = run_paths.macro_file.resolve()
-    output_hdf5 = (
-        run_paths.simulated_photons / f"{DEFAULT_OUTPUT_FILENAME_BASE}.h5"
-    ).resolve()
+    output_hdf5 = (run_paths.simulated_photons / simulated_output_filename(config)).resolve()
 
     if not macro_path.exists():
         raise FileNotFoundError(

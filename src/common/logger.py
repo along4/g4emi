@@ -37,19 +37,20 @@ def _require_loguru():
 def resolve_run_log_path(
     config: "SimConfig",
     *,
-    filename: str = DEFAULT_RUN_LOG_FILENAME,
+    filename: str | None = None,
 ) -> Path:
     """Resolve the canonical run log path under the configured logs directory."""
 
     try:
-        from src.config.ConfigIO import resolve_run_environment_paths
+        from src.config.ConfigIO import resolve_run_environment_paths, run_log_filename
     except ModuleNotFoundError:
         sys.path.append(str(Path(__file__).resolve().parents[2]))
-        from src.config.ConfigIO import resolve_run_environment_paths
+        from src.config.ConfigIO import resolve_run_environment_paths, run_log_filename
 
     run_paths = resolve_run_environment_paths(config)
     run_paths.log.mkdir(parents=True, exist_ok=True)
-    return (run_paths.log / filename).resolve()
+    target_filename = filename if filename is not None else run_log_filename(config)
+    return (run_paths.log / target_filename).resolve()
 
 
 def configure_run_logger(
@@ -58,7 +59,7 @@ def configure_run_logger(
     screen_level: str = DEFAULT_SCREEN_LEVEL,
     file_level: str = DEFAULT_FILE_LEVEL,
     screen_sink: TextIO | None = None,
-    filename: str = DEFAULT_RUN_LOG_FILENAME,
+    filename: str | None = None,
 ) -> Path:
     """Configure terminal and file sinks for the current run."""
 
@@ -99,7 +100,7 @@ def ensure_run_logger(
     screen_level: str = DEFAULT_SCREEN_LEVEL,
     file_level: str = DEFAULT_FILE_LEVEL,
     screen_sink: TextIO | None = None,
-    filename: str = DEFAULT_RUN_LOG_FILENAME,
+    filename: str | None = None,
 ) -> Path:
     """Configure run logging only when it is absent or targets a new run log."""
 

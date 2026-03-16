@@ -30,6 +30,7 @@ from dataclasses import dataclass
 from datetime import date as DateType
 import math
 from pathlib import Path
+import re
 import shlex
 import sys
 from typing import Any, Literal
@@ -94,7 +95,10 @@ TRANSPORT_PHOTONS_STAGE_DIR = "transportedPhotons"
 MACROS_STAGE_DIR = "macros"
 DEFAULT_GENERATED_MACRO_FILENAME = "generated_from_config.mac"
 DEFAULT_OUTPUT_FILENAME_BASE = "photon_optical_interface_hits"
+DEFAULT_TRANSPORT_OUTPUT_FILENAME_BASE = "photons_intensifier_hits"
+DEFAULT_RUN_LOG_FILENAME_BASE = "runLog"
 DEFAULT_OPTICAL_INTERFACE_THICKNESS_MM = 0.1
+SUB_RUN_NUMBER_WIDTH = 4
 
 RunEnvironmentTarget = Literal[
     "data",
@@ -138,6 +142,85 @@ class RunEnvironmentPaths:
             "simulated_photons": self.simulated_photons,
             "transported_photons": self.transported_photons,
         }
+
+
+_SUB_RUN_SUFFIX_PATTERN = re.compile(
+    rf"^(?P<prefix>.+)_(?P<number>\d{{{SUB_RUN_NUMBER_WIDTH}}})$"
+)
+
+
+def format_sub_run_suffix(sub_run_number: int) -> str:
+    """Return canonical zero-padded suffix for one sub-run number."""
+
+    return f"_{sub_run_number:0{SUB_RUN_NUMBER_WIDTH}d}"
+
+
+def split_sub_run_suffix(stem: str) -> tuple[str, int | None]:
+    """Split `<prefix>_NNNN` stems into prefix and optional sub-run number."""
+
+    match = _SUB_RUN_SUFFIX_PATTERN.fullmatch(stem)
+    if match is None:
+        return stem, None
+    return match.group("prefix"), int(match.group("number"))
+
+
+def artifact_stem_for_sub_run(base_stem: str, sub_run_number: int) -> str:
+    """Compose a stable artifact stem with canonical sub-run suffix."""
+
+    return f"{base_stem}{format_sub_run_suffix(sub_run_number)}"
+
+
+def macro_filename_for_config(config: SimConfig) -> str:
+    """Return canonical macro filename for one configured sub-run."""
+
+    env = config.metadata.run_environment
+    run_name = env.simulation_run_id.strip()
+    base_stem = run_name if run_name else Path(DEFAULT_GENERATED_MACRO_FILENAME).stem
+    return artifact_stem_for_sub_run(base_stem, env.sub_run_number) + ".mac"
+
+
+def simulated_output_filename(config: SimConfig) -> str:
+    """Return canonical simulated-photons HDF5 filename for one sub-run."""
+
+    return (
+        artifact_stem_for_sub_run(
+            DEFAULT_OUTPUT_FILENAME_BASE,
+            config.metadata.run_environment.sub_run_number,
+        )
+        + ".h5"
+    )
+
+
+def transport_output_filename_for_sub_run(sub_run_number: int) -> str:
+    """Return canonical transported-photons HDF5 filename for one sub-run."""
+
+    return (
+        artifact_stem_for_sub_run(
+            DEFAULT_TRANSPORT_OUTPUT_FILENAME_BASE,
+            sub_run_number,
+        )
+        + ".h5"
+    )
+
+
+def transport_output_filename(config: SimConfig) -> str:
+    """Return canonical transported-photons HDF5 filename for one sub-run."""
+
+    return transport_output_filename_for_sub_run(
+        config.metadata.run_environment.sub_run_number
+    )
+
+
+def run_log_filename(config: SimConfig) -> str:
+    """Return canonical run-log filename for one configured sub-run."""
+
+    return (
+        artifact_stem_for_sub_run(
+            DEFAULT_RUN_LOG_FILENAME_BASE,
+            config.metadata.run_environment.sub_run_number,
+        )
+        + ".txt"
+    )
 
 def _require_yaml_dependency() -> Any:
     """Return PyYAML module object or raise a dependency error.
@@ -229,12 +312,16 @@ def _default_import_template(macro_path: Path) -> SimConfig:
     metadata = payload["metadata"]
     run_environment = metadata["run_environment"]
     output_info = run_environment["output_info"]
+    macro_run_id, macro_sub_run_number = split_sub_run_suffix(macro_path.stem)
 
     metadata["author"] = "Macro Import"
     metadata["date"] = DateType.today().isoformat()
     metadata["version"] = "imported"
     metadata["description"] = f"Imported from macro: {macro_path.name}"
-    run_environment["simulation_run_id"] = macro_path.stem
+    run_environment["simulation_run_id"] = macro_run_id
+    run_environment["sub_run_number"] = (
+        macro_sub_run_number if macro_sub_run_number is not None else 0
+    )
     run_environment["working_directory"] = "data"
     run_environment["macro_directory"] = "macros"
     run_environment["log_directory"] = "logs"
@@ -304,8 +391,7 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
     -----
     - Macros are lossy relative to ``SimConfig``. They do not encode full lens
       setup and metadata context, so those values come from ``template`` defaults.
-    - ``/output/filename`` is currently ignored because filename base is fixed
-      by this pipeline.
+    - ``/output/filename`` is used only to recover the canonical sub-run suffix.
     - If parsed optical-interface thickness differs from
       ``DEFAULT_OPTICAL_INTERFACE_THICKNESS_MM``, this function raises because
       thickness is not currently represented in ``SimConfig``.
@@ -351,6 +437,7 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
     mask_radius_mm: float | None = None
     parsed_thickness_mm: float | None = None
     parsed_output_path: str | None = None
+    parsed_output_filename: str | None = None
     parsed_output_runname: str | None = None
 
     for raw_line in path.read_text(encoding="utf-8").splitlines():
@@ -372,6 +459,9 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
             )
         if command == "/output/path" and len(tokens) >= 2:
             parsed_output_path = tokens[1]
+            continue
+        if command == "/output/filename" and len(tokens) >= 2:
+            parsed_output_filename = tokens[1]
             continue
         if command == "/output/runname" and len(tokens) >= 2:
             parsed_output_runname = tokens[1].strip()
@@ -683,6 +773,11 @@ def from_macro(macro_path: str | Path, *, template: SimConfig | None = None) -> 
         run_environment["simulation_run_id"] = parsed_output_runname.strip()
     if parsed_output_path is not None:
         run_environment["working_directory"] = str(Path(parsed_output_path))
+    if parsed_output_filename is not None:
+        parsed_output_stem = Path(parsed_output_filename).stem
+        base_stem, parsed_sub_run_number = split_sub_run_suffix(parsed_output_stem)
+        if base_stem == DEFAULT_OUTPUT_FILENAME_BASE and parsed_sub_run_number is not None:
+            run_environment["sub_run_number"] = parsed_sub_run_number
 
     if saw_time_component_command:
         time_components = scint_properties.get("time_components")
@@ -1003,17 +1098,13 @@ def resolve_run_environment_directory(
 def resolve_run_environment_paths(config: SimConfig) -> RunEnvironmentPaths:
     """Resolve all canonical run-environment directories into absolute paths."""
 
-    run_name = config.metadata.run_environment.simulation_run_id.strip()
-    macro_filename = (
-        f"{run_name}.mac" if run_name else DEFAULT_GENERATED_MACRO_FILENAME
-    )
     macro_dir = resolve_run_environment_directory(config, "macro")
 
     return RunEnvironmentPaths(
         data=resolve_run_environment_directory(config, "data"),
         run_root=resolve_run_environment_directory(config, "run_root"),
         macro=macro_dir,
-        macro_file=(macro_dir / macro_filename).resolve(),
+        macro_file=(macro_dir / macro_filename_for_config(config)).resolve(),
         log=resolve_run_environment_directory(config, "log"),
         simulated_photons=resolve_run_environment_directory(config, "simulated_photons"),
         transported_photons=resolve_run_environment_directory(
@@ -1096,16 +1187,16 @@ def output_commands(config: SimConfig) -> list[str]:
 
     Command mapping:
     - ``RunEnvironment.WorkingDirectory``          -> ``/output/path``
-    - fixed base filename                          -> ``/output/filename``
+    - suffixed simulated-photons base filename     -> ``/output/filename``
     - ``RunEnvironment.SimulationRunID``          -> ``/output/runname``
 
-    The filename base is fixed so simulation artifacts remain consistently named
-    while directory/run identifiers control grouping.
+    The run folder stays keyed by ``SimulationRunID`` while ``sub_run_number``
+    is encoded in the output filename stem.
     """
 
     return [
         f"/output/path {resolve_run_environment_directory(config, 'data')}",
-        f"/output/filename {DEFAULT_OUTPUT_FILENAME_BASE}",
+        f"/output/filename {Path(simulated_output_filename(config)).stem}",
         f"/output/runname {config.metadata.run_environment.simulation_run_id}",
     ]
 
