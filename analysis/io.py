@@ -70,9 +70,10 @@ def require_fields(
 
     required = set(required_fields)
     available = set(dataset.dtype.names or ())
-    if required.issubset(available):
+    missing = required - available
+    if not missing:
         return
-    raise KeyError(f"/{dataset_name} is missing required fields: {sorted(required)}")
+    raise KeyError(f"/{dataset_name} is missing required fields: {sorted(missing)}")
 
 
 def intensifier_input_screen_from_attrs(
