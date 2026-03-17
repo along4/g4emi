@@ -10,14 +10,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
-try:
-    import h5py
-except ModuleNotFoundError as exc:
-    raise ModuleNotFoundError(
-        "h5py is required for HDF5 analysis. Install project dependencies with "
-        "`pixi install` (after pulling latest changes)."
-    ) from exc
 import numpy as np
+from analysis.io import (
+    decode_species,
+    intensifier_input_screen_from_attrs,
+    read_structured_dataset,
+    read_structured_dataset_with_file_attrs,
+    require_fields,
+)
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.colors import LogNorm
@@ -57,51 +57,6 @@ class PhotonCreationDelayFitResult:
     rmse_counts: float
 
 
-def _read_structured_dataset(hdf5_path: str | Path, dataset_name: str) -> np.ndarray:
-    """Read one structured dataset from an HDF5 file."""
-
-    path = Path(hdf5_path)
-    if not path.exists():
-        raise FileNotFoundError(f"HDF5 file not found: {path}")
-
-    with h5py.File(path, "r") as handle:
-        if dataset_name not in handle:
-            raise KeyError(f"Dataset {dataset_name!r} not found in {path}")
-        return handle[dataset_name][:]
-
-
-def _read_structured_dataset_with_file_attrs(
-    hdf5_path: str | Path,
-    dataset_name: str,
-) -> tuple[np.ndarray, dict[str, object]]:
-    """Read one structured dataset plus root-level HDF5 file attributes."""
-
-    path = Path(hdf5_path)
-    if not path.exists():
-        raise FileNotFoundError(f"HDF5 file not found: {path}")
-
-    with h5py.File(path, "r") as handle:
-        if dataset_name not in handle:
-            raise KeyError(f"Dataset {dataset_name!r} not found in {path}")
-        attrs = {str(key): handle.attrs[key] for key in handle.attrs.keys()}
-        return handle[dataset_name][:], attrs
-
-
-def _decode_species(values: np.ndarray) -> np.ndarray:
-    """Decode fixed-length HDF5 string arrays into lowercase Python strings."""
-
-    return np.array(
-        [
-            (value.decode("utf-8", errors="ignore") if isinstance(value, bytes) else str(value))
-            .strip("\x00")
-            .strip()
-            .lower()
-            for value in values
-        ],
-        dtype=object,
-    )
-
-
 def _histogram_image(
     x_mm: np.ndarray,
     y_mm: np.ndarray,
@@ -134,44 +89,17 @@ def _histogram_counts(
     return np.histogram(values, bins=bins)
 
 
-def _intensifier_input_screen_from_attrs(
-    attrs: dict[str, object],
-) -> tuple[float, float, float] | None:
-    """Return `(center_x_mm, center_y_mm, diameter_mm)` from file attrs."""
-
-    if "intensifier_input_screen_diameter_mm" not in attrs:
-        return None
-    if not bool(attrs.get("intensifier_input_screen_defined", True)):
-        return None
-
-    diameter_mm = float(attrs["intensifier_input_screen_diameter_mm"])
-    center_raw = attrs.get("intensifier_input_screen_center_mm")
-    if center_raw is None:
-        return None
-    center = np.asarray(center_raw, dtype=float).reshape(-1)
-    if center.size != 2:
-        return None
-    center_x_mm = float(center[0])
-    center_y_mm = float(center[1])
-
-    if not np.isfinite(diameter_mm) or diameter_mm <= 0.0:
-        return None
-    if not np.isfinite(center_x_mm) or not np.isfinite(center_y_mm):
-        return None
-    return (center_x_mm, center_y_mm, diameter_mm)
-
-
 def _shared_xy_range(
     hdf5_path: str | Path,
     neutron_labels: Sequence[str],
 ) -> XYRange:
     """Compute a shared XY histogram range for neutron/origin/exit plots."""
 
-    primaries = _read_structured_dataset(hdf5_path, "primaries")
-    photons = _read_structured_dataset(hdf5_path, "photons")
+    primaries = read_structured_dataset(hdf5_path, "primaries")
+    photons = read_structured_dataset(hdf5_path, "photons")
 
     neutron_set = {label.lower() for label in neutron_labels}
-    primary_labels = _decode_species(primaries["primary_species"])
+    primary_labels = decode_species(primaries["primary_species"])
     neutron_mask = np.isin(primary_labels, list(neutron_set))
 
     x_values = [np.asarray(primaries["primary_x_mm"][neutron_mask], dtype=float)]
@@ -354,16 +282,12 @@ def _projection_axes(plane: str) -> tuple[str, str]:
 def photon_creation_delays_ns(hdf5_path: str | Path) -> np.ndarray:
     """Return finite non-negative photon creation delays in nanoseconds."""
 
-    primaries = _read_structured_dataset(hdf5_path, "primaries")
-    photons = _read_structured_dataset(hdf5_path, "photons")
+    primaries = read_structured_dataset(hdf5_path, "primaries")
+    photons = read_structured_dataset(hdf5_path, "photons")
     primary_required = {"gun_call_id", "primary_track_id"}
     photon_required = {"gun_call_id", "primary_track_id", "photon_creation_time_ns"}
-    if not primary_required.issubset(set(primaries.dtype.names or ())):
-        raise KeyError(
-            f"/primaries is missing required fields: {sorted(primary_required)}"
-        )
-    if not photon_required.issubset(set(photons.dtype.names or ())):
-        raise KeyError(f"/photons is missing required fields: {sorted(photon_required)}")
+    require_fields(primaries, primary_required, dataset_name="primaries")
+    require_fields(photons, photon_required, dataset_name="photons")
 
     key_dtype = np.dtype(
         [
@@ -428,7 +352,7 @@ def secondary_track_lengths_by_species_mm(
 ) -> dict[str, np.ndarray]:
     """Return secondary origin-to-end lengths grouped by species."""
 
-    secondaries = _read_structured_dataset(hdf5_path, "secondaries")
+    secondaries = read_structured_dataset(hdf5_path, "secondaries")
     required = {
         "secondary_species",
         "secondary_origin_x_mm",
@@ -438,10 +362,9 @@ def secondary_track_lengths_by_species_mm(
         SECONDARY_END_Y_FIELD,
         SECONDARY_END_Z_FIELD,
     }
-    if not required.issubset(set(secondaries.dtype.names or ())):
-        raise KeyError(f"/secondaries is missing required fields: {sorted(required)}")
+    require_fields(secondaries, required, dataset_name="secondaries")
 
-    labels = _decode_species(secondaries["secondary_species"])
+    labels = decode_species(secondaries["secondary_species"])
     delta_x_mm = np.asarray(secondaries[SECONDARY_END_X_FIELD], dtype=float) - np.asarray(
         secondaries["secondary_origin_x_mm"],
         dtype=float,
@@ -675,12 +598,11 @@ def neutron_hits_to_image(
 ) -> tuple[Figure, Axes]:
     """Plot primary neutron hit positions (`/primaries`) as a 2D image."""
 
-    primaries = _read_structured_dataset(hdf5_path, "primaries")
+    primaries = read_structured_dataset(hdf5_path, "primaries")
     required = {"primary_species", "primary_x_mm", "primary_y_mm"}
-    if not required.issubset(set(primaries.dtype.names or ())):
-        raise KeyError(f"/primaries is missing required fields: {sorted(required)}")
+    require_fields(primaries, required, dataset_name="primaries")
 
-    labels = _decode_species(primaries["primary_species"])
+    labels = decode_species(primaries["primary_species"])
     neutron_set = {label.lower() for label in neutron_labels}
     mask = np.isin(labels, list(neutron_set))
 
@@ -723,10 +645,9 @@ def photon_origins_to_image(
     3. legacy shared-data range (`shared_range=True`)
     """
 
-    photons = _read_structured_dataset(hdf5_path, "photons")
+    photons = read_structured_dataset(hdf5_path, "photons")
     required = {"photon_origin_x_mm", "photon_origin_y_mm"}
-    if not required.issubset(set(photons.dtype.names or ())):
-        raise KeyError(f"/photons is missing required fields: {sorted(required)}")
+    require_fields(photons, required, dataset_name="photons")
 
     x_mm = np.asarray(photons["photon_origin_x_mm"], dtype=float)
     y_mm = np.asarray(photons["photon_origin_y_mm"], dtype=float)
@@ -774,10 +695,9 @@ def photon_exit_to_image(
     3. legacy shared-data range (`shared_range=True`)
     """
 
-    photons = _read_structured_dataset(hdf5_path, "photons")
+    photons = read_structured_dataset(hdf5_path, "photons")
     required = {PHOTON_SCINT_EXIT_X_FIELD, PHOTON_SCINT_EXIT_Y_FIELD}
-    if not required.issubset(set(photons.dtype.names or ())):
-        raise KeyError(f"/photons is missing required fields: {sorted(required)}")
+    require_fields(photons, required, dataset_name="photons")
 
     x_mm = np.asarray(photons[PHOTON_SCINT_EXIT_X_FIELD], dtype=float)
     y_mm = np.asarray(photons[PHOTON_SCINT_EXIT_Y_FIELD], dtype=float)
@@ -818,10 +738,9 @@ def optical_interface_photons_to_image(
 ) -> tuple[Figure, Axes]:
     """Plot optical-interface photon hits (`/photons`) as a 2D image."""
 
-    photons = _read_structured_dataset(hdf5_path, "photons")
+    photons = read_structured_dataset(hdf5_path, "photons")
     required = {"optical_interface_hit_x_mm", "optical_interface_hit_y_mm"}
-    if not required.issubset(set(photons.dtype.names or ())):
-        raise KeyError(f"/photons is missing required fields: {sorted(required)}")
+    require_fields(photons, required, dataset_name="photons")
 
     mask = np.ones(len(photons), dtype=bool)
     if (
@@ -859,19 +778,15 @@ def intensifier_photons_to_image(
 ) -> tuple[Figure, Axes]:
     """Plot transported intensifier-plane photon hits (`/transported_photons`)."""
 
-    transported, file_attrs = _read_structured_dataset_with_file_attrs(
+    transported, file_attrs = read_structured_dataset_with_file_attrs(
         hdf5_path,
         "transported_photons",
     )
     required = {"intensifier_hit_x_mm", "intensifier_hit_y_mm"}
+    require_fields(transported, required, dataset_name="transported_photons")
     transported_names = set(transported.dtype.names or ())
-    if not required.issubset(transported_names):
-        raise KeyError(
-            "/transported_photons is missing required fields: "
-            f"{sorted(required)}"
-        )
 
-    screen = _intensifier_input_screen_from_attrs(file_attrs)
+    screen = intensifier_input_screen_from_attrs(file_attrs)
     xy_range = None
     if screen is not None:
         center_x_mm, center_y_mm, diameter_mm = screen
@@ -1055,8 +970,8 @@ def event_recoil_paths_to_image(
 ) -> tuple[Figure, Axes]:
     """Plot recoil paths and linked photon origins for one event in 2D."""
 
-    secondaries = _read_structured_dataset(hdf5_path, "secondaries")
-    photons = _read_structured_dataset(hdf5_path, "photons")
+    secondaries = read_structured_dataset(hdf5_path, "secondaries")
+    photons = read_structured_dataset(hdf5_path, "photons")
     secondary_required = {
         "gun_call_id",
         "secondary_track_id",
@@ -1075,12 +990,8 @@ def event_recoil_paths_to_image(
         "photon_origin_y_mm",
         "photon_origin_z_mm",
     }
-    if not secondary_required.issubset(set(secondaries.dtype.names or ())):
-        raise KeyError(
-            f"/secondaries is missing required fields: {sorted(secondary_required)}"
-        )
-    if not photon_required.issubset(set(photons.dtype.names or ())):
-        raise KeyError(f"/photons is missing required fields: {sorted(photon_required)}")
+    require_fields(secondaries, secondary_required, dataset_name="secondaries")
+    require_fields(photons, photon_required, dataset_name="photons")
 
     end_field_by_axis = {
         "x": SECONDARY_END_X_FIELD,
@@ -1102,7 +1013,7 @@ def event_recoil_paths_to_image(
     colors = _overlay_histogram_colors(len(event_secondaries))
     all_x_mm: list[np.ndarray] = []
     all_y_mm: list[np.ndarray] = []
-    species_labels = _decode_species(event_secondaries["secondary_species"])
+    species_labels = decode_species(event_secondaries["secondary_species"])
     secondary_track_ids = np.asarray(event_secondaries["secondary_track_id"], dtype=np.int32)
     photon_secondary_ids = np.asarray(event_photons["secondary_track_id"], dtype=np.int32)
 
