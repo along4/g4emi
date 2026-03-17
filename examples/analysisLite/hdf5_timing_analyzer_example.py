@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-import sys
 
 import numpy as np
 
-# Ensure repository root is importable when run directly.
-sys.path.append(str(Path(__file__).resolve().parents[2]))
+from example_support import default_output_dir_from_input, ensure_repo_root_on_path  # noqa: E402
 
-from analysis.hdf5Analyzer import (  # noqa: E402
+ensure_repo_root_on_path()
+from analysis.timing import (  # noqa: E402
     ScintillationDecayComponent,
     decay_model_bin_counts,
     fit_photon_creation_delay_histogram,
@@ -61,17 +60,6 @@ def _parse_args() -> argparse.Namespace:
         ),
     )
     return parser.parse_args()
-
-
-def _default_output_dir_from_input(hdf5_path: Path) -> Path:
-    """Infer default analyzer output directory as run-root `plots/`."""
-
-    stage_dir_names = {"simulatedPhotons", "transportedPhotons"}
-    if hdf5_path.parent.name in stage_dir_names:
-        return hdf5_path.parent.parent / "plots"
-    return hdf5_path.parent / "plots"
-
-
 def _load_configured_decay_components(
     sim_config_yaml_path: Path,
 ) -> tuple[str, tuple[ScintillationDecayComponent, ...]]:
@@ -184,7 +172,7 @@ def main() -> None:
     output_dir = (
         args.output_dir.expanduser().resolve()
         if args.output_dir is not None
-        else _default_output_dir_from_input(hdf5_path).resolve()
+        else default_output_dir_from_input(hdf5_path).resolve()
     )
     output_dir.mkdir(parents=True, exist_ok=True)
 

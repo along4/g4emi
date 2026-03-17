@@ -1,4 +1,4 @@
-"""Minimal example for the lightweight HDF5 analyzer.
+"""Minimal example for lightweight spatial analysis from simulation HDF5.
 
 This script demonstrates how to generate quick-look images from a simulation
 HDF5 output file.
@@ -8,12 +8,15 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-import sys
 
-# Ensure repository root is importable when run directly.
-sys.path.append(str(Path(__file__).resolve().parents[2]))
+from example_support import (  # noqa: E402
+    default_output_dir_from_input,
+    ensure_repo_root_on_path,
+    infer_transport_hdf5_path,
+)
 
-from analysis.hdf5Analyzer import (  # noqa: E402
+ensure_repo_root_on_path()
+from analysis.spatial import (  # noqa: E402
     intensifier_photons_to_image,
     neutron_hits_to_image,
     optical_interface_photons_to_image,
@@ -26,7 +29,7 @@ def _parse_args() -> argparse.Namespace:
     """Parse CLI arguments for input/output paths."""
 
     parser = argparse.ArgumentParser(
-        description="Generate lightweight analyzer images from a g4emi HDF5 file."
+        description="Generate lightweight spatial analysis images from a g4emi HDF5 file."
     )
     parser.add_argument(
         "hdf5_path",
@@ -76,28 +79,8 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _infer_transport_hdf5_path(sim_hdf5_path: Path) -> Path | None:
-    """Infer sibling transport HDF5 path from simulated-photons input path."""
-
-    if sim_hdf5_path.parent.name != "simulatedPhotons":
-        return None
-    run_root = sim_hdf5_path.parent.parent
-    suffix = sim_hdf5_path.stem.removeprefix("photon_optical_interface_hits")
-    candidate = run_root / "transportedPhotons" / f"photons_intensifier_hits{suffix}.h5"
-    return candidate if candidate.exists() else None
-
-
-def _default_output_dir_from_input(hdf5_path: Path) -> Path:
-    """Infer default analyzer output directory as run-root `plots/`."""
-
-    stage_dir_names = {"simulatedPhotons", "transportedPhotons"}
-    if hdf5_path.parent.name in stage_dir_names:
-        return hdf5_path.parent.parent / "plots"
-    return hdf5_path.parent / "plots"
-
-
 def main() -> None:
-    """Generate four analyzer images from a sample HDF5 file."""
+    """Generate five quick-look spatial analysis images from one HDF5 file."""
 
     args = _parse_args()
     hdf5_path = args.hdf5_path.expanduser().resolve()
@@ -107,7 +90,7 @@ def main() -> None:
     output_dir = (
         args.output_dir.expanduser().resolve()
         if args.output_dir is not None
-        else _default_output_dir_from_input(hdf5_path).resolve()
+        else default_output_dir_from_input(hdf5_path).resolve()
     )
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -120,7 +103,7 @@ def main() -> None:
     transport_hdf5_path = (
         args.transport_hdf5_path.expanduser().resolve()
         if args.transport_hdf5_path is not None
-        else _infer_transport_hdf5_path(hdf5_path)
+        else infer_transport_hdf5_path(hdf5_path)
     )
     sim_config_yaml_path = (
         args.sim_config_yaml.expanduser().resolve()
