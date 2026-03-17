@@ -18,9 +18,14 @@ from analysis.io import (
     read_structured_dataset_with_file_attrs,
     require_fields,
 )
+from analysis.plotting import (
+    overlay_histogram_colors,
+    plot_histogram_1d,
+    plot_histogram_2d,
+    save_and_maybe_show,
+)
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
-from matplotlib.colors import LogNorm
 from matplotlib.figure import Figure
 from src.common.hdf5_schema import (
     PHOTON_SCINT_EXIT_X_FIELD,
@@ -175,99 +180,6 @@ def _resolve_scintillator_plot_xy_range(
     if shared_range:
         return _shared_xy_range(hdf5_path, neutron_labels)
     return None
-
-
-def _plot_histogram(
-    hist: np.ndarray,
-    x_edges: np.ndarray,
-    y_edges: np.ndarray,
-    *,
-    title: str,
-    cmap: str,
-    log_scale: bool,
-    output_path: str | Path | None,
-    show: bool,
-) -> tuple[Figure, Axes]:
-    """Render histogram image to a matplotlib figure."""
-
-    fig, ax = plt.subplots(figsize=(7, 6))
-
-    norm = None
-    if log_scale and np.any(hist > 0):
-        norm = LogNorm(vmin=1.0, vmax=float(hist.max()))
-
-    image = ax.imshow(
-        hist.T,
-        origin="lower",
-        extent=[x_edges[0], x_edges[-1], y_edges[0], y_edges[-1]],
-        interpolation="nearest",
-        aspect="equal",
-        cmap=cmap,
-        norm=norm,
-    )
-
-    ax.set_title(title)
-    ax.set_xlabel("x (mm)")
-    ax.set_ylabel("y (mm)")
-    fig.colorbar(image, ax=ax, label="counts")
-    fig.tight_layout()
-
-    if output_path is not None:
-        fig.savefig(Path(output_path), dpi=150)
-
-    if show:
-        plt.show()
-
-    return fig, ax
-
-
-def _plot_1d_histogram(
-    values: np.ndarray,
-    bins: int | Sequence[float],
-    *,
-    title: str,
-    x_label: str,
-    log_scale: bool,
-    output_path: str | Path | None,
-    show: bool,
-) -> tuple[Figure, Axes]:
-    """Render a 1D histogram to a matplotlib figure."""
-
-    fig, ax = plt.subplots(figsize=(7, 5))
-    counts, bin_edges = _histogram_counts(values, bins=bins)
-    ax.hist(
-        values,
-        bins=bin_edges,
-        color="#2f5d80",
-        edgecolor="black",
-        linewidth=0.5,
-        alpha=0.8,
-        label="Observed",
-    )
-    ax.set_title(title)
-    ax.set_xlabel(x_label)
-    ax.set_ylabel("counts")
-    if log_scale:
-        ax.set_yscale("log")
-    fig.tight_layout()
-
-    if output_path is not None:
-        fig.savefig(Path(output_path), dpi=150)
-
-    if show:
-        plt.show()
-
-    return fig, ax
-
-
-def _overlay_histogram_colors(count: int) -> list[str]:
-    """Return at least `count` histogram colors from the active style cycle."""
-
-    cycle = plt.rcParams.get("axes.prop_cycle")
-    colors = list(cycle.by_key().get("color", [])) if cycle is not None else []
-    if not colors:
-        colors = ["#4c78a8", "#f58518", "#54a24b", "#e45756", "#72b7b2"]
-    return [colors[index % len(colors)] for index in range(count)]
 
 
 def _projection_axes(plane: str) -> tuple[str, str]:
@@ -611,7 +523,7 @@ def neutron_hits_to_image(
     xy_range = _shared_xy_range(hdf5_path, neutron_labels) if shared_range else None
     hist, x_edges, y_edges = _histogram_image(x_mm, y_mm, bins, xy_range=xy_range)
 
-    return _plot_histogram(
+    return plot_histogram_2d(
         hist,
         x_edges,
         y_edges,
@@ -661,7 +573,7 @@ def photon_origins_to_image(
     )
     hist, x_edges, y_edges = _histogram_image(x_mm, y_mm, bins, xy_range=xy_range)
 
-    return _plot_histogram(
+    return plot_histogram_2d(
         hist,
         x_edges,
         y_edges,
@@ -714,7 +626,7 @@ def photon_exit_to_image(
     )
     hist, x_edges, y_edges = _histogram_image(x_mm, y_mm, bins, xy_range=xy_range)
 
-    return _plot_histogram(
+    return plot_histogram_2d(
         hist,
         x_edges,
         y_edges,
@@ -753,7 +665,7 @@ def optical_interface_photons_to_image(
     y_mm = np.asarray(photons["optical_interface_hit_y_mm"][mask], dtype=float)
     hist, x_edges, y_edges = _histogram_image(x_mm, y_mm, bins)
 
-    return _plot_histogram(
+    return plot_histogram_2d(
         hist,
         x_edges,
         y_edges,
@@ -827,7 +739,7 @@ def intensifier_photons_to_image(
     if out_of_bounds_fraction is not None:
         title = f"{title} (out-of-bounds: {out_of_bounds_fraction:.1%})"
 
-    fig, ax = _plot_histogram(
+    fig, ax = plot_histogram_2d(
         hist,
         x_edges,
         y_edges,
@@ -854,10 +766,7 @@ def intensifier_photons_to_image(
         ax.set_xlim(center_x_mm - radius_mm, center_x_mm + radius_mm)
         ax.set_ylim(center_y_mm - radius_mm, center_y_mm + radius_mm)
 
-    if output_path is not None:
-        fig.savefig(Path(output_path), dpi=150)
-    if show:
-        plt.show()
+    save_and_maybe_show(fig, output_path=output_path, show=show)
 
     return fig, ax
 
@@ -874,9 +783,11 @@ def photon_creation_delay_to_histogram(
 
     delay_array = photon_creation_delays_ns(hdf5_path)
 
-    return _plot_1d_histogram(
+    _, bin_edges = _histogram_counts(delay_array, bins=bins)
+
+    return plot_histogram_1d(
         delay_array,
-        bins=bins,
+        bin_edges=bin_edges,
         title="Photon Creation Delay from Primary Interaction",
         x_label="delay (ns)",
         log_scale=log_scale,
@@ -924,7 +835,7 @@ def secondary_track_lengths_overlay_to_histogram(
         _, bin_edges = _histogram_counts(all_lengths_mm, bins=bins)
 
     fig, ax = plt.subplots(figsize=(8, 5.5))
-    colors = _overlay_histogram_colors(len(grouped_lengths_mm))
+    colors = overlay_histogram_colors(len(grouped_lengths_mm))
     for color, (species, lengths_mm) in zip(
         colors,
         grouped_lengths_mm.items(),
@@ -951,11 +862,7 @@ def secondary_track_lengths_overlay_to_histogram(
     ax.legend()
     fig.tight_layout()
 
-    if output_path is not None:
-        fig.savefig(Path(output_path), dpi=150)
-
-    if show:
-        plt.show()
+    save_and_maybe_show(fig, output_path=output_path, show=show)
 
     return fig, ax
 
@@ -1010,7 +917,7 @@ def event_recoil_paths_to_image(
         raise ValueError(f"No /secondaries rows found for gun_call_id={gun_call_id}.")
 
     fig, ax = plt.subplots(figsize=(7, 6))
-    colors = _overlay_histogram_colors(len(event_secondaries))
+    colors = overlay_histogram_colors(len(event_secondaries))
     all_x_mm: list[np.ndarray] = []
     all_y_mm: list[np.ndarray] = []
     species_labels = decode_species(event_secondaries["secondary_species"])
@@ -1098,11 +1005,7 @@ def event_recoil_paths_to_image(
     ax.legend()
     fig.tight_layout()
 
-    if output_path is not None:
-        fig.savefig(Path(output_path), dpi=150)
-
-    if show:
-        plt.show()
+    save_and_maybe_show(fig, output_path=output_path, show=show)
 
     return fig, ax
 
