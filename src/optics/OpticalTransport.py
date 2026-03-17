@@ -28,8 +28,6 @@ import numpy as np
 try:
     from src.common.logger import ensure_run_logger, get_logger
     from src.config.ConfigIO import (
-        DEFAULT_OUTPUT_FILENAME_BASE,
-        DEFAULT_TRANSPORT_OUTPUT_FILENAME_BASE,
         from_yaml,
         resolve_run_environment_paths,
         simulated_output_filename,
@@ -44,8 +42,6 @@ except ModuleNotFoundError:
     sys.path.append(str(Path(__file__).resolve().parents[2]))
     from src.common.logger import ensure_run_logger, get_logger
     from src.config.ConfigIO import (
-        DEFAULT_OUTPUT_FILENAME_BASE,
-        DEFAULT_TRANSPORT_OUTPUT_FILENAME_BASE,
         from_yaml,
         resolve_run_environment_paths,
         simulated_output_filename,
@@ -55,10 +51,6 @@ except ModuleNotFoundError:
     )
     from src.config.SimConfig import SimConfig
     from src.optics.LensModels import LensModel, resolve_lens_path, resolve_smx_path
-
-
-DEFAULT_TRANSPORT_OUTPUT_FILENAME = f"{DEFAULT_TRANSPORT_OUTPUT_FILENAME_BASE}.h5"
-DEFAULT_INPUT_HDF5_FILENAME = f"{DEFAULT_OUTPUT_FILENAME_BASE}.h5"
 
 _REQUIRED_PHOTON_FIELDS = (
     "gun_call_id",
@@ -891,8 +883,6 @@ def _normalized_direction(
 
 
 __all__ = [
-    "DEFAULT_INPUT_HDF5_FILENAME",
-    "DEFAULT_TRANSPORT_OUTPUT_FILENAME",
     "PhotonTransportTracer",
     "RayOpticsLensTracer",
     "TransportPaths",
