@@ -48,7 +48,7 @@ class IntensifierPlotTests(unittest.TestCase):
                 secondary_track_lengths_by_species_mm,
                 secondary_track_lengths_overlay_to_histogram,
             )
-            import analysis.hdf5Analyzer as analyzer_module
+            import analysis.spatial as spatial_module
             import analysis.timing as timing_module
         except ModuleNotFoundError as exc:
             missing = (getattr(exc, "name", "") or "").lower()
@@ -82,7 +82,7 @@ class IntensifierPlotTests(unittest.TestCase):
         cls.secondary_track_lengths_overlay_to_histogram = staticmethod(
             secondary_track_lengths_overlay_to_histogram
         )
-        cls.analyzer_module = analyzer_module
+        cls.spatial_module = spatial_module
 
     def _write_transport_hdf5(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -296,7 +296,7 @@ class IntensifierPlotTests(unittest.TestCase):
             expected_range = ((-25.0, 25.0), (-10.0, 10.0))
 
             with mock.patch.object(
-                self.analyzer_module,
+                self.spatial_module,
                 "_scintillator_xy_range_from_sim_config",
                 return_value=expected_range,
             ):
