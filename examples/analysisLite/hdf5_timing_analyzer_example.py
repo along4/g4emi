@@ -11,7 +11,7 @@ import numpy as np
 # Ensure repository root is importable when run directly.
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
-from analysis.hdf5Analyzer import (  # noqa: E402
+from analysis.timing import (  # noqa: E402
     ScintillationDecayComponent,
     decay_model_bin_counts,
     fit_photon_creation_delay_histogram,

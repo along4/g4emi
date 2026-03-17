@@ -1,4 +1,4 @@
-"""Unit tests for the lightweight HDF5 analyzer."""
+"""Unit tests for the lightweight analysis modules."""
 
 from __future__ import annotations
 
@@ -35,18 +35,22 @@ class IntensifierPlotTests(unittest.TestCase):
             matplotlib.use("Agg")
             from matplotlib import pyplot as plt
 
-            from analysis.hdf5Analyzer import (
-                ScintillationDecayComponent,
-                decay_model_bin_counts,
-                event_recoil_paths_to_image,
-                fit_photon_creation_delay_histogram,
-                intensifier_photons_to_image,
-                photon_creation_delays_ns,
-                photon_creation_delay_to_histogram,
-                photon_exit_to_image,
-                photon_origins_to_image,
+            from analysis.events import event_recoil_paths_to_image
+            from analysis.secondaries import (
                 secondary_track_lengths_by_species_mm,
                 secondary_track_lengths_overlay_to_histogram,
+            )
+            from analysis.spatial import (
+                intensifier_photons_to_image,
+                photon_exit_to_image,
+                photon_origins_to_image,
+            )
+            from analysis.timing import (
+                ScintillationDecayComponent,
+                decay_model_bin_counts,
+                fit_photon_creation_delay_histogram,
+                photon_creation_delays_ns,
+                photon_creation_delay_to_histogram,
             )
             import analysis.spatial as spatial_module
             import analysis.timing as timing_module

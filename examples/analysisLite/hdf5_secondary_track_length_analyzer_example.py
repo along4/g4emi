@@ -9,7 +9,7 @@ import sys
 # Ensure repository root is importable when run directly.
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
-from analysis.hdf5Analyzer import (  # noqa: E402
+from analysis.secondaries import (  # noqa: E402
     secondary_track_lengths_by_species_mm,
     secondary_track_lengths_overlay_to_histogram,
 )

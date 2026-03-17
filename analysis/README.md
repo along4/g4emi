@@ -1,4 +1,4 @@
-# Lightweight HDF5 Analyzer
+# Lightweight Analysis Helpers
 
 This repository is primarily simulation-focused. The core scope is generating
 Geant4 outputs (HDF5), not providing a full analysis framework.
@@ -6,11 +6,8 @@ Geant4 outputs (HDF5), not providing a full analysis framework.
 Users are expected to build their own analysis pipelines for their specific
 science and workflow needs.
 
-To make onboarding easier, this folder includes a lightweight demonstration
-module: `hdf5Analyzer.py`.
-
-The current implementation still lives in one file, but the target package
-layout for cleanup is:
+To make onboarding easier, this folder includes lightweight demonstration
+analysis helpers organized by domain:
 
 - `analysis/io.py`: HDF5 reads, dataset access, shared validation
 - `analysis/plotting.py`: shared matplotlib rendering helpers
@@ -19,10 +16,6 @@ layout for cleanup is:
 - `analysis/secondaries.py`: secondary track-length analysis
 - `analysis/events.py`: event-level recoil-path visualization
 - `analysis/config_adapter.py`: SimConfig-to-analysis adapters
-
-`analysis/hdf5Analyzer.py` is still the active implementation during the split,
-but new cleanup work should target the focused modules above rather than adding
-more surface area to the monolith.
 
 ## Why this exists
 
@@ -55,7 +48,7 @@ exponential fit against histogram bin counts and returns fitted decay
 constants and yield fractions. This is intended as a lightweight exploratory
 tool, not a full statistical inference pipeline.
 
-The analyzer targets the current writer schema defined by:
+These helpers target the current writer schema defined by:
 - `sim/include/structures.hh`
 - `sim/src/SimIO.cc`
 - `src/optics/OpticalTransport.py`

@@ -9,7 +9,7 @@ import sys
 # Ensure repository root is importable when run directly.
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
-from analysis.hdf5Analyzer import event_recoil_paths_to_image  # noqa: E402
+from analysis.events import event_recoil_paths_to_image  # noqa: E402
 
 
 def _parse_args() -> argparse.Namespace:

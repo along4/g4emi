@@ -131,13 +131,7 @@ pixi run g4emi data/ScintCatalog_example/macros/ScintCatalog_example.mac
 This repo is simulation-first. Users are encouraged to implement analysis code
 tailored to their own workflows.
 
-A lightweight demonstration analyzer is provided in:
-
-```text
-analysis/hdf5Analyzer.py
-```
-
-Design notes and intent are documented in:
+A lightweight set of demonstration analysis helpers is documented in:
 
 ```text
 analysis/README.md

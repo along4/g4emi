@@ -13,7 +13,7 @@ import sys
 # Ensure repository root is importable when run directly.
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
-from analysis.hdf5Analyzer import (  # noqa: E402
+from analysis.spatial import (  # noqa: E402
     intensifier_photons_to_image,
     neutron_hits_to_image,
     optical_interface_photons_to_image,
