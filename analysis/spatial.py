@@ -1,18 +1,4 @@
-"""Spatial quick-look analyzers for primary/photon/intensifier views.
-
-This module should own:
-- neutron hit image generation
-- photon origin image generation
-- photon exit image generation
-- optical interface hit image generation
-- intensifier hit image generation
-- shared XY-range policy for spatial plots
-
-This module should not own:
-- generic plotting primitives
-- timing fits
-- event recoil visualization
-"""
+"""Spatial quick-look plotting helpers for simulation and transport outputs."""
 
 from __future__ import annotations
 

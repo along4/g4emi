@@ -1,4 +1,4 @@
-"""Minimal example for the lightweight HDF5 analyzer.
+"""Minimal example for lightweight spatial analysis from simulation HDF5.
 
 This script demonstrates how to generate quick-look images from a simulation
 HDF5 output file.
@@ -29,7 +29,7 @@ def _parse_args() -> argparse.Namespace:
     """Parse CLI arguments for input/output paths."""
 
     parser = argparse.ArgumentParser(
-        description="Generate lightweight analyzer images from a g4emi HDF5 file."
+        description="Generate lightweight spatial analysis images from a g4emi HDF5 file."
     )
     parser.add_argument(
         "hdf5_path",
@@ -77,8 +77,10 @@ def _parse_args() -> argparse.Namespace:
         ),
     )
     return parser.parse_args()
+
+
 def main() -> None:
-    """Generate four analyzer images from a sample HDF5 file."""
+    """Generate five quick-look spatial analysis images from one HDF5 file."""
 
     args = _parse_args()
     hdf5_path = args.hdf5_path.expanduser().resolve()

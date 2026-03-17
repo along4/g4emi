@@ -1,15 +1,4 @@
-"""Secondary-particle analysis helpers.
-
-This module should own:
-- secondary track-length extraction
-- grouping by secondary species
-- secondary overlay histogram rendering
-
-This module should not own:
-- timing fits
-- spatial quick-look plots
-- event recoil visualization
-"""
+"""Secondary-particle analysis helpers for track-length summaries and plots."""
 
 from __future__ import annotations
 
