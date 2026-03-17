@@ -85,6 +85,7 @@ def run(
     config: SimConfig,
     *,
     dry_run: bool = False,
+    log_filename: str | Path | None = None,
 ) -> subprocess.CompletedProcess[str] | None:
     """Launch a simulation from validated config.
 
@@ -122,6 +123,8 @@ def run(
 
     last_progress = 0
     displayed_progress = False
+    if log_filename is not None:
+        log_path = Path(log_filename)
     with log_path.open("a", encoding="utf-8") as log_file:
         with subprocess.Popen(
             command,
@@ -167,12 +170,16 @@ def run_simulation(
     config: SimConfig,
     *,
     dry_run: bool = False,
+    log_filename: str | Path | None = None,
 ) -> subprocess.CompletedProcess[str] | None:
     """Prepare and launch one simulation from validated config."""
 
     prepare_simulation_run(config)
-    completed = run(config, dry_run=dry_run)
-    logger = get_logger()
+    completed = run(config, dry_run=dry_run, log_filename=log_filename)
+    if log_filename is not None:
+        logger = get_logger(filename=str(log_filename))
+    else:
+        logger = get_logger()
     if completed is None:
         logger.info("Dry run requested; skipping g4emi launch.")
         return None
