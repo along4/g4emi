@@ -36,7 +36,7 @@ class AnalysisTestCase(unittest.TestCase):
             missing = (getattr(exc, "name", "") or "").lower()
             if missing in {"h5py", "numpy", "matplotlib"}:
                 raise unittest.SkipTest(
-                    f"Missing dependency for analyzer tests: {exc}. "
+                    f"Missing dependency for analysis tests: {exc}. "
                     "Run in the project environment (for example: pixi run test-python)."
                 ) from exc
             raise
