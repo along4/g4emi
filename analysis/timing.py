@@ -54,7 +54,7 @@ def photon_creation_delays_ns(hdf5_path: str | Path) -> np.ndarray:
 
     primaries = read_structured_dataset(hdf5_path, "primaries")
     photons = read_structured_dataset(hdf5_path, "photons")
-    primary_required = {"gun_call_id", "primary_track_id"}
+    primary_required = {"gun_call_id", "primary_track_id", PRIMARY_INTERACTION_TIME_FIELD}
     photon_required = {"gun_call_id", "primary_track_id", "photon_creation_time_ns"}
     require_fields(primaries, primary_required, dataset_name="primaries")
     require_fields(photons, photon_required, dataset_name="photons")
