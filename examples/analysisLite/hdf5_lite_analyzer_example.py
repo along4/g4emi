@@ -31,7 +31,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "hdf5_path",
         type=Path,
-        help="Path to input HDF5 file (e.g. data/.../photon_optical_interface_hits.h5).",
+        help="Path to input HDF5 file (e.g. data/.../photon_optical_interface_hits_0000.h5).",
     )
     parser.add_argument(
         "--output-dir",
@@ -49,7 +49,7 @@ def _parse_args() -> argparse.Namespace:
         help=(
             "Optional transport HDF5 path containing /transported_photons. "
             "If omitted, tries sibling path "
-            "data/<run>/transportedPhotons/photons_intensifier_hits.h5."
+            "data/<run>/transportedPhotons/photons_intensifier_hits_0000.h5."
         ),
     )
     parser.add_argument(
@@ -82,7 +82,8 @@ def _infer_transport_hdf5_path(sim_hdf5_path: Path) -> Path | None:
     if sim_hdf5_path.parent.name != "simulatedPhotons":
         return None
     run_root = sim_hdf5_path.parent.parent
-    candidate = run_root / "transportedPhotons" / "photons_intensifier_hits.h5"
+    suffix = sim_hdf5_path.stem.removeprefix("photon_optical_interface_hits")
+    candidate = run_root / "transportedPhotons" / f"photons_intensifier_hits{suffix}.h5"
     return candidate if candidate.exists() else None
 
 

@@ -190,7 +190,7 @@ class MacroCommandGenerationTests(unittest.TestCase):
 
             expected = [
                 f"/output/path {self._resolve_run_environment_directory(config, 'data')}",
-                "/output/filename photon_optical_interface_hits",
+                "/output/filename photon_optical_interface_hits_0000",
                 "/output/runname unit_macro_test",
                 "/scintillator/geom/material EJ200",
                 "/scintillator/geom/scintX 100 mm",
@@ -250,6 +250,18 @@ class MacroCommandGenerationTests(unittest.TestCase):
 
             written_lines = macro_path.read_text(encoding="utf-8").splitlines()
             self.assertEqual(written_lines, expected)
+
+    def test_resolve_run_environment_paths_suffixes_macro_filename_by_sub_run(self) -> None:
+        """Canonical macro filenames should include the zero-padded sub-run suffix."""
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            yaml_path = self._write_yaml_config(tmp_path)
+
+            config = self._from_yaml(yaml_path)
+            macro_path = self._resolve_run_environment_paths(config).macro_file
+
+            self.assertEqual(macro_path.name, "unit_macro_test_0000.mac")
 
     def test_append_macro_line_appends_single_line(self) -> None:
         """append_macro_line should append one normalized line per call."""
@@ -311,6 +323,43 @@ class MacroCommandGenerationTests(unittest.TestCase):
             imported = self._from_macro(macro_path, template=config)
             reconstructed = self._macro_commands(imported)
             self.assertEqual(reconstructed, expected)
+
+    def test_from_macro_recovers_sub_run_number_from_macro_and_output_filename(self) -> None:
+        """Macro import should recover run ID and sub-run number from suffixed artifacts."""
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            macro_path = tmp_path / "import_case_0042.mac"
+            macro_path.write_text(
+                "\n".join(
+                    [
+                        "/output/path data",
+                        "/output/filename photon_optical_interface_hits_0042",
+                        "/output/runname import_case",
+                        "/scintillator/geom/material EJ200",
+                        "/scintillator/geom/scintX 100 mm",
+                        "/scintillator/geom/scintY 100 mm",
+                        "/scintillator/geom/scintZ 20 mm",
+                        "/scintillator/geom/posX 0 mm",
+                        "/scintillator/geom/posY 0 mm",
+                        "/scintillator/geom/posZ 0 mm",
+                        "/optical_interface/geom/sizeX 60.55 mm",
+                        "/optical_interface/geom/sizeY 60.55 mm",
+                        "/optical_interface/geom/thickness 0.1 mm",
+                        "/optical_interface/geom/posX 0 mm",
+                        "/optical_interface/geom/posY 0 mm",
+                        "/optical_interface/geom/posZ 210.05 mm",
+                        "/run/initialize",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            imported = self._from_macro(macro_path)
+
+            self.assertEqual(imported.metadata.run_environment.simulation_run_id, "import_case")
+            self.assertEqual(imported.metadata.run_environment.sub_run_number, 42)
 
     def test_from_macro_without_mask_command_disables_mask_command(self) -> None:
         """Missing mask command should keep maskRadius at disabled default."""

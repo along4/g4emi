@@ -20,6 +20,7 @@ from src.config.ConfigIO import (  # noqa: E402
     from_yaml,
     geometry_commands,
     resolve_run_environment_paths,
+    simulated_output_filename,
     write_macro,
 )
 
@@ -101,7 +102,7 @@ def main() -> None:
     logger.info(f"Output stage directory: {paths.simulated_photons}")
     logger.info(
         "Expected HDF5 target: "
-        f"{paths.simulated_photons / 'photon_optical_interface_hits.h5'}"
+        f"{paths.simulated_photons / simulated_output_filename(config)}"
     )
     logger.info("Start Geant4 interactively:")
     logger.info("  pixi run g4emi")

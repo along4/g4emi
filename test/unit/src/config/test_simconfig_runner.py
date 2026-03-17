@@ -110,9 +110,10 @@ class SimConfigRunnerTests(unittest.TestCase):
         config = self.SimConfig.model_validate(payload)
 
         self.assertEqual(config.runner.binary, "g4emi")
-        self.assertTrue(config.runner.show_progress)
+        self.assertFalse(config.runner.show_progress)
         self.assertTrue(config.runner.verify_output)
         self.assertTrue(config.optical.show_transport_progress)
+        self.assertEqual(config.metadata.run_environment.sub_run_number, 0)
 
     def test_runner_accepts_verify_output_alias_and_serializes_by_alias(self) -> None:
         payload = self._base_payload()

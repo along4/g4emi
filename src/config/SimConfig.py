@@ -567,6 +567,7 @@ class RunEnvironmentConfig(StrictModel):
 
     Default layout policy:
     - `SimulationRunID`: "example"
+    - `SubRunNumber`: `0`
     - `WorkingDirectory`: `data/`
     - `MacroDirectory`: `macros/`
     - `LogDirectory`: `logs/`
@@ -577,6 +578,7 @@ class RunEnvironmentConfig(StrictModel):
     """
 
     simulation_run_id: str = Field(alias="SimulationRunID", default="example", min_length=1)
+    sub_run_number: int = Field(alias="SubRunNumber", default=0, ge=0, le=9999)
     working_directory: str | None = Field(default=None, alias="WorkingDirectory")
     macro_directory: str | None = Field(default=None, alias="MacroDirectory")
     log_directory: str | None = Field(default=None, alias="LogDirectory")
@@ -694,10 +696,12 @@ class RunnerConfig(StrictModel):
     These values are intentionally separate from :class:`SimulationConfig`,
     which maps to GEANT4 macro commands. `RunnerConfig` captures how Python
     should launch and verify a simulation that has already been configured.
+    The runner launches GEANT4 in batch mode via a macro file, so the default
+    terminal progress bar is off unless explicitly enabled.
     """
 
     binary: str = Field(min_length=1, default="g4emi")
-    show_progress: bool = Field(default=True, alias="showProgress")
+    show_progress: bool = Field(default=False, alias="showProgress")
     verify_output: bool = Field(default=True, alias="verifyOutput")
 
     @field_validator("binary")

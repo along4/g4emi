@@ -79,6 +79,7 @@ class OpticalTransportTests(unittest.TestCase):
         self,
         working_directory: Path,
         *,
+        sub_run_number: int = 0,
         transport_chunk_rows: int | str | None = None,
         transport_chunk_target_mib: float | None = None,
         include_intensifier_screen: bool = True,
@@ -155,6 +156,7 @@ class OpticalTransportTests(unittest.TestCase):
                 "description": "Optical transport test payload.",
                 "RunEnvironment": {
                     "SimulationRunID": "transport_unit_test",
+                    "SubRunNumber": sub_run_number,
                     "WorkingDirectory": str(working_directory),
                     "MacroDirectory": "macros",
                     "LogDirectory": "logs",
@@ -248,10 +250,23 @@ class OpticalTransportTests(unittest.TestCase):
             config = self._build_config(Path(tmp_dir))
             resolved = self.resolve_transport_paths(config)
 
-            self.assertTrue(str(resolved.input_hdf5).endswith("photon_optical_interface_hits.h5"))
-            self.assertTrue(str(resolved.output_hdf5).endswith("photons_intensifier_hits.h5"))
+            self.assertTrue(str(resolved.input_hdf5).endswith("photon_optical_interface_hits_0000.h5"))
+            self.assertTrue(str(resolved.output_hdf5).endswith("photons_intensifier_hits_0000.h5"))
             self.assertIn("simulatedPhotons", str(resolved.input_hdf5))
             self.assertIn("transportedPhotons", str(resolved.output_hdf5))
+
+    def test_resolve_transport_paths_preserves_sub_run_suffix_from_input_filename(self) -> None:
+        """Explicit transport input filename should drive the default output suffix."""
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = self._build_config(Path(tmp_dir), sub_run_number=2)
+            resolved = self.resolve_transport_paths(
+                config,
+                input_filename="photon_optical_interface_hits_0042.h5",
+            )
+
+            self.assertTrue(str(resolved.input_hdf5).endswith("photon_optical_interface_hits_0042.h5"))
+            self.assertTrue(str(resolved.output_hdf5).endswith("photons_intensifier_hits_0042.h5"))
 
     def test_transport_from_sim_config_writes_linked_secondary_hdf5(self) -> None:
         """Transport should preserve linkage IDs and emit NaNs for misses."""

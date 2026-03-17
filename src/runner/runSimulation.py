@@ -9,18 +9,20 @@ import subprocess
 import sys
 
 try:
-    from src.common.logger import resolve_run_log_path
+    from src.common.logger import get_logger, resolve_run_log_path
+    from src.config.ConfigIO import prepare_simulation_run
     from src.config.ConfigIO import (
-        DEFAULT_OUTPUT_FILENAME_BASE,
         resolve_run_environment_paths,
+        simulated_output_filename,
     )
     from src.config.SimConfig import SimConfig
 except ModuleNotFoundError:
     sys.path.append(str(Path(__file__).resolve().parents[2]))
-    from src.common.logger import resolve_run_log_path
+    from src.common.logger import get_logger, resolve_run_log_path
+    from src.config.ConfigIO import prepare_simulation_run
     from src.config.ConfigIO import (
-        DEFAULT_OUTPUT_FILENAME_BASE,
         resolve_run_environment_paths,
+        simulated_output_filename,
     )
     from src.config.SimConfig import SimConfig
 
@@ -83,6 +85,7 @@ def run(
     config: SimConfig,
     *,
     dry_run: bool = False,
+    log_filename: str | Path | None = None,
 ) -> subprocess.CompletedProcess[str] | None:
     """Launch a simulation from validated config.
 
@@ -95,9 +98,7 @@ def run(
 
     run_paths = resolve_run_environment_paths(config)
     macro_path = run_paths.macro_file.resolve()
-    output_hdf5 = (
-        run_paths.simulated_photons / f"{DEFAULT_OUTPUT_FILENAME_BASE}.h5"
-    ).resolve()
+    output_hdf5 = (run_paths.simulated_photons / simulated_output_filename(config)).resolve()
 
     if not macro_path.exists():
         raise FileNotFoundError(
@@ -122,6 +123,8 @@ def run(
 
     last_progress = 0
     displayed_progress = False
+    if log_filename is not None:
+        log_path = Path(log_filename)
     with log_path.open("a", encoding="utf-8") as log_file:
         with subprocess.Popen(
             command,
@@ -160,4 +163,25 @@ def run(
             "Simulation finished but expected HDF5 was not found: "
             f"{output_hdf5}"
         )
+    return completed
+
+
+def run_simulation(
+    config: SimConfig,
+    *,
+    dry_run: bool = False,
+    log_filename: str | Path | None = None,
+) -> subprocess.CompletedProcess[str] | None:
+    """Prepare and launch one simulation from validated config."""
+
+    prepare_simulation_run(config)
+    completed = run(config, dry_run=dry_run, log_filename=log_filename)
+    if log_filename is not None:
+        logger = get_logger(filename=str(log_filename))
+    else:
+        logger = get_logger()
+    if completed is None:
+        logger.info("Dry run requested; skipping g4emi launch.")
+        return None
+    logger.info("Simulation finished.")
     return completed

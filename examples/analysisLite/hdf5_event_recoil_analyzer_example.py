@@ -21,7 +21,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "hdf5_path",
         type=Path,
-        help="Path to input HDF5 file (e.g. data/.../photon_optical_interface_hits.h5).",
+        help="Path to input HDF5 file (e.g. data/.../photon_optical_interface_hits_0000.h5).",
     )
     parser.add_argument(
         "gun_call_id",

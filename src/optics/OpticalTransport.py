@@ -28,9 +28,11 @@ import numpy as np
 try:
     from src.common.logger import ensure_run_logger, get_logger
     from src.config.ConfigIO import (
-        DEFAULT_OUTPUT_FILENAME_BASE,
         from_yaml,
         resolve_run_environment_paths,
+        simulated_output_filename,
+        split_sub_run_suffix,
+        transport_output_filename_for_sub_run,
         validate_run_environment,
     )
     from src.config.SimConfig import SimConfig
@@ -40,17 +42,15 @@ except ModuleNotFoundError:
     sys.path.append(str(Path(__file__).resolve().parents[2]))
     from src.common.logger import ensure_run_logger, get_logger
     from src.config.ConfigIO import (
-        DEFAULT_OUTPUT_FILENAME_BASE,
         from_yaml,
         resolve_run_environment_paths,
+        simulated_output_filename,
+        split_sub_run_suffix,
+        transport_output_filename_for_sub_run,
         validate_run_environment,
     )
     from src.config.SimConfig import SimConfig
     from src.optics.LensModels import LensModel, resolve_lens_path, resolve_smx_path
-
-
-DEFAULT_TRANSPORT_OUTPUT_FILENAME = "photons_intensifier_hits.h5"
-DEFAULT_INPUT_HDF5_FILENAME = f"{DEFAULT_OUTPUT_FILENAME_BASE}.h5"
 
 _REQUIRED_PHOTON_FIELDS = (
     "gun_call_id",
@@ -102,6 +102,22 @@ def _write_transport_progress(processed: int, total: int) -> None:
     if clamped >= total:
         sys.stderr.write("\n")
         sys.stderr.flush()
+
+
+def _transport_output_filename_for_input(
+    input_filename: str | Path,
+    *,
+    fallback_sub_run_number: int,
+) -> str:
+    """Return transport output filename that preserves the input sub-run suffix."""
+
+    _, parsed_sub_run_number = split_sub_run_suffix(Path(input_filename).stem)
+    sub_run_number = (
+        fallback_sub_run_number
+        if parsed_sub_run_number is None
+        else parsed_sub_run_number
+    )
+    return transport_output_filename_for_sub_run(sub_run_number)
 
 
 class PhotonTransportTracer(Protocol):
@@ -377,8 +393,8 @@ class RayOpticsLensTracer:
 def resolve_transport_paths(
     config: SimConfig,
     *,
-    input_filename: str = DEFAULT_INPUT_HDF5_FILENAME,
-    output_filename: str = DEFAULT_TRANSPORT_OUTPUT_FILENAME,
+    input_filename: str | None = None,
+    output_filename: str | None = None,
 ) -> TransportPaths:
     """Resolve default transport input/output HDF5 paths from `SimConfig`."""
 
@@ -388,9 +404,22 @@ def resolve_transport_paths(
         create_directories=True,
     )
     run_paths = resolve_run_environment_paths(config)
+    resolved_input_filename = (
+        simulated_output_filename(config)
+        if input_filename is None
+        else input_filename
+    )
+    resolved_output_filename = (
+        _transport_output_filename_for_input(
+            resolved_input_filename,
+            fallback_sub_run_number=config.metadata.run_environment.sub_run_number,
+        )
+        if output_filename is None
+        else output_filename
+    )
     return TransportPaths(
-        input_hdf5=(run_paths.simulated_photons / input_filename).resolve(),
-        output_hdf5=(run_paths.transported_photons / output_filename).resolve(),
+        input_hdf5=(run_paths.simulated_photons / resolved_input_filename).resolve(),
+        output_hdf5=(run_paths.transported_photons / resolved_output_filename).resolve(),
     )
 
 
@@ -432,19 +461,24 @@ def transport_from_sim_config(
 
     assumptions = config.optical.transport_assumptions
     input_screen = _resolve_intensifier_input_screen(config)
-    defaults = resolve_transport_paths(config)
     run_paths = resolve_run_environment_paths(config)
     log_path = ensure_run_logger(config)
     logger = get_logger()
     input_path = (
         Path(input_hdf5_path).resolve()
         if input_hdf5_path is not None
-        else defaults.input_hdf5
+        else (run_paths.simulated_photons / simulated_output_filename(config)).resolve()
     )
     output_path = (
         Path(output_hdf5_path).resolve()
         if output_hdf5_path is not None
-        else defaults.output_hdf5
+        else (
+            run_paths.transported_photons
+            / _transport_output_filename_for_input(
+                input_path.name,
+                fallback_sub_run_number=config.metadata.run_environment.sub_run_number,
+            )
+        ).resolve()
     )
 
     if input_path == output_path:
@@ -849,8 +883,6 @@ def _normalized_direction(
 
 
 __all__ = [
-    "DEFAULT_INPUT_HDF5_FILENAME",
-    "DEFAULT_TRANSPORT_OUTPUT_FILENAME",
     "PhotonTransportTracer",
     "RayOpticsLensTracer",
     "TransportPaths",
