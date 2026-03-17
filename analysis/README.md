@@ -15,7 +15,9 @@ analysis helpers organized by domain:
 - `analysis/timing.py`: photon creation delay extraction and timing fits
 - `analysis/secondaries.py`: secondary track-length analysis
 - `analysis/events.py`: event-level recoil-path visualization
-- `analysis/config_adapter.py`: SimConfig-to-analysis adapters
+
+The user-facing entry points live in the domain modules above. `io.py` and
+`plotting.py` are lower-level support modules.
 
 ## Why this exists
 
@@ -25,15 +27,27 @@ analysis helpers organized by domain:
 
 ## What it provides
 
+Spatial helpers in `analysis/spatial.py`:
 - `neutron_hits_to_image(...)`
 - `photon_origins_to_image(...)`
 - `photon_exit_to_image(...)`
 - `optical_interface_photons_to_image(...)`
 - `intensifier_photons_to_image(...)`
+
+Timing helpers in `analysis/timing.py`:
+- `photon_creation_delays_ns(...)`
 - `photon_creation_delay_to_histogram(...)`
+- `fit_photon_creation_delay_histogram(...)`
+
+Secondary-track helpers in `analysis/secondaries.py`:
+- `secondary_track_lengths_by_species_mm(...)`
+- `secondary_track_lengths_overlay_to_histogram(...)`
+
+Event helper in `analysis/events.py`:
+- `event_recoil_paths_to_image(...)`
 
 These functions create 2D histogram images (`x` vs `y`) from the relevant
-HDF5 datasets, plus a 1D timing histogram for photon creation delay.
+HDF5 datasets, plus timing, secondary-track, and event-level quick-look tools.
 
 `photon_creation_delay_to_histogram(...)` computes:
 
@@ -77,6 +91,12 @@ Quick-look spatial example:
 Timing-focused example:
 - `examples/analysisLite/hdf5_timing_analyzer_example.py`
 
+Secondary-track example:
+- `examples/analysisLite/hdf5_secondary_track_length_analyzer_example.py`
+
+Event-level recoil example:
+- `examples/analysisLite/hdf5_event_recoil_analyzer_example.py`
+
 Run from repo root:
 
 ```bash
@@ -118,3 +138,35 @@ pixi run python examples/analysisLite/hdf5_timing_analyzer_example.py \
 When `--sim-config-yaml` is provided, the script loads the active 3-component
 profile selected for the configured source particle, overlays that model on
 the histogram, and uses it as the initial guess for fitting.
+
+Run the secondary-track example from repo root:
+
+```bash
+pixi run python examples/analysisLite/hdf5_secondary_track_length_analyzer_example.py \
+  data/CanonEF50mmf1p0L_run/simulatedPhotons/photon_optical_interface_hits.h5
+```
+
+This writes `secondary_track_lengths_overlay.png` to the same default output
+directory.
+
+Run the event-level recoil example from repo root:
+
+```bash
+pixi run python examples/analysisLite/hdf5_event_recoil_analyzer_example.py \
+  data/CanonEF50mmf1p0L_run/simulatedPhotons/photon_optical_interface_hits.h5 \
+  7 --plane xy
+```
+
+This writes `event_<gun_call_id>_<plane>_recoil_paths.png` to the same default
+output directory.
+
+## Tests
+
+Analysis unit tests are split by feature area under `test/unit/analysis/`.
+Run them from repo root with:
+
+```bash
+python -m unittest discover -s test/unit/analysis -p "test_*.py"
+```
+
+If using pixi, `pixi run test-python` also includes them.

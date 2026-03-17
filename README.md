@@ -1,311 +1,60 @@
-# g4emi: Scintillator + Neutron GPS (Geant4)
+# g4emi
 
-This repository contains:
+`g4emi` is a Geant4-based simulation for scintillator and neutron-GPS workflows
+with optical-photon recording at an optical-interface plane.
 
-- A Geant4 simulation (`g4emi`) for neutron-driven scintillation with optical photon recording at an optical-interface plane.
-- A Python configuration layer for geometry, macro generation, and optics workflows.
+This repository also includes a Python configuration layer for YAML-driven run
+setup, optical transport helpers, and lightweight analysis examples.
 
-## 1. Getting Started
+## Quick Start
 
-### 1.1 Installation with pixi
-
-The `pixi.toml` in this repository installs Python, Geant4, and build tooling from `conda-forge`.
-Supported platforms in the project manifest are `linux-64` and `osx-arm64`.
+The recommended setup path is `pixi`.
 
 ```bash
 pixi install
-pixi run check-geant4
-pixi run check-ray-optics
 pixi run build-sim
 ```
 
-After build, the `g4emi` binary is available through Pixi tasks:
-
-```bash
-pixi run run-neutron-gps
-pixi run run-vis
-```
-
-### 1.2 Installation of just g4emi
-
-If you only want the C++ simulation (no Pixi/Python workflow), install these system dependencies:
-
-- Geant4 (`>=11.2`) with UI and visualization components
-- HDF5 with C and HL components
-- CMake (`>=3.16`)
-- A C++17 compiler
-
-Then configure and build:
-
-```bash
-# Example if your Geant4 install provides this setup script
-source /opt/geant4/geant4-v11.2.1/install/bin/geant4.sh
-
-cmake -S . -B build
-cmake --build build -j
-```
-
-Run the simulation directly:
-
-```bash
-./build/g4emi sim/macros/neutron_gps.mac
-```
-
-## 2. Example Usage
-
-### 2.1 Batch neutron GPS run
+Run a macro-driven simulation:
 
 ```bash
 pixi run run-neutron-gps
 ```
 
-### 2.2 Interactive run with visualization
-
-```bash
-pixi run run-vis
-```
-
-### 2.3 YAML-driven macro generation from Python
-
-Generate a macro from `examples/yamlFiles/CanonEF50mmf1p0L_example.yaml`:
+Run a YAML-driven example:
 
 ```bash
 pixi run python examples/SimulationSetup/CanonEF50mmf1p0L_example.py
-```
-
-The script prints the generated macro path and a run command. By default (with the current example YAML), the macro is written under:
-
-```text
-data/CanonEF50mmf1p0L_run/macros/CanonEF50mmf1p0L_run.mac
-```
-
-Run it with:
-
-```bash
 pixi run g4emi data/CanonEF50mmf1p0L_run/macros/CanonEF50mmf1p0L_run.mac
 ```
 
-The example YAML files now include a top-level `runner` block for Python-side
-launch behavior, for example:
+## Core Workflows
 
-```yaml
-optical:
-  showTransportProgress: true
+- Run Geant4 directly from a macro: `pixi run run-neutron-gps`
+- Generate and run from YAML: `pixi run python examples/runSimulation/run_simulation_from_yaml.py examples/yamlFiles/CanonEF50mmf1p0L_example.yaml`
+- Transport optical-interface hits to the intensifier plane: `pixi run python examples/photonTransportation/optical_transport_example.py examples/yamlFiles/CanonEF50mmf1p0L_example.yaml`
+- Generate lightweight analysis outputs: `pixi run python examples/analysisLite/hdf5_lite_analyzer_example.py data/CanonEF50mmf1p0L_run/simulatedPhotons/photon_optical_interface_hits.h5`
 
-runner:
-  binary: g4emi
-  showProgress: true
-  verifyOutput: true
-```
+For the full YAML -> simulation -> transport pipeline, see
+[examples/endToEnd/README.md](examples/endToEnd/README.md).
 
-`simulation` remains the Geant4 macro/run-command section, while `runner`
-controls how Python launch helpers execute and verify the run. Transport-side
-progress display is controlled separately by `optical.showTransportProgress`.
+For analysis examples and module-level guidance, see
+[analysis/README.md](analysis/README.md).
 
-### 2.4 Catalog-based scintillator override example
+## Repository Layout
 
-`examples/yamlFiles/EJ200.yaml` demonstrates:
-- `scintillator.catalogId: EJ200` baseline hydration from the local catalog.
-- targeted manual overrides in `scintillator.properties` (e.g. `absLength`, `timeComponents`, `scintYield`).
-- `examples/yamlFiles/EJ276D.yaml`
-  demonstrates explicit 3-entry `timeComponents` schema usage.
-- simulation forwards `timeComponents[0..2]` into Geant4 scintillation components
-  `1..3`; inactive components remain present with zero yield, and all timing
-  components share the configured scintillation emission spectrum.
+- `sim/`: Geant4 application code, headers, and macro files
+- `src/config/`: YAML models, validation, and macro-generation utilities
+- `src/optics/`: optical transport and lens tooling
+- `examples/`: runnable workflow examples
+- `analysis/`: lightweight analysis helpers for generated HDF5 outputs
+- `test/`: unit tests and test documentation
 
-For an actual run, use the Python generator first so output subdirectories
-(`data/<SimulationRunID>/simulatedPhotons`) are created before Geant4 writes:
+## Further Documentation
 
-```bash
-pixi run python examples/scintillatorCataloging/scintillator_catalog.py
-```
-
-Then run the macro path printed by the script (default location):
-
-```bash
-pixi run g4emi data/ScintCatalog_example/macros/ScintCatalog_example.mac
-```
-
-### 2.5 Lightweight HDF5 analyzer example
-
-This repo is simulation-first. Users are encouraged to implement analysis code
-tailored to their own workflows.
-
-A lightweight set of demonstration analysis helpers is documented in:
-
-```text
-analysis/README.md
-```
-
-A runnable example is available in:
-
-```bash
-pixi run python examples/analysisLite/hdf5_lite_analyzer_example.py \
-  data/CanonEF50mmf1p0L_run/simulatedPhotons/photon_optical_interface_hits.h5
-```
-
-A separate timing-focused example is available in:
-
-```bash
-pixi run python examples/analysisLite/hdf5_timing_analyzer_example.py \
-  data/CanonEF50mmf1p0L_run/simulatedPhotons/photon_optical_interface_hits.h5
-```
-
-To fit a 3-component decay model and compare against the configured SimConfig
-time components:
-
-```bash
-pixi run python examples/analysisLite/hdf5_timing_analyzer_example.py \
-  data/CanonEF50mmf1p0L_run/simulatedPhotons/photon_optical_interface_hits.h5 \
-  --fit \
-  --sim-config-yaml examples/yamlFiles/CanonEF50mmf1p0L_example.yaml
-```
-
-Optional analyzer range controls:
-- `--sim-config-yaml <path>`: use scintillator XY extent from SimConfig for
-  photon-origin/photon-exit plots.
-- `--xy-limits X_MIN X_MAX Y_MIN Y_MAX`: explicit XY limits (highest
-  precedence).
-- if neither is provided, bounds are inferred from HDF5 data.
-
-### 2.6 Optical transport to lens back plane (SimConfig-driven)
-
-After generating simulation output (`/photons` optical-interface hits), run:
-
-```bash
-pixi run python examples/photonTransportation/optical_transport_example.py \
-  examples/yamlFiles/CanonEF50mmf1p0L_example.yaml
-```
-
-By default this reads:
-
-```text
-<run_root>/simulatedPhotons/photon_optical_interface_hits.h5
-```
-
-and writes:
-
-```text
-<run_root>/transportedPhotons/photons_intensifier_hits.h5
-```
-
-The output file contains:
-- copied `/primaries` and `/secondaries` datasets for linkage to source tracks
-- `/transported_photons` dataset with source track IDs and transported sensor
-  coordinates (`intensifier_hit_*_mm`)
-- `reached_intensifier`: transport produced a finite intensifier-plane hit
-- `in_bounds`: when `intensifier_input_screen_defined == true`, this flags hits
-  inside the configured image circle; when
-  `intensifier_input_screen_defined == false`, reached hits are treated as
-  in-bounds by definition
-
-If a photon misses the lens/sensor in ray tracing, its
-`intensifier_hit_*_mm` values are written as `NaN` and
-`reached_intensifier` is `False`.
-
-When `intensifier.input_screen` is present in `SimConfig`, transport also
-writes HDF5 attributes describing the active input screen
-(`intensifier_input_screen_defined`,
-`intensifier_input_screen_diameter_mm`,
-`intensifier_input_screen_center_mm`,
-`intensifier_input_screen_coordinate_frame`, and
-`intensifier_input_screen_magnification`) so downstream analysis can use fixed
-physical extents.
-
-### 2.7 One-step YAML -> run simulation example
-
-To generate the macro and run `g4emi` from one script:
-
-```bash
-pixi run python examples/runSimulation/run_simulation_from_yaml.py \
-  examples/yamlFiles/CanonEF50mmf1p0L_example.yaml
-```
-
-Useful options:
-- `--dry-run`: write macro + print run command without launching Geant4.
-
-By default, the script uses `runner.binary` from the YAML. The script still
-accepts `--beam-on` as a temporary override for `simulation.numberOfParticles`.
-
-### 2.8 End-to-end YAML -> simulation -> transport
-
-To run the full pipeline (macro generation, simulation, then optical transport):
-
-```bash
-pixi run python examples/endToEnd/end_to_end_example.py \
-  examples/yamlFiles/CanonEF50mmf1p0L_example.yaml
-```
-
-This script also uses the YAML `runner.binary` by default. Passing
-`--g4emi-binary <path-or-name>` overrides `runner.binary` for that invocation.
-
-## 3. Simulation Output Structures
-
-### 3.1 Output directory structure
-
-Runtime output files are staged under an effective output root (`output_path`, or fallback `data/`).
-
-- Without runname:
-  - `<output_root>/simulatedPhotons/photon_optical_interface_hits.h5`
-- With runname:
-  - `<output_root>/<runname>/simulatedPhotons/photon_optical_interface_hits.h5`
-
-Python-side helpers also use these sibling stage folders:
-
-- `<output_root>/<runname>/simulatedPhotons/`
-- `<output_root>/<runname>/transportedPhotons/`
-- `<output_root>/<runname>/macros/`
-
-### 3.2 HDF5 structure
-
-HDF5 mode writes normalized datasets:
-
-- `/primaries`
-- `/secondaries`
-- `/photons`
-
-Selection semantics:
-- `/primaries` contains only primaries that created at least one secondary in the scintillator volume.
-- `/secondaries` contains only secondaries linked to at least one detected optical-interface photon hit.
-- `/photons` contains one row per detected optical-interface photon hit.
-
-Dataset columns:
-
-- `/primaries`: `gun_call_id`, `primary_track_id`, `primary_species`, `primary_x_mm`, `primary_y_mm`, `primary_energy_MeV`, `primary_interaction_time_ns`, `primary_created_secondary_count`, `primary_generated_optical_photon_count`, `primary_detected_optical_interface_photon_count`
-- `/secondaries`: `gun_call_id`, `primary_track_id`, `secondary_track_id`, `secondary_species`, `secondary_origin_x_mm`, `secondary_origin_y_mm`, `secondary_origin_z_mm`, `secondary_origin_energy_MeV`, `secondary_end_x_mm`, `secondary_end_y_mm`, `secondary_end_z_mm`
-- `/photons`: `gun_call_id`, `primary_track_id`, `secondary_track_id`, `photon_track_id`, `photon_creation_time_ns`, `photon_origin_x_mm`, `photon_origin_y_mm`, `photon_origin_z_mm`, `photon_scint_exit_x_mm`, `photon_scint_exit_y_mm`, `photon_scint_exit_z_mm`, `optical_interface_hit_x_mm`, `optical_interface_hit_y_mm`, `optical_interface_hit_time_ns`, `optical_interface_hit_dir_x`, `optical_interface_hit_dir_y`, `optical_interface_hit_dir_z`, `optical_interface_hit_pol_x`, `optical_interface_hit_pol_y`, `optical_interface_hit_pol_z`, `optical_interface_hit_energy_eV`, `optical_interface_hit_wavelength_nm`
-
-`/photons` captures geometric state, optical state, and timing at the crossing point (position, time, direction, polarization, energy, wavelength) so downstream pipelines can do both ray tracing and time-domain analyses. `optical_interface_hit_time_ns` and `photon_creation_time_ns` share the same Geant4 global-time basis (event-local clock). `/primaries.primary_interaction_time_ns` stores the first primary interaction time recorded in the scintillator and is written as `NaN` when no such interaction time was recorded. When no scintillator-exit crossing is recorded for a photon, the `photon_scint_exit_x_mm`, `photon_scint_exit_y_mm`, and `photon_scint_exit_z_mm` fields are written as `NaN`; consumers should treat these `NaN` values as missing coordinates rather than valid positions.
-
-In practice, `/primaries` rows are only written for primaries that created at least one secondary in the scintillator, so primaries with no observed scintillator activity are omitted from the output entirely.
-
-`/primaries` activity counters summarize per-primary ancestry in the scintillator: created secondaries, generated optical photons, and detected optical-interface photons.
-
-## 4. Useful Things to Know About the Code
-
-- Random seeding:
-  - Runs use fresh random seeds by default.
-  - For reproducibility, set seeds in macro before `/run/beamOn`:
-    - `/random/setSeeds 12345 67890`
-
-- Geometry/output messenger commands:
-  - Use `/scintillator/geom/*`, `/optical_interface/geom/*`, and `/output/*` to configure simulation from macro files.
-  - After changing geometry commands, run `/run/initialize` before `/run/beamOn`.
-
-- Directory creation behavior:
-  - C++ runtime does not create parent output directories.
-  - Directory creation is handled in Python (`src/config/ConfigIO.py`).
-  - If output parent directories are missing at run start, simulation aborts with a fatal error.
-
-- Optical physics check:
-  - In Geant4 prompt, run `/run/initialize` then `/process/list`.
-  - Expect optical processes such as `Scintillation`, `OpAbsorption`, and `OpBoundary`.
-
-- HDF5 schema updates:
-  - Existing HDF5 files are not migrated in-place.
-  - To use newer `/photons` schema fields, write to a fresh file (new runname or new path).
-
-- Code map:
-  - Core Geant4 app: `sim/src/`, headers in `sim/include/`, macros in `sim/macros/`
-  - Python config/model layer: `src/config/`
-  - Lens model parsing: `src/optics/LensModels.py`
+- Examples index: [examples/README.md](examples/README.md)
+- Analysis helpers: [analysis/README.md](analysis/README.md)
+- End-to-end workflow: [examples/endToEnd/README.md](examples/endToEnd/README.md)
+- Tests: [test/README.md](test/README.md)
+- Lens catalog notes: [lenses/README.md](lenses/README.md)
+- Scintillator catalog notes: [scintillators/README.md](scintillators/README.md)
