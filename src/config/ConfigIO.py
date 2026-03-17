@@ -152,6 +152,12 @@ _SUB_RUN_SUFFIX_PATTERN = re.compile(
 def format_sub_run_suffix(sub_run_number: int) -> str:
     """Return canonical zero-padded suffix for one sub-run number."""
 
+    max_value = 10 ** SUB_RUN_NUMBER_WIDTH
+    if not 0 <= sub_run_number < max_value:
+        raise ValueError(
+            f"sub_run_number {sub_run_number} is out of range for "
+            f"{SUB_RUN_NUMBER_WIDTH}-digit sub-run suffix (allowed: 0 to {max_value - 1})"
+        )
     return f"_{sub_run_number:0{SUB_RUN_NUMBER_WIDTH}d}"
 
 
