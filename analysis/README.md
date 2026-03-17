@@ -1,172 +1,85 @@
-# Lightweight Analysis Helpers
+# Analysis Helpers
 
-This repository is primarily simulation-focused. The core scope is generating
-Geant4 outputs (HDF5), not providing a full analysis framework.
+This directory contains lightweight analysis helpers for `g4emi` HDF5 outputs.
 
-Users are expected to build their own analysis pipelines for their specific
-science and workflow needs.
+These modules are intended for quick inspection, plotting, and small analysis
+tasks. They are not meant to be a full analysis framework.
 
-To make onboarding easier, this folder includes lightweight demonstration
-analysis helpers organized by domain:
+For runnable scripts, see
+[`examples/analysisLite/README.md`](../examples/analysisLite/README.md).
 
-- `analysis/io.py`: HDF5 reads, dataset access, shared validation
-- `analysis/plotting.py`: shared matplotlib rendering helpers
-- `analysis/spatial.py`: neutron/photon/intensifier spatial quick-look plots
-- `analysis/timing.py`: photon creation delay extraction and timing fits
-- `analysis/secondaries.py`: secondary track-length analysis
+## Module Layout
+
+- `analysis/spatial.py`: neutron, photon, optical-interface, and intensifier
+  spatial quick-look plots
+- `analysis/timing.py`: photon creation delay extraction, histograms, and
+  bounded three-component fits
+- `analysis/secondaries.py`: secondary track-length grouping and overlays
 - `analysis/events.py`: event-level recoil-path visualization
+- `analysis/io.py`: shared HDF5 reads, field validation, and small dataset helpers
+- `analysis/plotting.py`: shared matplotlib helpers used by the analysis modules
 
-The user-facing entry points live in the domain modules above. `io.py` and
-`plotting.py` are lower-level support modules.
+The user-facing entry points live in the domain modules. `io.py` and
+`plotting.py` are support code.
 
-## Why this exists
+## Scope
 
-- show how to read the project HDF5 schema with `h5py`
-- provide quick visual sanity checks with minimal dependencies
-- serve as starter code that users can copy/extend in their own projects
+These helpers are useful for:
 
-## What it provides
+- quick sanity checks on generated HDF5 output
+- lightweight exploratory plotting
+- starter code for custom downstream analysis
 
-Spatial helpers in `analysis/spatial.py`:
+These helpers are not intended to:
+
+- preserve legacy ad hoc schema aliases
+- replace a project-specific analysis pipeline
+- serve as a general-purpose plotting framework
+
+## Key Entry Points
+
+Spatial:
 - `neutron_hits_to_image(...)`
 - `photon_origins_to_image(...)`
 - `photon_exit_to_image(...)`
 - `optical_interface_photons_to_image(...)`
 - `intensifier_photons_to_image(...)`
 
-Timing helpers in `analysis/timing.py`:
+Timing:
 - `photon_creation_delays_ns(...)`
 - `photon_creation_delay_to_histogram(...)`
 - `fit_photon_creation_delay_histogram(...)`
 
-Secondary-track helpers in `analysis/secondaries.py`:
+Secondaries:
 - `secondary_track_lengths_by_species_mm(...)`
 - `secondary_track_lengths_overlay_to_histogram(...)`
 
-Event helper in `analysis/events.py`:
+Events:
 - `event_recoil_paths_to_image(...)`
 
-These functions create 2D histogram images (`x` vs `y`) from the relevant
-HDF5 datasets, plus timing, secondary-track, and event-level quick-look tools.
+## Behavior Notes
 
-`photon_creation_delay_to_histogram(...)` computes:
-
-- `photon_creation_time_ns - primary_interaction_time_ns`
-
-It reads `/primaries` and `/photons`, matches rows by
-`(gun_call_id, primary_track_id)`, and skips rows where the primary
-interaction time is missing (`NaN`).
-
-`fit_photon_creation_delay_histogram(...)` performs a bounded 3-component
-exponential fit against histogram bin counts and returns fitted decay
-constants and yield fractions. This is intended as a lightweight exploratory
-tool, not a full statistical inference pipeline.
-
-These helpers target the current writer schema defined by:
-- `sim/include/structures.hh`
-- `sim/src/SimIO.cc`
-- `src/optics/OpticalTransport.py`
-
-It is not intended to preserve legacy field aliases from older ad hoc outputs.
-
-By default, `neutron_hits_to_image`, `photon_origins_to_image`, and
-`photon_exit_to_image` use a shared XY range so their image scale is directly
-comparable.
-
-`intensifier_photons_to_image(...)` uses the intensifier input-screen metadata
-from transport HDF5 attributes (when present) to fix plot extent to the
-physical image-circle footprint and can overlay the circle boundary.
-
-`photon_origins_to_image(...)` and `photon_exit_to_image(...)` support three
-range modes (highest precedence first):
-- explicit user limits (`xy_range_override` / `--xy-limits`)
-- scintillator XY extent from SimConfig YAML
-- inferred bounds from HDF5 data (default fallback)
-
-## Example usage
-
-Quick-look spatial example:
-- `examples/analysisLite/hdf5_lite_analyzer_example.py`
-
-Timing-focused example:
-- `examples/analysisLite/hdf5_timing_analyzer_example.py`
-
-Secondary-track example:
-- `examples/analysisLite/hdf5_secondary_track_length_analyzer_example.py`
-
-Event-level recoil example:
-- `examples/analysisLite/hdf5_event_recoil_analyzer_example.py`
-
-Run from repo root:
-
-```bash
-pixi run python examples/analysisLite/hdf5_lite_analyzer_example.py \
-  data/CanonEF50mmf1p0L_run/simulatedPhotons/photon_optical_interface_hits.h5
-```
-
-The lite analyzer script uses an existing simulation output HDF5 file and writes PNGs to
-`<run_root>/plots/` by default (for example:
-`data/CanonEF50mmf1p0L_run/plots/`).
-
-If a sibling transport file exists at:
-
-`data/<run>/transportedPhotons/photons_intensifier_hits.h5`
-
-the script also writes `photons_intensifier_hits.png`.
-You can also pass an explicit transport file via:
-
-`--transport-hdf5-path <path/to/photons_intensifier_hits.h5>`
-
-Run the timing-only example from repo root:
-
-```bash
-pixi run python examples/analysisLite/hdf5_timing_analyzer_example.py \
-  data/CanonEF50mmf1p0L_run/simulatedPhotons/photon_optical_interface_hits.h5
-```
-
-This writes `photon_creation_delay.png` to the same default output directory.
-
-To overlay the configured decay model and fit the histogram:
-
-```bash
-pixi run python examples/analysisLite/hdf5_timing_analyzer_example.py \
-  data/CanonEF50mmf1p0L_run/simulatedPhotons/photon_optical_interface_hits.h5 \
-  --fit \
-  --sim-config-yaml examples/yamlFiles/CanonEF50mmf1p0L_example.yaml
-```
-
-When `--sim-config-yaml` is provided, the script loads the active 3-component
-profile selected for the configured source particle, overlays that model on
-the histogram, and uses it as the initial guess for fitting.
-
-Run the secondary-track example from repo root:
-
-```bash
-pixi run python examples/analysisLite/hdf5_secondary_track_length_analyzer_example.py \
-  data/CanonEF50mmf1p0L_run/simulatedPhotons/photon_optical_interface_hits.h5
-```
-
-This writes `secondary_track_lengths_overlay.png` to the same default output
-directory.
-
-Run the event-level recoil example from repo root:
-
-```bash
-pixi run python examples/analysisLite/hdf5_event_recoil_analyzer_example.py \
-  data/CanonEF50mmf1p0L_run/simulatedPhotons/photon_optical_interface_hits.h5 \
-  7 --plane xy
-```
-
-This writes `event_<gun_call_id>_<plane>_recoil_paths.png` to the same default
-output directory.
+- The analysis modules target the current writer schema used by the simulation
+  and optical transport code.
+- `photon_creation_delay_to_histogram(...)` computes
+  `photon_creation_time_ns - primary_interaction_time_ns` by matching
+  `/photons` rows to `/primaries` on `(gun_call_id, primary_track_id)`.
+- `fit_photon_creation_delay_histogram(...)` is an exploratory bounded
+  three-component fit, not a full inference workflow.
+- `photon_origins_to_image(...)` and `photon_exit_to_image(...)` can use
+  explicit XY limits, derive XY extent from SimConfig YAML, or infer bounds
+  from HDF5 data.
+- `intensifier_photons_to_image(...)` uses intensifier screen metadata from
+  transport HDF5 attributes when available.
 
 ## Tests
 
-Analysis unit tests are split by feature area under `test/unit/analysis/`.
-Run them from repo root with:
+Analysis unit tests live under `test/unit/analysis/`.
+
+Run them from repo root:
 
 ```bash
 python -m unittest discover -s test/unit/analysis -p "test_*.py"
 ```
 
-If using pixi, `pixi run test-python` also includes them.
+If using pixi, `pixi run test-python` includes them.
