@@ -1,4 +1,4 @@
-"""Unit tests for lightweight HDF5 analyzer intensifier plotting behavior."""
+"""Unit tests for the lightweight HDF5 analyzer."""
 
 from __future__ import annotations
 
@@ -133,16 +133,13 @@ class IntensifierPlotTests(unittest.TestCase):
         with self.h5py.File(path, "w") as handle:
             handle.create_dataset("photons", data=rows)
 
-    def _write_timing_hdf5(self, path: Path, *, legacy_field_name: bool) -> None:
+    def _write_timing_hdf5(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
-        interaction_field = (
-            "primary_t0_time_ns" if legacy_field_name else "primary_interaction_time_ns"
-        )
         primaries_dtype = self.np.dtype(
             [
                 ("gun_call_id", self.np.int64),
                 ("primary_track_id", self.np.int32),
-                (interaction_field, self.np.float64),
+                ("primary_interaction_time_ns", self.np.float64),
             ]
         )
         photons_dtype = self.np.dtype(
@@ -329,7 +326,7 @@ class IntensifierPlotTests(unittest.TestCase):
     def test_photon_creation_delay_histogram_uses_primary_interaction_times(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             hdf5_path = Path(tmp_dir) / "photon_optical_interface_hits.h5"
-            self._write_timing_hdf5(hdf5_path, legacy_field_name=False)
+            self._write_timing_hdf5(hdf5_path)
 
             fig, ax = self.photon_creation_delay_to_histogram(
                 hdf5_path,
@@ -462,7 +459,7 @@ class IntensifierPlotTests(unittest.TestCase):
     def test_photon_creation_delays_extract_expected_values(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             hdf5_path = Path(tmp_dir) / "photon_optical_interface_hits.h5"
-            self._write_timing_hdf5(hdf5_path, legacy_field_name=False)
+            self._write_timing_hdf5(hdf5_path)
 
             delays_ns = self.photon_creation_delays_ns(hdf5_path)
 
@@ -472,22 +469,6 @@ class IntensifierPlotTests(unittest.TestCase):
                     self.np.array([2.0, 5.0], dtype=float),
                 )
             )
-
-    def test_photon_creation_delay_histogram_accepts_legacy_primary_time_field(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            hdf5_path = Path(tmp_dir) / "photon_optical_interface_hits.h5"
-            self._write_timing_hdf5(hdf5_path, legacy_field_name=True)
-
-            fig, ax = self.photon_creation_delay_to_histogram(
-                hdf5_path,
-                bins=[0.0, 2.5, 5.5, 8.5],
-                log_scale=False,
-                show=False,
-            )
-
-            counts = [float(patch.get_height()) for patch in ax.patches]
-            self.assertEqual(sum(counts), 2.0)
-            self.plt.close(fig)
 
     def test_photon_creation_delay_fit_recovers_three_component_model(self) -> None:
         if not self.scipy_available:
@@ -571,7 +552,7 @@ class IntensifierPlotTests(unittest.TestCase):
             )
         with tempfile.TemporaryDirectory() as tmp_dir:
             hdf5_path = Path(tmp_dir) / "photon_optical_interface_hits.h5"
-            self._write_timing_hdf5(hdf5_path, legacy_field_name=False)
+            self._write_timing_hdf5(hdf5_path)
 
             with self.assertRaisesRegex(
                 ValueError,

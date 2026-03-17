@@ -33,13 +33,19 @@ HDF5 datasets, plus a 1D timing histogram for photon creation delay.
 
 It reads `/primaries` and `/photons`, matches rows by
 `(gun_call_id, primary_track_id)`, and skips rows where the primary
-interaction time is missing (`NaN`). For backward compatibility with older
-files, it also accepts the legacy `/primaries.primary_t0_time_ns` field name.
+interaction time is missing (`NaN`).
 
 `fit_photon_creation_delay_histogram(...)` performs a bounded 3-component
 exponential fit against histogram bin counts and returns fitted decay
 constants and yield fractions. This is intended as a lightweight exploratory
 tool, not a full statistical inference pipeline.
+
+The analyzer targets the current writer schema defined by:
+- `sim/include/structures.hh`
+- `sim/src/SimIO.cc`
+- `src/optics/OpticalTransport.py`
+
+It is not intended to preserve legacy field aliases from older ad hoc outputs.
 
 By default, `neutron_hits_to_image`, `photon_origins_to_image`, and
 `photon_exit_to_image` use a shared XY range so their image scale is directly

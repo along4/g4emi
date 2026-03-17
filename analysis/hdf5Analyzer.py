@@ -22,6 +22,14 @@ from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.colors import LogNorm
 from matplotlib.figure import Figure
+from src.common.hdf5_schema import (
+    PHOTON_SCINT_EXIT_X_FIELD,
+    PHOTON_SCINT_EXIT_Y_FIELD,
+    PRIMARY_INTERACTION_TIME_FIELD,
+    SECONDARY_END_X_FIELD,
+    SECONDARY_END_Y_FIELD,
+    SECONDARY_END_Z_FIELD,
+)
 try:
     from scipy.optimize import least_squares
 except ModuleNotFoundError:
@@ -153,67 +161,6 @@ def _intensifier_input_screen_from_attrs(
     return (center_x_mm, center_y_mm, diameter_mm)
 
 
-def _photon_exit_field_names(photons: np.ndarray) -> tuple[str, str]:
-    """Resolve scintillator-exit field names across schema versions."""
-
-    names = set(photons.dtype.names or ())
-    if {"photon_scint_exit_x_mm", "photon_scint_exit_y_mm"}.issubset(names):
-        return "photon_scint_exit_x_mm", "photon_scint_exit_y_mm"
-    if {"scint_exit_x_mm", "scint_exit_y_mm"}.issubset(names):
-        return "scint_exit_x_mm", "scint_exit_y_mm"
-    raise KeyError(
-        "/photons is missing scintillator-exit fields. Expected either "
-        "('photon_scint_exit_x_mm', 'photon_scint_exit_y_mm') or "
-        "('scint_exit_x_mm', 'scint_exit_y_mm')."
-    )
-
-
-def _primary_interaction_time_field_name(primaries: np.ndarray) -> str:
-    """Resolve primary interaction-time field name across schema versions."""
-
-    names = set(primaries.dtype.names or ())
-    if "primary_interaction_time_ns" in names:
-        return "primary_interaction_time_ns"
-    if "primary_t0_time_ns" in names:
-        return "primary_t0_time_ns"
-    raise KeyError(
-        "/primaries is missing primary interaction-time field. Expected either "
-        "'primary_interaction_time_ns' or legacy 'primary_t0_time_ns'."
-    )
-
-
-def _secondary_endpoint_field_names(secondaries: np.ndarray) -> tuple[str, str, str]:
-    """Resolve secondary endpoint field names across schema versions."""
-
-    names = set(secondaries.dtype.names or ())
-    if {
-        "secondary_end_x_mm",
-        "secondary_end_y_mm",
-        "secondary_end_z_mm",
-    }.issubset(names):
-        return (
-            "secondary_end_x_mm",
-            "secondary_end_y_mm",
-            "secondary_end_z_mm",
-        )
-    if {
-        "secondary_stop_x_mm",
-        "secondary_stop_y_mm",
-        "secondary_stop_z_mm",
-    }.issubset(names):
-        return (
-            "secondary_stop_x_mm",
-            "secondary_stop_y_mm",
-            "secondary_stop_z_mm",
-        )
-    raise KeyError(
-        "/secondaries is missing endpoint fields. Expected either "
-        "('secondary_end_x_mm', 'secondary_end_y_mm', 'secondary_end_z_mm') or "
-        "legacy "
-        "('secondary_stop_x_mm', 'secondary_stop_y_mm', 'secondary_stop_z_mm')."
-    )
-
-
 def _shared_xy_range(
     hdf5_path: str | Path,
     neutron_labels: Sequence[str],
@@ -232,9 +179,8 @@ def _shared_xy_range(
     x_values.append(np.asarray(photons["photon_origin_x_mm"], dtype=float))
     y_values.append(np.asarray(photons["photon_origin_y_mm"], dtype=float))
 
-    exit_x_field, exit_y_field = _photon_exit_field_names(photons)
-    exit_x = np.asarray(photons[exit_x_field], dtype=float)
-    exit_y = np.asarray(photons[exit_y_field], dtype=float)
+    exit_x = np.asarray(photons[PHOTON_SCINT_EXIT_X_FIELD], dtype=float)
+    exit_y = np.asarray(photons[PHOTON_SCINT_EXIT_Y_FIELD], dtype=float)
     # Missing scintillator exits are encoded as NaN; exclude them from range
     # calculation so finite origin/hit coordinates still define valid bounds.
     finite_exit_mask = np.isfinite(exit_x) & np.isfinite(exit_y)
@@ -419,7 +365,6 @@ def photon_creation_delays_ns(hdf5_path: str | Path) -> np.ndarray:
     if not photon_required.issubset(set(photons.dtype.names or ())):
         raise KeyError(f"/photons is missing required fields: {sorted(photon_required)}")
 
-    interaction_field = _primary_interaction_time_field_name(primaries)
     key_dtype = np.dtype(
         [
             ("gun_call_id", np.int64),
@@ -441,9 +386,10 @@ def photon_creation_delays_ns(hdf5_path: str | Path) -> np.ndarray:
 
     sort_idx = np.argsort(primary_keys, order=("gun_call_id", "primary_track_id"))
     sorted_primary_keys = primary_keys[sort_idx]
-    sorted_interaction_times_ns = np.asarray(primaries[interaction_field], dtype=float)[
-        sort_idx
-    ]
+    sorted_interaction_times_ns = np.asarray(
+        primaries[PRIMARY_INTERACTION_TIME_FIELD],
+        dtype=float,
+    )[sort_idx]
     photon_creation_times_ns = np.asarray(photons["photon_creation_time_ns"], dtype=float)
 
     match_idx = np.searchsorted(sorted_primary_keys, photon_keys, side="left")
@@ -488,21 +434,23 @@ def secondary_track_lengths_by_species_mm(
         "secondary_origin_x_mm",
         "secondary_origin_y_mm",
         "secondary_origin_z_mm",
+        SECONDARY_END_X_FIELD,
+        SECONDARY_END_Y_FIELD,
+        SECONDARY_END_Z_FIELD,
     }
     if not required.issubset(set(secondaries.dtype.names or ())):
         raise KeyError(f"/secondaries is missing required fields: {sorted(required)}")
 
-    end_x_field, end_y_field, end_z_field = _secondary_endpoint_field_names(secondaries)
     labels = _decode_species(secondaries["secondary_species"])
-    delta_x_mm = np.asarray(secondaries[end_x_field], dtype=float) - np.asarray(
+    delta_x_mm = np.asarray(secondaries[SECONDARY_END_X_FIELD], dtype=float) - np.asarray(
         secondaries["secondary_origin_x_mm"],
         dtype=float,
     )
-    delta_y_mm = np.asarray(secondaries[end_y_field], dtype=float) - np.asarray(
+    delta_y_mm = np.asarray(secondaries[SECONDARY_END_Y_FIELD], dtype=float) - np.asarray(
         secondaries["secondary_origin_y_mm"],
         dtype=float,
     )
-    delta_z_mm = np.asarray(secondaries[end_z_field], dtype=float) - np.asarray(
+    delta_z_mm = np.asarray(secondaries[SECONDARY_END_Z_FIELD], dtype=float) - np.asarray(
         secondaries["secondary_origin_z_mm"],
         dtype=float,
     )
@@ -827,10 +775,12 @@ def photon_exit_to_image(
     """
 
     photons = _read_structured_dataset(hdf5_path, "photons")
-    x_field, y_field = _photon_exit_field_names(photons)
+    required = {PHOTON_SCINT_EXIT_X_FIELD, PHOTON_SCINT_EXIT_Y_FIELD}
+    if not required.issubset(set(photons.dtype.names or ())):
+        raise KeyError(f"/photons is missing required fields: {sorted(required)}")
 
-    x_mm = np.asarray(photons[x_field], dtype=float)
-    y_mm = np.asarray(photons[y_field], dtype=float)
+    x_mm = np.asarray(photons[PHOTON_SCINT_EXIT_X_FIELD], dtype=float)
+    y_mm = np.asarray(photons[PHOTON_SCINT_EXIT_Y_FIELD], dtype=float)
     finite_exit_mask = np.isfinite(x_mm) & np.isfinite(y_mm)
     x_mm = x_mm[finite_exit_mask]
     y_mm = y_mm[finite_exit_mask]
@@ -1114,6 +1064,9 @@ def event_recoil_paths_to_image(
         "secondary_origin_x_mm",
         "secondary_origin_y_mm",
         "secondary_origin_z_mm",
+        SECONDARY_END_X_FIELD,
+        SECONDARY_END_Y_FIELD,
+        SECONDARY_END_Z_FIELD,
     }
     photon_required = {
         "gun_call_id",
@@ -1129,11 +1082,10 @@ def event_recoil_paths_to_image(
     if not photon_required.issubset(set(photons.dtype.names or ())):
         raise KeyError(f"/photons is missing required fields: {sorted(photon_required)}")
 
-    end_x_field, end_y_field, end_z_field = _secondary_endpoint_field_names(secondaries)
     end_field_by_axis = {
-        "x": end_x_field,
-        "y": end_y_field,
-        "z": end_z_field,
+        "x": SECONDARY_END_X_FIELD,
+        "y": SECONDARY_END_Y_FIELD,
+        "z": SECONDARY_END_Z_FIELD,
     }
     axis_1, axis_2 = _projection_axes(plane)
     secondary_mask = np.asarray(secondaries["gun_call_id"], dtype=np.int64) == int(
