@@ -578,7 +578,7 @@ class RunEnvironmentConfig(StrictModel):
     """
 
     simulation_run_id: str = Field(alias="SimulationRunID", default="example", min_length=1)
-    sub_run_number: int = Field(alias="SubRunNumber", default=0, ge=0)
+    sub_run_number: int = Field(alias="SubRunNumber", default=0, ge=0, le=9999)
     working_directory: str | None = Field(default=None, alias="WorkingDirectory")
     macro_directory: str | None = Field(default=None, alias="MacroDirectory")
     log_directory: str | None = Field(default=None, alias="LogDirectory")
