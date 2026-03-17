@@ -54,6 +54,7 @@ For analysis examples and module-level guidance, see
 
 - Examples index: [examples/README.md](examples/README.md)
 - Analysis helpers: [analysis/README.md](analysis/README.md)
+- HDF5 schema reference: [docs/hdf5_schema.md](docs/hdf5_schema.md)
 - End-to-end workflow: [examples/endToEnd/README.md](examples/endToEnd/README.md)
 - Tests: [test/README.md](test/README.md)
 - Lens catalog notes: [lenses/README.md](lenses/README.md)
