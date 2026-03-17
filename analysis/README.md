@@ -9,6 +9,21 @@ science and workflow needs.
 To make onboarding easier, this folder includes a lightweight demonstration
 module: `hdf5Analyzer.py`.
 
+The current implementation still lives in one file, but the target package
+layout for cleanup is:
+
+- `analysis/io.py`: HDF5 reads, dataset access, shared validation
+- `analysis/plotting.py`: shared matplotlib rendering helpers
+- `analysis/spatial.py`: neutron/photon/intensifier spatial quick-look plots
+- `analysis/timing.py`: photon creation delay extraction and timing fits
+- `analysis/secondaries.py`: secondary track-length analysis
+- `analysis/events.py`: event-level recoil-path visualization
+- `analysis/config_adapter.py`: SimConfig-to-analysis adapters
+
+`analysis/hdf5Analyzer.py` is still the active implementation during the split,
+but new cleanup work should target the focused modules above rather than adding
+more surface area to the monolith.
+
 ## Why this exists
 
 - show how to read the project HDF5 schema with `h5py`
