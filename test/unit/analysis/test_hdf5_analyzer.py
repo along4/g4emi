@@ -49,6 +49,7 @@ class IntensifierPlotTests(unittest.TestCase):
                 secondary_track_lengths_overlay_to_histogram,
             )
             import analysis.hdf5Analyzer as analyzer_module
+            import analysis.timing as timing_module
         except ModuleNotFoundError as exc:
             missing = (getattr(exc, "name", "") or "").lower()
             if missing in {"h5py", "numpy", "matplotlib"}:
@@ -62,7 +63,7 @@ class IntensifierPlotTests(unittest.TestCase):
         cls.np = np
         cls.plt = plt
         cls.ScintillationDecayComponent = ScintillationDecayComponent
-        cls.scipy_available = analyzer_module.least_squares is not None
+        cls.scipy_available = timing_module.least_squares is not None
         cls.decay_model_bin_counts = staticmethod(decay_model_bin_counts)
         cls.event_recoil_paths_to_image = staticmethod(event_recoil_paths_to_image)
         cls.fit_photon_creation_delay_histogram = staticmethod(
