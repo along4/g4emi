@@ -27,17 +27,31 @@ class PhotocathodeStageTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        from src.intensifier.models import PhotocathodeParams
-        from src.intensifier.models import TransportedPhotonBatch
-        from src.intensifier.photocathode import convert_photons_to_photoelectrons
-        from src.intensifier.photocathode import interpolate_qe
-
+        try:
+            from src.config.SimConfig import SimConfig
+            from src.intensifier.models import PhotocathodeParams
+            from src.intensifier.models import TransportedPhotonBatch
+            from src.intensifier.photocathode import convert_photons_to_photoelectrons
+            from src.intensifier.photocathode import interpolate_qe
+            from src.intensifier.photocathode import photocathode_params_from_sim_config
+        except ModuleNotFoundError as exc:
+            missing = (getattr(exc, "name", "") or "").lower()
+            if missing in {"pydantic", "numpy"}:
+                raise unittest.SkipTest(
+                    f"Missing dependency for intensifier tests: {exc}. "
+                    "Run in the project environment (for example: pixi run test-python)."
+                ) from exc
+            raise
+        cls.SimConfig = SimConfig
         cls.PhotocathodeParams = PhotocathodeParams
         cls.TransportedPhotonBatch = TransportedPhotonBatch
         cls.convert_photons_to_photoelectrons = staticmethod(
             convert_photons_to_photoelectrons
         )
         cls.interpolate_qe = staticmethod(interpolate_qe)
+        cls.photocathode_params_from_sim_config = staticmethod(
+            photocathode_params_from_sim_config
+        )
 
     def _photons(self) -> object:
         """Build a small deterministic transported-photon batch."""
@@ -54,6 +68,89 @@ class PhotocathodeStageTests(unittest.TestCase):
             time_ns=np.array([5.0, 6.0, 7.0], dtype=np.float64),
             wavelength_nm=np.array([400.0, 500.0, 650.0], dtype=np.float64),
         )
+
+    def _config_payload(self) -> dict[str, object]:
+        """Build a minimal valid SimConfig payload with intensifier parameters."""
+
+        return {
+            "scintillator": {
+                "catalogId": "EJ200",
+                "position_mm": {"x_mm": 0.0, "y_mm": 0.0, "z_mm": 0.0},
+                "dimension_mm": {"x_mm": 50.0, "y_mm": 50.0, "z_mm": 10.0},
+                "properties": {
+                    "name": "EJ200",
+                    "photonEnergy": [2.0, 2.4, 2.76],
+                    "rIndex": [1.58, 1.58, 1.58],
+                    "nKEntries": 3,
+                    "timeComponents": {
+                        "default": [
+                            {"timeConstant": 2.1, "yieldFraction": 1.0},
+                            {"timeConstant": 0.0, "yieldFraction": 0.0},
+                            {"timeConstant": 0.0, "yieldFraction": 0.0},
+                        ]
+                    },
+                },
+            },
+            "source": {
+                "gps": {
+                    "particle": "neutron",
+                    "position": {
+                        "type": "Plane",
+                        "shape": "Circle",
+                        "centerMm": {"x_mm": 0.0, "y_mm": 0.0, "z_mm": -20.0},
+                        "radiusMm": 1.0,
+                    },
+                    "angular": {
+                        "type": "beam2d",
+                        "rot1": {"x": 1.0, "y": 0.0, "z": 0.0},
+                        "rot2": {"x": 0.0, "y": 1.0, "z": 0.0},
+                        "direction": {"x": 0.0, "y": 0.0, "z": 1.0},
+                    },
+                    "energy": {"type": "Mono", "monoMeV": 2.45},
+                }
+            },
+            "optical": {
+                "lenses": [
+                    {
+                        "name": "CanonEF50mmf1.0L",
+                        "primary": True,
+                        "zmxFile": "CanonEF50mmf1.0L.zmx",
+                    }
+                ],
+                "geometry": {"entranceDiameter": 60.55, "sensorMaxWidth": 36.0},
+                "sensitiveDetectorConfig": {
+                    "position_mm": {"x_mm": 0.0, "y_mm": 0.0, "z_mm": 210.05},
+                    "shape": "circle",
+                    "diameterRule": "min(entranceDiameter,sensorMaxWidth)",
+                },
+            },
+            "intensifier": {
+                "model": "Cricket2",
+                "input_screen": {
+                    "image_circle_diameter_mm": 18.0,
+                    "center_mm": [0.0, 0.0],
+                    "magnification": 1.0,
+                },
+                "photocathode": {
+                    "qeWavelengthNm": [350.0, 500.0, 650.0],
+                    "qeValues": [0.1, 0.2, 0.05],
+                    "collectionEfficiency": 0.8,
+                    "ttsSigmaNs": 0.15,
+                },
+            },
+            "Metadata": {
+                "author": "Unit Test",
+                "date": "2026-03-19",
+                "version": "test",
+                "description": "Photocathode stage test payload.",
+                "RunEnvironment": {
+                    "SimulationRunID": "photocathode_stage_test",
+                    "WorkingDirectory": "data",
+                    "MacroDirectory": "macros",
+                    "LogDirectory": "logs",
+                },
+            },
+        }
 
     def test_interpolate_qe_returns_zero_outside_range(self) -> None:
         params = self.PhotocathodeParams(
@@ -132,6 +229,21 @@ class PhotocathodeStageTests(unittest.TestCase):
 
         self.assertEqual(len(result), len(photons))
         self.assertFalse(np.allclose(result.time_pc_ns, photons.time_ns))
+
+    def test_photocathode_params_can_be_built_from_sim_config(self) -> None:
+        config = self.SimConfig.model_validate(self._config_payload())
+        params = self.photocathode_params_from_sim_config(config)
+
+        np.testing.assert_allclose(
+            params.qe_wavelength_nm,
+            np.array([350.0, 500.0, 650.0], dtype=np.float64),
+        )
+        np.testing.assert_allclose(
+            params.qe_values,
+            np.array([0.1, 0.2, 0.05], dtype=np.float64),
+        )
+        self.assertAlmostEqual(params.collection_efficiency, 0.8)
+        self.assertAlmostEqual(params.tts_sigma_ns, 0.15)
 
 
 if __name__ == "__main__":

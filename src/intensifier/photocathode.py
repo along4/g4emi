@@ -7,12 +7,32 @@ overall collection efficiency, and optional transit-time spread.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import numpy as np
 import numpy.typing as npt
 
 from src.intensifier.models import PhotocathodeParams
 from src.intensifier.models import PhotoelectronBatch
 from src.intensifier.models import TransportedPhotonBatch
+
+if TYPE_CHECKING:
+    from src.config.SimConfig import SimConfig
+
+
+def photocathode_params_from_sim_config(config: SimConfig) -> PhotocathodeParams:
+    """Build normalized photocathode params from validated `SimConfig`."""
+
+    intensifier = config.intensifier
+    if intensifier is None:
+        raise ValueError("`config.intensifier` is required for the photocathode stage.")
+    stage = intensifier.photocathode
+    return PhotocathodeParams(
+        qe_wavelength_nm=np.asarray(stage.qe_wavelength_nm, dtype=np.float64),
+        qe_values=np.asarray(stage.qe_values, dtype=np.float64),
+        collection_efficiency=float(stage.collection_efficiency),
+        tts_sigma_ns=float(stage.tts_sigma_ns),
+    )
 
 
 def interpolate_qe(
