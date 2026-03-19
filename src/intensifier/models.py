@@ -99,10 +99,11 @@ class McpParams:
             "stage2_mean_gain",
             "stage2_gain_shape",
             "gain_ref",
-            "spread_sigma0_mm",
         ):
             if float(getattr(self, field_name)) <= 0.0:
                 raise ValueError(f"`{field_name}` must be strictly positive.")
+        if float(self.spread_sigma0_mm) < 0.0:
+            raise ValueError("`spread_sigma0_mm` must be non-negative.")
 
 
 @dataclass(frozen=True, slots=True)

@@ -509,7 +509,7 @@ class IntensifierConfig(StrictModel):
             default=0.03,
             validation_alias=AliasChoices("spread_sigma0_mm", "spreadSigma0Mm"),
             serialization_alias="spread_sigma0_mm",
-            gt=0.0,
+            ge=0.0,
         )
         spread_gain_exponent: float = Field(
             default=0.4,
