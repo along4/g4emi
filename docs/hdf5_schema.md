@@ -7,6 +7,9 @@ It covers:
 - simulation output written by `g4emi`
 - optical transport output written by `src/optics/OpticalTransport.py`
 
+The current intensifier module consumes this transport output in memory. It
+does not yet define a separate persisted intensifier-stage HDF5 dataset.
+
 This is a reference for the current writer schema. It does not describe legacy
 aliases or older ad hoc outputs.
 
