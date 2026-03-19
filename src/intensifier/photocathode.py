@@ -76,17 +76,7 @@ def convert_photons_to_photoelectrons(
         rng = np.random.default_rng()
 
     if len(photons) == 0:
-        return PhotoelectronBatch(
-            source_photon_index=np.array([], dtype=np.int64),
-            gun_call_id=np.array([], dtype=np.int64),
-            primary_track_id=np.array([], dtype=np.int32),
-            secondary_track_id=np.array([], dtype=np.int32),
-            photon_track_id=np.array([], dtype=np.int32),
-            x_pc_mm=np.array([], dtype=np.float64),
-            y_pc_mm=np.array([], dtype=np.float64),
-            time_pc_ns=np.array([], dtype=np.float64),
-            wavelength_nm=np.array([], dtype=np.float64),
-        )
+        return PhotoelectronBatch.empty()
 
     qe = interpolate_qe(photons.wavelength_nm, params)
     detection_probability = np.clip(qe * params.collection_efficiency, 0.0, 1.0)

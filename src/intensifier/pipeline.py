@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -62,8 +62,8 @@ def run_intensifier_pipeline(
 def run_intensifier_pipeline_from_sim_config(
     config: SimConfig,
     *,
-    transport_hdf5_path: str | None = None,
-    source_hdf5_path: str | None = None,
+    transport_hdf5_path: str | Path | None = None,
+    source_hdf5_path: str | Path | None = None,
     require_in_bounds: bool = True,
     rng: np.random.Generator | None = None,
 ) -> IntensifierOutputBatch:
@@ -81,29 +81,3 @@ def run_intensifier_pipeline_from_sim_config(
         params,
         rng=rng,
     )
-
-
-@dataclass(slots=True)
-class IntensifierPipeline:
-    """Small pipeline wrapper for repeated intensifier-stage execution."""
-
-    params: IntensifierParams
-
-    def run(
-        self,
-        transported_photons: TransportedPhotonBatch,
-        rng: np.random.Generator | None = None,
-    ) -> IntensifierOutputBatch:
-        """Run the configured intensifier pipeline."""
-
-        return run_intensifier_pipeline(
-            transported_photons,
-            self.params,
-            rng=rng,
-        )
-
-    @classmethod
-    def from_sim_config(cls, config: SimConfig) -> IntensifierPipeline:
-        """Construct a pipeline from validated `SimConfig`."""
-
-        return cls(params=intensifier_params_from_sim_config(config))

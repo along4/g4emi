@@ -64,20 +64,7 @@ def convert_photoelectrons_to_mcp_events(
         rng = np.random.default_rng()
 
     if len(photoelectrons) == 0:
-        return McpEventBatch(
-            source_photon_index=np.array([], dtype=np.int64),
-            gun_call_id=np.array([], dtype=np.int64),
-            primary_track_id=np.array([], dtype=np.int32),
-            secondary_track_id=np.array([], dtype=np.int32),
-            photon_track_id=np.array([], dtype=np.int32),
-            x_mcp_mm=np.array([], dtype=np.float64),
-            y_mcp_mm=np.array([], dtype=np.float64),
-            time_mcp_ns=np.array([], dtype=np.float64),
-            stage1_gain=np.array([], dtype=np.float64),
-            stage2_gain=np.array([], dtype=np.float64),
-            total_gain=np.array([], dtype=np.float64),
-            wavelength_nm=np.array([], dtype=np.float64),
-        )
+        return McpEventBatch.empty()
 
     event_count = len(photoelectrons)
     stage1_gain = sample_gamma_gain(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 try:
     import h5py
@@ -17,6 +18,9 @@ from src.common.hdf5_schema import DATASET_PHOTONS
 from src.common.hdf5_schema import DATASET_TRANSPORTED_PHOTONS
 from src.intensifier.models import TransportedPhotonBatch
 from src.optics.OpticalTransport import resolve_transport_paths
+
+if TYPE_CHECKING:
+    from src.config.SimConfig import SimConfig
 
 _REQUIRED_TRANSPORT_FIELDS = (
     "source_photon_index",
@@ -50,36 +54,68 @@ def _require_fields(
         raise KeyError(f"Dataset '{dataset_name}' is missing required fields: {missing}")
 
 
+def _require_existing_path(path: str | Path, label: str) -> Path:
+    """Resolve `path` and require that it exists on disk."""
+
+    resolved = Path(path).resolve()
+    if not resolved.exists():
+        raise FileNotFoundError(f"{label} not found: {resolved}")
+    return resolved
+
+
+def _resolve_transport_hdf5_path(
+    config: SimConfig | None,
+    transport_hdf5_path: str | Path | None,
+) -> Path:
+    """Resolve the transport HDF5 path from an explicit path or `SimConfig`."""
+
+    if transport_hdf5_path is not None:
+        return _require_existing_path(transport_hdf5_path, "Transport HDF5 file")
+    if config is None:
+        raise ValueError(
+            "`config` is required when `transport_hdf5_path` is not provided."
+        )
+    return _require_existing_path(
+        resolve_transport_paths(config).output_hdf5,
+        "Transport HDF5 file",
+    )
+
+
+def _resolve_source_hdf5_path(
+    transport_path: Path,
+    source_hdf5_path: str | Path | None,
+) -> Path:
+    """Resolve the source-photon HDF5 path from explicit input or transport metadata."""
+
+    if source_hdf5_path is not None:
+        return _require_existing_path(source_hdf5_path, "Source photon HDF5 file")
+
+    with h5py.File(transport_path, "r") as transport_handle:
+        source_hdf5_attr = transport_handle.attrs.get("source_hdf5")
+        if source_hdf5_attr is None:
+            raise KeyError(
+                "Transport HDF5 is missing the `source_hdf5` attribute needed "
+                "to resolve the source photon file."
+            )
+    return _require_existing_path(
+        source_hdf5_attr,
+        "Source photon HDF5 file",
+    )
+
+
 def resolve_intensifier_input_hdf5_paths(
-    config,
+    config: SimConfig | None,
     *,
     transport_hdf5_path: str | Path | None = None,
     source_hdf5_path: str | Path | None = None,
 ) -> tuple[Path, Path]:
     """Resolve transport/source HDF5 paths for intensifier input loading."""
 
-    transport_path = (
-        Path(transport_hdf5_path).resolve()
-        if transport_hdf5_path is not None
-        else resolve_transport_paths(config).output_hdf5
+    transport_path = _resolve_transport_hdf5_path(
+        config,
+        transport_hdf5_path,
     )
-    if not transport_path.exists():
-        raise FileNotFoundError(f"Transport HDF5 file not found: {transport_path}")
-
-    if source_hdf5_path is not None:
-        source_path = Path(source_hdf5_path).resolve()
-    else:
-        with h5py.File(transport_path, "r") as transport_handle:
-            source_hdf5_attr = transport_handle.attrs.get("source_hdf5")
-            if source_hdf5_attr is None:
-                raise KeyError(
-                    "Transport HDF5 is missing the `source_hdf5` attribute needed "
-                    "to resolve the source photon file."
-                )
-            source_path = Path(str(source_hdf5_attr)).resolve()
-
-    if not source_path.exists():
-        raise FileNotFoundError(f"Source photon HDF5 file not found: {source_path}")
+    source_path = _resolve_source_hdf5_path(transport_path, source_hdf5_path)
     return transport_path, source_path
 
 
@@ -91,24 +127,8 @@ def load_transported_photon_batch(
 ) -> TransportedPhotonBatch:
     """Load usable transported photons and source timing/wavelength into one batch."""
 
-    transport_path = Path(transport_hdf5_path).resolve()
-    if not transport_path.exists():
-        raise FileNotFoundError(f"Transport HDF5 file not found: {transport_path}")
-
-    if source_hdf5_path is None:
-        with h5py.File(transport_path, "r") as transport_handle:
-            source_hdf5_attr = transport_handle.attrs.get("source_hdf5")
-            if source_hdf5_attr is None:
-                raise KeyError(
-                    "Transport HDF5 is missing the `source_hdf5` attribute needed "
-                    "to resolve the source photon file."
-                )
-            source_path = Path(str(source_hdf5_attr)).resolve()
-    else:
-        source_path = Path(source_hdf5_path).resolve()
-
-    if not source_path.exists():
-        raise FileNotFoundError(f"Source photon HDF5 file not found: {source_path}")
+    transport_path = _resolve_transport_hdf5_path(None, transport_hdf5_path)
+    source_path = _resolve_source_hdf5_path(transport_path, source_hdf5_path)
 
     with h5py.File(transport_path, "r") as transport_handle, h5py.File(
         source_path,
@@ -139,18 +159,7 @@ def load_transported_photon_batch(
 
         selected = transported[mask]
         if len(selected) == 0:
-            return TransportedPhotonBatch(
-                source_photon_index=np.array([], dtype=np.int64),
-                gun_call_id=np.array([], dtype=np.int64),
-                primary_track_id=np.array([], dtype=np.int32),
-                secondary_track_id=np.array([], dtype=np.int32),
-                photon_track_id=np.array([], dtype=np.int32),
-                x_mm=np.array([], dtype=np.float64),
-                y_mm=np.array([], dtype=np.float64),
-                z_mm=np.array([], dtype=np.float64),
-                time_ns=np.array([], dtype=np.float64),
-                wavelength_nm=np.array([], dtype=np.float64),
-            )
+            return TransportedPhotonBatch.empty()
 
         source_indices = np.asarray(selected["source_photon_index"], dtype=np.int64)
         source_rows = source_ds[source_indices]

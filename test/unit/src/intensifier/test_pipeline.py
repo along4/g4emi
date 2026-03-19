@@ -37,7 +37,6 @@ class IntensifierPipelineTests(unittest.TestCase):
             from src.intensifier.models import PhotocathodeParams
             from src.intensifier.models import PhosphorParams
             from src.intensifier.models import TransportedPhotonBatch
-            from src.intensifier.pipeline import IntensifierPipeline
             from src.intensifier.pipeline import run_intensifier_pipeline
             from src.intensifier.pipeline import run_intensifier_pipeline_from_sim_config
         except ModuleNotFoundError as exc:
@@ -56,7 +55,6 @@ class IntensifierPipelineTests(unittest.TestCase):
         cls.PhotocathodeParams = PhotocathodeParams
         cls.PhosphorParams = PhosphorParams
         cls.TransportedPhotonBatch = TransportedPhotonBatch
-        cls.IntensifierPipeline = IntensifierPipeline
         cls.run_intensifier_pipeline = staticmethod(run_intensifier_pipeline)
         cls.run_intensifier_pipeline_from_sim_config = staticmethod(
             run_intensifier_pipeline_from_sim_config
@@ -278,18 +276,27 @@ class IntensifierPipelineTests(unittest.TestCase):
         self.assertTrue(np.all(result.output_time_ns >= photons.time_ns))
         self.assertTrue(np.all(result.signal_amplitude_arb > 0.0))
 
-    def test_pipeline_wrapper_runs_same_flow(self) -> None:
+    def test_repeated_calls_can_reuse_one_parameter_bundle(self) -> None:
         photons = self._photons()
         params = self._params()
-        pipeline = self.IntensifierPipeline(params=params)
-
-        result = pipeline.run(
+        result1 = self.run_intensifier_pipeline(
             photons,
+            params,
+            rng=np.random.default_rng(123),
+        )
+        result2 = self.run_intensifier_pipeline(
+            photons,
+            params,
             rng=np.random.default_rng(123),
         )
 
-        self.assertEqual(len(result), len(photons))
-        np.testing.assert_array_equal(result.source_photon_index, photons.source_photon_index)
+        self.assertEqual(len(result1), len(photons))
+        self.assertEqual(len(result2), len(photons))
+        np.testing.assert_array_equal(result1.source_photon_index, photons.source_photon_index)
+        np.testing.assert_array_equal(result2.source_photon_index, photons.source_photon_index)
+        np.testing.assert_allclose(result1.output_x_mm, result2.output_x_mm)
+        np.testing.assert_allclose(result1.output_y_mm, result2.output_y_mm)
+        np.testing.assert_allclose(result1.output_time_ns, result2.output_time_ns)
 
     def test_run_intensifier_pipeline_from_sim_config_loads_hdf5_inputs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

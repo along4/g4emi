@@ -71,19 +71,7 @@ def convert_mcp_events_to_intensifier_output(
         rng = np.random.default_rng()
 
     if len(mcp_events) == 0:
-        return IntensifierOutputBatch(
-            source_photon_index=np.array([], dtype=np.int64),
-            gun_call_id=np.array([], dtype=np.int64),
-            primary_track_id=np.array([], dtype=np.int32),
-            secondary_track_id=np.array([], dtype=np.int32),
-            photon_track_id=np.array([], dtype=np.int32),
-            output_x_mm=np.array([], dtype=np.float64),
-            output_y_mm=np.array([], dtype=np.float64),
-            output_time_ns=np.array([], dtype=np.float64),
-            signal_amplitude_arb=np.array([], dtype=np.float64),
-            total_gain=np.array([], dtype=np.float64),
-            wavelength_nm=np.array([], dtype=np.float64),
-        )
+        return IntensifierOutputBatch.empty()
 
     event_count = len(mcp_events)
     delays_ns = sample_phosphor_delay_ns(event_count, params, rng)

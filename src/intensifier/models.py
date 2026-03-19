@@ -203,6 +203,23 @@ class TransportedPhotonBatch:
     def __len__(self) -> int:
         return int(self.source_photon_index.shape[0])
 
+    @classmethod
+    def empty(cls) -> "TransportedPhotonBatch":
+        """Return an empty transported-photon batch with the correct dtypes."""
+
+        return cls(
+            source_photon_index=np.array([], dtype=np.int64),
+            gun_call_id=np.array([], dtype=np.int64),
+            primary_track_id=np.array([], dtype=np.int32),
+            secondary_track_id=np.array([], dtype=np.int32),
+            photon_track_id=np.array([], dtype=np.int32),
+            x_mm=np.array([], dtype=np.float64),
+            y_mm=np.array([], dtype=np.float64),
+            z_mm=np.array([], dtype=np.float64),
+            time_ns=np.array([], dtype=np.float64),
+            wavelength_nm=np.array([], dtype=np.float64),
+        )
+
 
 @dataclass(slots=True)
 class PhotoelectronBatch:
@@ -265,6 +282,22 @@ class PhotoelectronBatch:
 
     def __len__(self) -> int:
         return int(self.source_photon_index.shape[0])
+
+    @classmethod
+    def empty(cls) -> "PhotoelectronBatch":
+        """Return an empty photoelectron batch with the correct dtypes."""
+
+        return cls(
+            source_photon_index=np.array([], dtype=np.int64),
+            gun_call_id=np.array([], dtype=np.int64),
+            primary_track_id=np.array([], dtype=np.int32),
+            secondary_track_id=np.array([], dtype=np.int32),
+            photon_track_id=np.array([], dtype=np.int32),
+            x_pc_mm=np.array([], dtype=np.float64),
+            y_pc_mm=np.array([], dtype=np.float64),
+            time_pc_ns=np.array([], dtype=np.float64),
+            wavelength_nm=np.array([], dtype=np.float64),
+        )
 
 
 @dataclass(slots=True)
@@ -337,6 +370,25 @@ class McpEventBatch:
 
     def __len__(self) -> int:
         return int(self.source_photon_index.shape[0])
+
+    @classmethod
+    def empty(cls) -> "McpEventBatch":
+        """Return an empty MCP-event batch with the correct dtypes."""
+
+        return cls(
+            source_photon_index=np.array([], dtype=np.int64),
+            gun_call_id=np.array([], dtype=np.int64),
+            primary_track_id=np.array([], dtype=np.int32),
+            secondary_track_id=np.array([], dtype=np.int32),
+            photon_track_id=np.array([], dtype=np.int32),
+            x_mcp_mm=np.array([], dtype=np.float64),
+            y_mcp_mm=np.array([], dtype=np.float64),
+            time_mcp_ns=np.array([], dtype=np.float64),
+            stage1_gain=np.array([], dtype=np.float64),
+            stage2_gain=np.array([], dtype=np.float64),
+            total_gain=np.array([], dtype=np.float64),
+            wavelength_nm=np.array([], dtype=np.float64),
+        )
 
 
 @dataclass(slots=True)
@@ -414,3 +466,21 @@ class IntensifierOutputBatch:
 
     def __len__(self) -> int:
         return int(self.source_photon_index.shape[0])
+
+    @classmethod
+    def empty(cls) -> "IntensifierOutputBatch":
+        """Return an empty intensifier-output batch with the correct dtypes."""
+
+        return cls(
+            source_photon_index=np.array([], dtype=np.int64),
+            gun_call_id=np.array([], dtype=np.int64),
+            primary_track_id=np.array([], dtype=np.int32),
+            secondary_track_id=np.array([], dtype=np.int32),
+            photon_track_id=np.array([], dtype=np.int32),
+            output_x_mm=np.array([], dtype=np.float64),
+            output_y_mm=np.array([], dtype=np.float64),
+            output_time_ns=np.array([], dtype=np.float64),
+            signal_amplitude_arb=np.array([], dtype=np.float64),
+            total_gain=np.array([], dtype=np.float64),
+            wavelength_nm=np.array([], dtype=np.float64),
+        )
