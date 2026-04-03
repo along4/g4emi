@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from matplotlib import pyplot as plt
 import numpy as np
 
 from example_support import default_output_dir_from_input, ensure_repo_root_on_path  # noqa: E402
@@ -59,7 +60,14 @@ def _parse_args() -> argparse.Namespace:
             "decay model for overlay and fit initialization."
         ),
     )
+    parser.add_argument(
+        "--show",
+        action="store_true",
+        help="Display the plot interactively instead of writing a PNG.",
+    )
     return parser.parse_args()
+
+
 def _load_configured_decay_components(
     sim_config_yaml_path: Path,
 ) -> tuple[str, tuple[ScintillationDecayComponent, ...]]:
@@ -169,14 +177,18 @@ def main() -> None:
     if args.bins <= 0:
         raise ValueError("--bins must be > 0.")
 
-    output_dir = (
-        args.output_dir.expanduser().resolve()
-        if args.output_dir is not None
-        else default_output_dir_from_input(hdf5_path).resolve()
-    )
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = None
+    if not args.show:
+        output_dir = (
+            args.output_dir.expanduser().resolve()
+            if args.output_dir is not None
+            else default_output_dir_from_input(hdf5_path).resolve()
+        )
+        output_dir.mkdir(parents=True, exist_ok=True)
 
-    creation_delay_png = output_dir / "photon_creation_delay.png"
+    creation_delay_png = (
+        None if output_dir is None else output_dir / "photon_creation_delay.png"
+    )
     sim_config_yaml_path = (
         args.sim_config_yaml.expanduser().resolve()
         if args.sim_config_yaml is not None
@@ -253,7 +265,8 @@ def main() -> None:
         fit_rmse_counts=(fit_result.rmse_counts if fit_result is not None else None),
     )
 
-    fig.savefig(creation_delay_png, dpi=150)
+    if creation_delay_png is not None:
+        fig.savefig(creation_delay_png, dpi=150)
 
     print(f"Input HDF5: {hdf5_path}")
     if sim_config_yaml_path is not None:
@@ -267,6 +280,11 @@ def main() -> None:
         for line in _format_components(fit_result.components):
             print(line)
         print(f"Fit RMSE (counts/bin): {fit_result.rmse_counts:.3f}")
+    if args.show:
+        print("Displaying plot interactively.")
+        plt.show()
+        return
+
     print("Wrote images:")
     print(f"  - {creation_delay_png}")
 

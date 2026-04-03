@@ -9,6 +9,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from matplotlib import pyplot as plt
+
 from example_support import (  # noqa: E402
     default_output_dir_from_input,
     ensure_repo_root_on_path,
@@ -76,6 +78,11 @@ def _parse_args() -> argparse.Namespace:
             "Takes precedence over --sim-config-yaml."
         ),
     )
+    parser.add_argument(
+        "--show",
+        action="store_true",
+        help="Display the plots interactively instead of writing PNGs.",
+    )
     return parser.parse_args()
 
 
@@ -87,18 +94,24 @@ def main() -> None:
     if not hdf5_path.exists():
         raise FileNotFoundError(f"Input HDF5 file not found: {hdf5_path}")
 
-    output_dir = (
-        args.output_dir.expanduser().resolve()
-        if args.output_dir is not None
-        else default_output_dir_from_input(hdf5_path).resolve()
-    )
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = None
+    if not args.show:
+        output_dir = (
+            args.output_dir.expanduser().resolve()
+            if args.output_dir is not None
+            else default_output_dir_from_input(hdf5_path).resolve()
+        )
+        output_dir.mkdir(parents=True, exist_ok=True)
 
-    neutron_png = output_dir / "neutron_hits.png"
-    origins_png = output_dir / "photon_origins.png"
-    exit_png = output_dir / "photon_exit.png"
-    interface_png = output_dir / "optical_interface_photons.png"
-    intensifier_png = output_dir / "photons_intensifier_hits.png"
+    neutron_png = None if output_dir is None else output_dir / "neutron_hits.png"
+    origins_png = None if output_dir is None else output_dir / "photon_origins.png"
+    exit_png = None if output_dir is None else output_dir / "photon_exit.png"
+    interface_png = (
+        None if output_dir is None else output_dir / "optical_interface_photons.png"
+    )
+    intensifier_png = (
+        None if output_dir is None else output_dir / "photons_intensifier_hits.png"
+    )
 
     transport_hdf5_path = (
         args.transport_hdf5_path.expanduser().resolve()
@@ -125,13 +138,14 @@ def main() -> None:
             (y_min, y_max),
         )
 
-    neutron_hits_to_image(hdf5_path, output_path=neutron_png)
+    neutron_hits_to_image(hdf5_path, output_path=neutron_png, show=False)
     photon_origins_to_image(
         hdf5_path,
         output_path=origins_png,
         use_scintillator_extent=(sim_config_yaml_path is not None),
         sim_config_yaml_path=sim_config_yaml_path,
         xy_range_override=xy_range_override,
+        show=False,
     )
     photon_exit_to_image(
         hdf5_path,
@@ -139,12 +153,14 @@ def main() -> None:
         use_scintillator_extent=(sim_config_yaml_path is not None),
         sim_config_yaml_path=sim_config_yaml_path,
         xy_range_override=xy_range_override,
+        show=False,
     )
-    optical_interface_photons_to_image(hdf5_path, output_path=interface_png)
+    optical_interface_photons_to_image(hdf5_path, output_path=interface_png, show=False)
     if transport_hdf5_path is not None and transport_hdf5_path.exists():
         intensifier_photons_to_image(
             transport_hdf5_path,
             output_path=intensifier_png,
+            show=False,
         )
     else:
         intensifier_png = None
@@ -156,6 +172,15 @@ def main() -> None:
         print(f"SimConfig YAML (for origin/exit extent): {sim_config_yaml_path}")
     else:
         print("Origin/exit XY limits: inferred from HDF5 data bounds")
+    if args.show:
+        print("Displaying plots interactively.")
+        if intensifier_png is None:
+            print("Skipped intensifier plot: transport HDF5 not found.")
+        elif transport_hdf5_path is not None:
+            print(f"Transport HDF5: {transport_hdf5_path}")
+        plt.show()
+        return
+
     print("Wrote images:")
     print(f"  - {neutron_png}")
     print(f"  - {origins_png}")
