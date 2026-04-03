@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
+from datetime import timezone
 
 try:
     import h5py
@@ -14,8 +16,14 @@ except ModuleNotFoundError as exc:  # pragma: no cover - dependency availability
     ) from exc
 import numpy as np
 
+from src.common.hdf5_schema import DATASET_INTENSIFIER_OUTPUT_EVENTS
 from src.common.hdf5_schema import DATASET_PHOTONS
+from src.common.hdf5_schema import DATASET_PRIMARIES
+from src.common.hdf5_schema import DATASET_SECONDARIES
 from src.common.hdf5_schema import DATASET_TRANSPORTED_PHOTONS
+from src.config.ConfigIO import artifact_stem_for_sub_run
+from src.config.ConfigIO import resolve_run_environment_paths
+from src.intensifier.models import IntensifierOutputBatch
 from src.intensifier.models import TransportedPhotonBatch
 from src.optics.OpticalTransport import resolve_transport_paths
 
@@ -40,6 +48,22 @@ _REQUIRED_SOURCE_PHOTON_FIELDS = (
     "optical_interface_hit_wavelength_nm",
 )
 
+_INTENSIFIER_OUTPUT_DTYPE = np.dtype(
+    [
+        ("source_photon_index", np.int64),
+        ("gun_call_id", np.int64),
+        ("primary_track_id", np.int32),
+        ("secondary_track_id", np.int32),
+        ("photon_track_id", np.int32),
+        ("output_x_mm", np.float64),
+        ("output_y_mm", np.float64),
+        ("output_time_ns", np.float64),
+        ("signal_amplitude_arb", np.float64),
+        ("total_gain", np.float64),
+        ("wavelength_nm", np.float64),
+    ]
+)
+
 
 def _require_fields(
     dataset_name: str,
@@ -52,6 +76,17 @@ def _require_fields(
     missing = [field for field in required_fields if field not in available]
     if missing:
         raise KeyError(f"Dataset '{dataset_name}' is missing required fields: {missing}")
+
+
+def _copy_dataset_if_present(
+    source: h5py.File,
+    destination: h5py.File,
+    dataset_name: str,
+) -> None:
+    """Copy one dataset when present in the source HDF5 file."""
+
+    if dataset_name in source:
+        source.copy(dataset_name, destination)
 
 
 def _require_existing_path(path: str | Path, label: str) -> Path:
@@ -117,6 +152,78 @@ def resolve_intensifier_input_hdf5_paths(
     )
     source_path = _resolve_source_hdf5_path(transport_path, source_hdf5_path)
     return transport_path, source_path
+
+
+def intensifier_output_hdf5_path_from_sim_config(config: SimConfig) -> Path:
+    """Return the default intensifier output HDF5 path under `run_root/sensor/`."""
+
+    run_paths = resolve_run_environment_paths(config)
+    sensor_dir = (run_paths.run_root / "sensor").resolve()
+    sub_run_number = config.metadata.run_environment.sub_run_number
+    filename = f"{artifact_stem_for_sub_run('intensifier_output_events', sub_run_number)}.h5"
+    return (sensor_dir / filename).resolve()
+
+
+def intensifier_output_batch_to_structured_array(
+    output_events: IntensifierOutputBatch,
+) -> np.ndarray:
+    """Convert one intensifier output batch into the canonical HDF5 dtype."""
+
+    structured = np.empty(len(output_events), dtype=_INTENSIFIER_OUTPUT_DTYPE)
+    structured["source_photon_index"] = output_events.source_photon_index
+    structured["gun_call_id"] = output_events.gun_call_id
+    structured["primary_track_id"] = output_events.primary_track_id
+    structured["secondary_track_id"] = output_events.secondary_track_id
+    structured["photon_track_id"] = output_events.photon_track_id
+    structured["output_x_mm"] = output_events.output_x_mm
+    structured["output_y_mm"] = output_events.output_y_mm
+    structured["output_time_ns"] = output_events.output_time_ns
+    structured["signal_amplitude_arb"] = output_events.signal_amplitude_arb
+    structured["total_gain"] = output_events.total_gain
+    structured["wavelength_nm"] = output_events.wavelength_nm
+    return structured
+
+
+def write_intensifier_output_hdf5(
+    output_events: IntensifierOutputBatch,
+    *,
+    config: SimConfig,
+    transport_hdf5_path: str | Path,
+    output_hdf5_path: str | Path | None = None,
+) -> Path:
+    """Write intensifier output events to a standalone HDF5 file."""
+
+    transport_path, source_path = resolve_intensifier_input_hdf5_paths(
+        config,
+        transport_hdf5_path=transport_hdf5_path,
+    )
+    output_path = (
+        Path(output_hdf5_path).resolve()
+        if output_hdf5_path is not None
+        else intensifier_output_hdf5_path_from_sim_config(config)
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    structured = intensifier_output_batch_to_structured_array(output_events)
+    intensifier = config.intensifier
+    if intensifier is None:
+        raise ValueError("`config.intensifier` is required to write intensifier output.")
+
+    with h5py.File(transport_path, "r") as transport_handle, h5py.File(
+        output_path,
+        "w",
+    ) as output_handle:
+        _copy_dataset_if_present(transport_handle, output_handle, DATASET_PRIMARIES)
+        _copy_dataset_if_present(transport_handle, output_handle, DATASET_SECONDARIES)
+        output_handle.create_dataset(DATASET_INTENSIFIER_OUTPUT_EVENTS, data=structured)
+
+        output_handle.attrs["source_hdf5"] = str(source_path)
+        output_handle.attrs["transport_hdf5"] = str(transport_path)
+        output_handle.attrs["run_id"] = config.metadata.run_environment.simulation_run_id
+        output_handle.attrs["intensifier_model"] = intensifier.model
+        output_handle.attrs["generated_utc"] = datetime.now(timezone.utc).isoformat()
+
+    return output_path
 
 
 def load_transported_photon_batch(

@@ -161,6 +161,7 @@ class SimConfigIntensifierTests(unittest.TestCase):
         payload = self._base_payload()
         payload["intensifier"] = {
             "model": "Cricket2",
+            "writeOutputHdf5": True,
             "input_screen": {
                 "image_circle_diameter_mm": 18.0,
                 "center_mm": [0.0, 0.0],
@@ -199,10 +200,25 @@ class SimConfigIntensifierTests(unittest.TestCase):
             config.intensifier.photocathode.qe_values,
             [0.1, 0.2, 0.05],
         )
+        self.assertTrue(config.intensifier.write_output_hdf5)
         self.assertAlmostEqual(config.intensifier.photocathode.collection_efficiency, 0.8)
         self.assertAlmostEqual(config.intensifier.photocathode.tts_sigma_ns, 0.15)
         self.assertAlmostEqual(config.intensifier.mcp.stage1_mean_gain, 10.0)
         self.assertAlmostEqual(config.intensifier.phosphor.fast_fraction, 0.85)
+
+    def test_intensifier_hdf5_output_flag_defaults_to_false(self) -> None:
+        payload = self._base_payload()
+        payload["intensifier"] = {
+            "model": "Cricket2",
+            "input_screen": {
+                "image_circle_diameter_mm": 18.0,
+                "center_mm": [0.0, 0.0],
+                "magnification": 1.0,
+            },
+        }
+
+        config = self.SimConfig.model_validate(payload)
+        self.assertFalse(config.intensifier.write_output_hdf5)
 
 
 if __name__ == "__main__":

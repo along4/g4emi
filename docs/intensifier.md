@@ -60,7 +60,19 @@ stages can work from one normalized in-memory batch.
 The module currently returns an in-memory `IntensifierOutputBatch`.
 
 This output is sensor-agnostic. It is meant to be passed to a later sensor
-stage, not written as a new HDF5 dataset in the current implementation.
+stage.
+
+By default, no intensifier-stage HDF5 file is written.
+
+If `intensifier.write_output_hdf5` is set to `true`, the pipeline also writes:
+
+- `<run_root>/sensor/intensifier_output_events_<subrun>.h5`
+
+That file contains:
+
+- copied `/primaries`
+- copied `/secondaries`
+- `/intensifier_output_events`
 
 Each output event carries:
 
@@ -81,6 +93,10 @@ The current stage blocks are:
 - `intensifier.photocathode`
 - `intensifier.mcp`
 - `intensifier.phosphor`
+
+The current output-control flag is:
+
+- `intensifier.write_output_hdf5`
 
 ### Photocathode Parameters
 
@@ -121,6 +137,7 @@ fast/slow delay model, and applies a spatial blur.
 ```yaml
 intensifier:
   model: Cricket2
+  write_output_hdf5: false
   input_screen:
     image_circle_diameter_mm: 18.0
     center_mm: [0.0, 0.0]
@@ -168,11 +185,11 @@ Included now:
 - `SimConfig`-driven parameters
 - HDF5 input loading from optical transport output
 - in-memory intensifier output events
+- optional standalone intensifier output HDF5 writing
 
 Not included yet:
 
 - sensor/readout modeling
-- persisted intensifier-stage HDF5 output
 - detailed saturation effects
 - pore-level MCP transport
 - explicit phosphor-photon simulation

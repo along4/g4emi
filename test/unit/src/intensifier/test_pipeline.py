@@ -31,6 +31,7 @@ class IntensifierPipelineTests(unittest.TestCase):
         try:
             import h5py
 
+            from src.common.hdf5_schema import DATASET_INTENSIFIER_OUTPUT_EVENTS
             from src.config.SimConfig import SimConfig
             from src.intensifier.models import IntensifierParams
             from src.intensifier.models import McpParams
@@ -49,6 +50,7 @@ class IntensifierPipelineTests(unittest.TestCase):
             raise
 
         cls.h5py = h5py
+        cls.DATASET_INTENSIFIER_OUTPUT_EVENTS = DATASET_INTENSIFIER_OUTPUT_EVENTS
         cls.SimConfig = SimConfig
         cls.IntensifierParams = IntensifierParams
         cls.McpParams = McpParams
@@ -210,6 +212,19 @@ class IntensifierPipelineTests(unittest.TestCase):
 
     def _write_source_hdf5(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
+        primaries_dtype = np.dtype(
+            [
+                ("gun_call_id", np.int64),
+                ("primary_track_id", np.int32),
+            ]
+        )
+        secondaries_dtype = np.dtype(
+            [
+                ("gun_call_id", np.int64),
+                ("primary_track_id", np.int32),
+                ("secondary_track_id", np.int32),
+            ]
+        )
         photons_dtype = self.np.dtype(
             [
                 ("gun_call_id", self.np.int64),
@@ -227,7 +242,11 @@ class IntensifierPipelineTests(unittest.TestCase):
             ],
             dtype=photons_dtype,
         )
+        primaries = self.np.array([(0, 1)], dtype=primaries_dtype)
+        secondaries = self.np.array([(0, 1, 10)], dtype=secondaries_dtype)
         with self.h5py.File(path, "w") as handle:
+            handle.create_dataset("primaries", data=primaries)
+            handle.create_dataset("secondaries", data=secondaries)
             handle.create_dataset("photons", data=photons)
 
     def _write_transport_hdf5(self, path: Path, *, source_hdf5: Path) -> None:
@@ -254,6 +273,12 @@ class IntensifierPipelineTests(unittest.TestCase):
             dtype=transported_dtype,
         )
         with self.h5py.File(path, "w") as handle:
+            if source_hdf5.exists():
+                with self.h5py.File(source_hdf5, "r") as source_handle:
+                    if "primaries" in source_handle:
+                        source_handle.copy("primaries", handle)
+                    if "secondaries" in source_handle:
+                        source_handle.copy("secondaries", handle)
             handle.create_dataset("transported_photons", data=rows)
             handle.attrs["source_hdf5"] = str(source_hdf5.resolve())
 
@@ -321,6 +346,61 @@ class IntensifierPipelineTests(unittest.TestCase):
             )
             self.assertTrue(np.all(result.output_time_ns >= np.array([11.0, 12.0])))
             self.assertTrue(np.all(result.signal_amplitude_arb > 0.0))
+
+    def test_run_intensifier_pipeline_from_sim_config_optionally_writes_hdf5_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            payload = self._config_payload(tmp_path)
+            payload["intensifier"]["writeOutputHdf5"] = True
+            config = self.SimConfig.model_validate(payload)
+            source_hdf5 = tmp_path / "simulatedPhotons" / "source.h5"
+            transport_hdf5 = tmp_path / "transportedPhotons" / "transport.h5"
+            expected_output = (
+                tmp_path
+                / "intensifier_pipeline_test"
+                / "sensor"
+                / "intensifier_output_events_0000.h5"
+            )
+            self._write_source_hdf5(source_hdf5)
+            self._write_transport_hdf5(transport_hdf5, source_hdf5=source_hdf5)
+
+            result = self.run_intensifier_pipeline_from_sim_config(
+                config,
+                transport_hdf5_path=transport_hdf5,
+                source_hdf5_path=source_hdf5,
+                rng=np.random.default_rng(123),
+            )
+
+            self.assertEqual(len(result), 2)
+            self.assertTrue(expected_output.exists())
+            with self.h5py.File(expected_output, "r") as handle:
+                self.assertIn(self.DATASET_INTENSIFIER_OUTPUT_EVENTS, handle)
+                dataset = handle[self.DATASET_INTENSIFIER_OUTPUT_EVENTS][:]
+                self.assertEqual(len(dataset), 2)
+                np.testing.assert_array_equal(
+                    dataset["source_photon_index"],
+                    result.source_photon_index,
+                )
+                np.testing.assert_allclose(dataset["output_x_mm"], result.output_x_mm)
+                np.testing.assert_allclose(dataset["output_y_mm"], result.output_y_mm)
+                np.testing.assert_allclose(dataset["output_time_ns"], result.output_time_ns)
+                np.testing.assert_allclose(
+                    dataset["signal_amplitude_arb"],
+                    result.signal_amplitude_arb,
+                )
+                np.testing.assert_allclose(dataset["total_gain"], result.total_gain)
+                np.testing.assert_allclose(dataset["wavelength_nm"], result.wavelength_nm)
+                self.assertEqual(
+                    handle.attrs["transport_hdf5"],
+                    str(transport_hdf5.resolve()),
+                )
+                self.assertEqual(
+                    handle.attrs["source_hdf5"],
+                    str(source_hdf5.resolve()),
+                )
+                self.assertEqual(handle.attrs["run_id"], "intensifier_pipeline_test")
+                self.assertEqual(handle.attrs["intensifier_model"], "Cricket2")
+                self.assertIn("generated_utc", handle.attrs)
 
 
 if __name__ == "__main__":

@@ -556,6 +556,11 @@ class IntensifierConfig(StrictModel):
         )
 
     model: str = Field(min_length=1)
+    write_output_hdf5: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("write_output_hdf5", "writeOutputHdf5"),
+        serialization_alias="write_output_hdf5",
+    )
     input_screen: IntensifierInputScreenConfig = Field(
         validation_alias=AliasChoices("input_screen", "inputScreen"),
         serialization_alias="input_screen",
@@ -959,6 +964,7 @@ def default_sim_config() -> SimConfig:
             },
             "intensifier": {
                 "model": "Cricket2",
+                "write_output_hdf5": False,
                 "input_screen": {
                     "image_circle_diameter_mm": 18.0,
                     "center_mm": [0.0, 0.0],
