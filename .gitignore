@@ -34,6 +34,8 @@ compile_commands.json
 # Local scratch dirs (common spelling variants)
 /.scratch/
 
+# Temporary design notes
+/docs/temp/
 
 # Editor/OS artifacts
 .DS_Store

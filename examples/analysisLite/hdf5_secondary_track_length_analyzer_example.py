@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from matplotlib import pyplot as plt
+
 from example_support import default_output_dir_from_input, ensure_repo_root_on_path  # noqa: E402
 
 ensure_repo_root_on_path()
@@ -63,20 +65,33 @@ def _parse_args() -> argparse.Namespace:
         default=None,
         help="Optional maximum x-axis value in mm to clamp long track-length tails.",
     )
+    parser.add_argument(
+        "--show",
+        action="store_true",
+        help="Display the plot interactively instead of writing a PNG.",
+    )
     return parser.parse_args()
+
+
 def main() -> None:
     args = _parse_args()
     hdf5_path = args.hdf5_path.expanduser().resolve()
     if not hdf5_path.exists():
         raise FileNotFoundError(f"Input HDF5 file not found: {hdf5_path}")
 
-    output_dir = (
-        args.output_dir.expanduser().resolve()
-        if args.output_dir is not None
-        else default_output_dir_from_input(hdf5_path).resolve()
+    output_dir = None
+    if not args.show:
+        output_dir = (
+            args.output_dir.expanduser().resolve()
+            if args.output_dir is not None
+            else default_output_dir_from_input(hdf5_path).resolve()
+        )
+        output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = (
+        None
+        if output_dir is None
+        else output_dir / "secondary_track_lengths_overlay.png"
     )
-    output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = output_dir / "secondary_track_lengths_overlay.png"
 
     grouped_lengths = secondary_track_lengths_by_species_mm(
         hdf5_path,
@@ -89,10 +104,15 @@ def main() -> None:
         log_scale=not args.linear_y,
         x_max=args.x_max,
         output_path=output_path,
+        show=False,
     )
 
     print(f"Input HDF5: {hdf5_path}")
-    print(f"Wrote image: {output_path}")
+    if args.show:
+        print("Displaying plot interactively.")
+        plt.show()
+    else:
+        print(f"Wrote image: {output_path}")
     print("Included species:")
     for species, lengths_mm in grouped_lengths.items():
         print(f"  - {species}: {len(lengths_mm)} tracks")

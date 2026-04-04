@@ -157,6 +157,69 @@ class SimConfigIntensifierTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.SimConfig.model_validate(payload)
 
+    def test_intensifier_stage_parameters_are_parsed(self) -> None:
+        payload = self._base_payload()
+        payload["intensifier"] = {
+            "model": "Cricket2",
+            "writeOutputHdf5": True,
+            "input_screen": {
+                "image_circle_diameter_mm": 18.0,
+                "center_mm": [0.0, 0.0],
+                "magnification": 1.0,
+            },
+            "photocathode": {
+                "qeWavelengthNm": [350.0, 500.0, 650.0],
+                "qeValues": [0.1, 0.2, 0.05],
+                "collectionEfficiency": 0.8,
+                "ttsSigmaNs": 0.15,
+            },
+            "mcp": {
+                "stage1MeanGain": 10.0,
+                "stage1GainShape": 2.5,
+                "stage2MeanGain": 900.0,
+                "stage2GainShape": 2.0,
+                "gainRef": 1000.0,
+                "spreadSigma0Mm": 0.03,
+                "spreadGainExponent": 0.4,
+            },
+            "phosphor": {
+                "phosphorGain": 1.2,
+                "decayFastNs": 70.0,
+                "decaySlowNs": 200.0,
+                "fastFraction": 0.85,
+                "psfSigmaMm": 0.04,
+            },
+        }
+
+        config = self.SimConfig.model_validate(payload)
+        self.assertEqual(
+            config.intensifier.photocathode.qe_wavelength_nm,
+            [350.0, 500.0, 650.0],
+        )
+        self.assertEqual(
+            config.intensifier.photocathode.qe_values,
+            [0.1, 0.2, 0.05],
+        )
+        self.assertTrue(config.intensifier.write_output_hdf5)
+        self.assertAlmostEqual(config.intensifier.photocathode.collection_efficiency, 0.8)
+        self.assertAlmostEqual(config.intensifier.photocathode.tts_sigma_ns, 0.15)
+        self.assertAlmostEqual(config.intensifier.mcp.stage1_mean_gain, 10.0)
+        self.assertAlmostEqual(config.intensifier.phosphor.fast_fraction, 0.85)
+
+    def test_intensifier_hdf5_output_flag_defaults_to_false(self) -> None:
+        payload = self._base_payload()
+        payload["intensifier"] = {
+            "model": "Cricket2",
+            "input_screen": {
+                "image_circle_diameter_mm": 18.0,
+                "center_mm": [0.0, 0.0],
+                "magnification": 1.0,
+            },
+        }
+
+        config = self.SimConfig.model_validate(payload)
+        self.assertFalse(config.intensifier.write_output_hdf5)
+
 
 if __name__ == "__main__":
     unittest.main()

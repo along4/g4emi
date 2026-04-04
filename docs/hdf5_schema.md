@@ -7,6 +7,9 @@ It covers:
 - simulation output written by `g4emi`
 - optical transport output written by `src/optics/OpticalTransport.py`
 
+The current intensifier module consumes this transport output in memory. It
+can also optionally write a separate persisted intensifier-stage HDF5 dataset.
+
 This is a reference for the current writer schema. It does not describe legacy
 aliases or older ad hoc outputs.
 
@@ -25,6 +28,12 @@ Typical paths:
 
 - `<run_root>/transportedPhotons/photons_intensifier_hits.h5`
 - `<run_root>/transportedPhotons/photons_intensifier_hits_<subrun>.h5`
+
+Optional intensifier output is written under the `sensor/` stage.
+
+Typical paths:
+
+- `<run_root>/sensor/intensifier_output_events_<subrun>.h5`
 
 ## Simulation Datasets
 
@@ -195,6 +204,53 @@ Notes:
   is configured.
 - When an input screen is configured, the related diameter, center,
   magnification, and coordinate-frame attributes are also written.
+
+## Optional Intensifier Output Dataset
+
+When `intensifier.write_output_hdf5` is `true`, the intensifier pipeline also
+writes a standalone HDF5 file under `sensor/`.
+
+Intensifier output HDF5 files contain:
+
+- copied `/primaries`
+- copied `/secondaries`
+- `/intensifier_output_events`
+
+### `/intensifier_output_events`
+
+Fields:
+
+- `source_photon_index`
+- `gun_call_id`
+- `primary_track_id`
+- `secondary_track_id`
+- `photon_track_id`
+- `output_x_mm`
+- `output_y_mm`
+- `output_time_ns`
+- `signal_amplitude_arb`
+- `total_gain`
+- `wavelength_nm`
+
+Notes:
+
+- `/intensifier_output_events` stores one row per final in-memory intensifier
+  output event.
+- `source_photon_index` links the event back to the source `/photons` row used
+  by optical transport.
+- `signal_amplitude_arb` is the current sensor-agnostic output amplitude from
+  the phosphor stage.
+- `total_gain` is the combined gain after the simplified dual-stage MCP model.
+
+### Intensifier Output File Attributes
+
+Common attributes:
+
+- `source_hdf5`
+- `transport_hdf5`
+- `run_id`
+- `intensifier_model`
+- `generated_utc`
 
 ## Schema Sources
 
