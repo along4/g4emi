@@ -261,14 +261,13 @@ class IntensifierPipelineTests(unittest.TestCase):
                 ("intensifier_hit_x_mm", np.float64),
                 ("intensifier_hit_y_mm", np.float64),
                 ("intensifier_hit_z_mm", np.float64),
-                ("reached_intensifier", np.bool_),
                 ("in_bounds", np.bool_),
             ]
         )
         rows = np.array(
             [
-                (0, 0, 1, 10, 100, 1.5, 2.5, 3.5, True, True),
-                (1, 0, 1, 10, 101, 4.5, 5.5, 6.5, True, True),
+                (0, 0, 1, 10, 100, 1.5, 2.5, 3.5, True),
+                (1, 0, 1, 10, 101, 4.5, 5.5, 6.5, True),
             ],
             dtype=transported_dtype,
         )

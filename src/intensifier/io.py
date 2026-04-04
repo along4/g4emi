@@ -40,7 +40,6 @@ _REQUIRED_TRANSPORT_FIELDS = (
     "intensifier_hit_x_mm",
     "intensifier_hit_y_mm",
     "intensifier_hit_z_mm",
-    "reached_intensifier",
     "in_bounds",
 )
 
@@ -304,10 +303,7 @@ def load_transported_photon_batch(
 
         for start in range(0, total_transport_rows, chunk_rows):
             stop = min(start + chunk_rows, total_transport_rows)
-            reached_mask = np.asarray(
-                transported_ds["reached_intensifier"][start:stop],
-                dtype=bool,
-            )
+            reached_mask = np.ones(stop - start, dtype=bool)
             if require_in_bounds:
                 reached_mask &= np.asarray(
                     transported_ds["in_bounds"][start:stop],

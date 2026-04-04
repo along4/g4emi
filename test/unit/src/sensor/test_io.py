@@ -209,7 +209,6 @@ class TimepixIoTests(unittest.TestCase):
                 ("intensifier_hit_x_mm", np.float64),
                 ("intensifier_hit_y_mm", np.float64),
                 ("intensifier_hit_z_mm", np.float64),
-                ("reached_intensifier", np.bool_),
                 ("in_bounds", np.bool_),
             ]
         )
@@ -234,7 +233,7 @@ class TimepixIoTests(unittest.TestCase):
             handle.create_dataset(
                 "transported_photons",
                 data=np.array(
-                    [(0, 0, 1, 10, 100, 1.0, 2.0, 3.0, True, True)],
+                    [(0, 0, 1, 10, 100, 1.0, 2.0, 3.0, True)],
                     dtype=transported_dtype,
                 ),
             )

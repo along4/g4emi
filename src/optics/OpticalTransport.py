@@ -74,7 +74,6 @@ _TRANSPORT_DTYPE = np.dtype(
         ("intensifier_hit_x_mm", np.float64),
         ("intensifier_hit_y_mm", np.float64),
         ("intensifier_hit_z_mm", np.float64),
-        ("reached_intensifier", np.bool_),
         ("in_bounds", np.bool_),
     ]
 )
@@ -735,7 +734,6 @@ def _transport_rows_chunk(
                 np.float64(sensor_x),
                 np.float64(sensor_y),
                 np.float64(sensor_z),
-                True,
                 bool(in_bounds),
             )
         )

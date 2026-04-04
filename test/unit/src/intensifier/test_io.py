@@ -204,15 +204,13 @@ class IntensifierIoTests(unittest.TestCase):
                 ("intensifier_hit_x_mm", self.np.float64),
                 ("intensifier_hit_y_mm", self.np.float64),
                 ("intensifier_hit_z_mm", self.np.float64),
-                ("reached_intensifier", self.np.bool_),
                 ("in_bounds", self.np.bool_),
             ]
         )
         rows = self.np.array(
             [
-                (0, 0, 1, 10, 100, 1.5, 2.5, 3.5, True, True),
-                (1, 0, 1, 10, 101, 4.5, 5.5, 6.5, True, False),
-                (2, 0, 1, 10, 102, self.np.nan, self.np.nan, self.np.nan, False, False),
+                (0, 0, 1, 10, 100, 1.5, 2.5, 3.5, True),
+                (1, 0, 1, 10, 101, 4.5, 5.5, 6.5, False),
             ],
             dtype=transported_dtype,
         )

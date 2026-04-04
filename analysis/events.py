@@ -177,18 +177,11 @@ def event_recoil_paths_to_image(
         transported = read_structured_dataset(transport_hdf5_path, DATASET_TRANSPORTED_PHOTONS)
         require_fields(
             transported,
-            {"source_photon_index", "reached_intensifier"},
+            {"source_photon_index"},
             dataset_name=DATASET_TRANSPORTED_PHOTONS,
         )
         source_indices = np.asarray(transported["source_photon_index"], dtype=np.int64)
-        reached_lookup = {
-            int(source_index): bool(reached)
-            for source_index, reached in zip(
-                source_indices,
-                np.asarray(transported["reached_intensifier"], dtype=bool),
-                strict=False,
-            )
-        }
+        reached_lookup = {int(source_index): True for source_index in source_indices}
         transport_reached_mask = np.array(
             [reached_lookup.get(int(index), False) for index in event_photon_indices],
             dtype=bool,

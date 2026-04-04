@@ -333,13 +333,6 @@ def intensifier_photons_to_image(
 
     mask = np.ones(len(transported), dtype=bool)
     reached_mask = np.ones(len(transported), dtype=bool)
-    if "reached_intensifier" in transported_names:
-        reached_mask = np.asarray(transported["reached_intensifier"], dtype=bool)
-    else:
-        reached_mask = (
-            np.isfinite(np.asarray(transported["intensifier_hit_x_mm"], dtype=float))
-            & np.isfinite(np.asarray(transported["intensifier_hit_y_mm"], dtype=float))
-        )
     if require_reached_intensifier:
         mask &= reached_mask
 

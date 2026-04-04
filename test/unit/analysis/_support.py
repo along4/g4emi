@@ -55,15 +55,13 @@ class AnalysisDataBuilderMixin:
             [
                 ("intensifier_hit_x_mm", self.np.float64),
                 ("intensifier_hit_y_mm", self.np.float64),
-                ("reached_intensifier", self.np.bool_),
                 ("in_bounds", self.np.bool_),
             ]
         )
         rows = self.np.array(
             [
-                (0.0, 0.0, True, True),
-                (10.0, 0.0, True, False),
-                (self.np.nan, self.np.nan, False, False),
+                (0.0, 0.0, True),
+                (10.0, 0.0, False),
             ],
             dtype=dtype,
         )
@@ -284,17 +282,13 @@ class AnalysisDataBuilderMixin:
         transported_dtype = self.np.dtype(
             [
                 ("source_photon_index", self.np.int64),
-                ("reached_intensifier", self.np.bool_),
             ]
         )
         rows = self.np.array(
             [
-                (0, False),
-                (1, True),
-                (2, True),
-                (3, False),
-                (4, False),
-                (5, True),
+                (1,),
+                (2,),
+                (5,),
             ],
             dtype=transported_dtype,
         )

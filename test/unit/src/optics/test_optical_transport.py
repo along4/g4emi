@@ -308,7 +308,6 @@ class OpticalTransportTests(unittest.TestCase):
                 self.assertNotIn("optical_interface_hit_energy_eV", rows.dtype.names)
                 self.assertNotIn("optical_interface_hit_wavelength_nm", rows.dtype.names)
 
-                self.assertTrue(bool(rows["reached_intensifier"][0]))
                 self.assertFalse(bool(rows["in_bounds"][0]))
                 self.assertAlmostEqual(float(rows["intensifier_hit_x_mm"][0]), 11.5)
                 self.assertAlmostEqual(float(rows["intensifier_hit_y_mm"][0]), -3.0)
@@ -382,7 +381,6 @@ class OpticalTransportTests(unittest.TestCase):
 
             with self.h5py.File(summary.output_hdf5, "r") as handle:
                 rows = handle["transported_photons"][:]
-                self.assertTrue(bool(rows["reached_intensifier"][0]))
                 self.assertTrue(bool(rows["in_bounds"][0]))
                 self.assertEqual(len(rows), 1)
                 self.assertFalse(bool(handle.attrs["intensifier_input_screen_defined"]))
