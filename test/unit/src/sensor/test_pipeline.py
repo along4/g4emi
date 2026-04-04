@@ -258,8 +258,8 @@ class TimepixPipelineTests(unittest.TestCase):
                 "transported_photons",
                 data=np.array(
                     [
-                        (0, 0, 1, 10, 100, hit_x_mm, hit_y_mm, 0.0, True),
-                        (1, 0, 1, 10, 101, hit_x_mm, hit_y_mm, 0.0, True),
+                        (0, 0, 1, 10, 100, hit_x_mm, hit_y_mm, 0.0, 11.0, 450.0, True),
+                        (1, 0, 1, 10, 101, hit_x_mm, hit_y_mm, 0.0, 12.0, 500.0, True),
                     ],
                     dtype=np.dtype(
                         [
@@ -271,6 +271,8 @@ class TimepixPipelineTests(unittest.TestCase):
                             ("intensifier_hit_x_mm", np.float64),
                             ("intensifier_hit_y_mm", np.float64),
                             ("intensifier_hit_z_mm", np.float64),
+                            ("intensifier_hit_time_ns", np.float64),
+                            ("intensifier_hit_wavelength_nm", np.float64),
                             ("in_bounds", np.bool_),
                         ]
                     ),

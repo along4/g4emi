@@ -81,6 +81,8 @@ TRANSPORTED_PHOTON_FIELDS = (
     "intensifier_hit_x_mm",
     "intensifier_hit_y_mm",
     "intensifier_hit_z_mm",
+    "intensifier_hit_time_ns",
+    "intensifier_hit_wavelength_nm",
     "in_bounds",
 )
 

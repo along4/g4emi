@@ -40,12 +40,9 @@ _REQUIRED_TRANSPORT_FIELDS = (
     "intensifier_hit_x_mm",
     "intensifier_hit_y_mm",
     "intensifier_hit_z_mm",
+    "intensifier_hit_time_ns",
+    "intensifier_hit_wavelength_nm",
     "in_bounds",
-)
-
-_REQUIRED_SOURCE_PHOTON_FIELDS = (
-    "optical_interface_hit_time_ns",
-    "optical_interface_hit_wavelength_nm",
 )
 
 _INTENSIFIER_OUTPUT_DTYPE = np.dtype(
@@ -263,32 +260,24 @@ def load_transported_photon_batch(
     """Load usable transported photons and source timing/wavelength into one batch."""
 
     transport_path = _resolve_transport_hdf5_path(None, transport_hdf5_path)
-    source_path = _resolve_source_hdf5_path(transport_path, source_hdf5_path)
+    del source_hdf5_path
     logger = get_logger()
     if chunk_rows <= 0:
         raise ValueError("`chunk_rows` must be > 0.")
 
-    with h5py.File(transport_path, "r") as transport_handle, h5py.File(
-        source_path,
-        "r",
-    ) as source_handle:
+    with h5py.File(transport_path, "r") as transport_handle:
         if DATASET_TRANSPORTED_PHOTONS not in transport_handle:
             raise KeyError(
                 f"Dataset '{DATASET_TRANSPORTED_PHOTONS}' not found in {transport_path}"
             )
-        if DATASET_PHOTONS not in source_handle:
-            raise KeyError(f"Dataset '{DATASET_PHOTONS}' not found in {source_path}")
 
         transported_ds = transport_handle[DATASET_TRANSPORTED_PHOTONS]
-        source_ds = source_handle[DATASET_PHOTONS]
         transported_fields = transported_ds.dtype.names or ()
-        source_fields = source_ds.dtype.names or ()
         _require_fields(
             DATASET_TRANSPORTED_PHOTONS,
             transported_fields,
             _REQUIRED_TRANSPORT_FIELDS,
         )
-        _require_fields(DATASET_PHOTONS, source_fields, _REQUIRED_SOURCE_PHOTON_FIELDS)
 
         total_transport_rows = int(transported_ds.shape[0])
         source_index_parts: list[np.ndarray] = []
@@ -299,6 +288,8 @@ def load_transported_photon_batch(
         x_parts: list[np.ndarray] = []
         y_parts: list[np.ndarray] = []
         z_parts: list[np.ndarray] = []
+        time_parts: list[np.ndarray] = []
+        wavelength_parts: list[np.ndarray] = []
         selected_row_count = 0
 
         for start in range(0, total_transport_rows, chunk_rows):
@@ -336,6 +327,15 @@ def load_transported_photon_batch(
                 z_parts.append(
                     np.asarray(selected_chunk["intensifier_hit_z_mm"], dtype=np.float64)
                 )
+                time_parts.append(
+                    np.asarray(selected_chunk["intensifier_hit_time_ns"], dtype=np.float64)
+                )
+                wavelength_parts.append(
+                    np.asarray(
+                        selected_chunk["intensifier_hit_wavelength_nm"],
+                        dtype=np.float64,
+                    )
+                )
                 selected_row_count += int(np.count_nonzero(reached_mask))
 
             if show_progress:
@@ -356,41 +356,6 @@ def load_transported_photon_batch(
         x_mm = np.concatenate(x_parts)
         y_mm = np.concatenate(y_parts)
         z_mm = np.concatenate(z_parts)
-
-        time_parts: list[np.ndarray] = []
-        wavelength_parts: list[np.ndarray] = []
-        total_selected_rows = int(source_indices.shape[0])
-        logger.info(
-            "[intensifier] Joining source photon timing/wavelength rows: "
-            f"{total_selected_rows}"
-        )
-        for start in range(0, total_selected_rows, chunk_rows):
-            stop = min(start + chunk_rows, total_selected_rows)
-            chunk_source_indices = source_indices[start:stop]
-            order = np.argsort(chunk_source_indices, kind="stable")
-            sorted_indices = chunk_source_indices[order]
-            sorted_source_rows = source_ds[sorted_indices]
-            inverse_order = np.empty_like(order)
-            inverse_order[order] = np.arange(order.size, dtype=order.dtype)
-            source_rows = sorted_source_rows[inverse_order]
-            time_parts.append(
-                np.asarray(
-                    source_rows["optical_interface_hit_time_ns"],
-                    dtype=np.float64,
-                )
-            )
-            wavelength_parts.append(
-                np.asarray(
-                    source_rows["optical_interface_hit_wavelength_nm"],
-                    dtype=np.float64,
-                )
-            )
-            if show_progress:
-                _write_load_progress(
-                    "Intensifier source join",
-                    stop,
-                    total_selected_rows,
-                )
 
         return TransportedPhotonBatch(
             source_photon_index=source_indices,
@@ -416,14 +381,10 @@ def load_transported_photon_batch_from_sim_config(
 ) -> TransportedPhotonBatch:
     """Resolve HDF5 input paths from `SimConfig` and load one photon batch."""
 
-    transport_path, source_path = resolve_intensifier_input_hdf5_paths(
-        config,
-        transport_hdf5_path=transport_hdf5_path,
-        source_hdf5_path=source_hdf5_path,
-    )
+    del source_hdf5_path
+    transport_path = _resolve_transport_hdf5_path(config, transport_hdf5_path)
     return load_transported_photon_batch(
         transport_path,
-        source_hdf5_path=source_path,
         require_in_bounds=require_in_bounds,
         show_progress=(
             bool(config.runner.show_progress)

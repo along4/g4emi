@@ -59,6 +59,7 @@ _REQUIRED_PHOTON_FIELDS = (
     "photon_track_id",
     "optical_interface_hit_x_mm",
     "optical_interface_hit_y_mm",
+    "optical_interface_hit_time_ns",
     "optical_interface_hit_dir_x",
     "optical_interface_hit_dir_y",
     "optical_interface_hit_dir_z",
@@ -74,6 +75,8 @@ _TRANSPORT_DTYPE = np.dtype(
         ("intensifier_hit_x_mm", np.float64),
         ("intensifier_hit_y_mm", np.float64),
         ("intensifier_hit_z_mm", np.float64),
+        ("intensifier_hit_time_ns", np.float64),
+        ("intensifier_hit_wavelength_nm", np.float64),
         ("in_bounds", np.bool_),
     ]
 )
@@ -734,6 +737,10 @@ def _transport_rows_chunk(
                 np.float64(sensor_x),
                 np.float64(sensor_y),
                 np.float64(sensor_z),
+                np.float64(photon["optical_interface_hit_time_ns"]),
+                np.float64(photon["optical_interface_hit_wavelength_nm"])
+                if "optical_interface_hit_wavelength_nm" in photon_field_names
+                else np.nan,
                 bool(in_bounds),
             )
         )

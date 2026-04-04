@@ -71,7 +71,9 @@ def configure_run_logger(
     log_path = resolve_run_log_path(config, filename=filename)
     sink = sys.stderr if screen_sink is None else screen_sink
 
-    _remove_owned_handlers(logger)
+    logger.remove()
+    _RUN_SCREEN_HANDLER_ID = None
+    _RUN_FILE_HANDLER_ID = None
     _RUN_SCREEN_HANDLER_ID = logger.add(
         sink,
         level=screen_level,

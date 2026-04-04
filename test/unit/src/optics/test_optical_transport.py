@@ -214,6 +214,7 @@ class OpticalTransportTests(unittest.TestCase):
                 ("photon_track_id", self.np.int32),
                 ("optical_interface_hit_x_mm", self.np.float64),
                 ("optical_interface_hit_y_mm", self.np.float64),
+                ("optical_interface_hit_time_ns", self.np.float64),
                 ("optical_interface_hit_dir_x", self.np.float64),
                 ("optical_interface_hit_dir_y", self.np.float64),
                 ("optical_interface_hit_dir_z", self.np.float64),
@@ -232,8 +233,8 @@ class OpticalTransportTests(unittest.TestCase):
         )
         photons = self.np.array(
             [
-                (0, 1, 10, 100, 1.5, 2.0, 0.0, 0.0, 1.0, 2.1, 500.0),
-                (0, 1, 10, 101, -4.0, 1.0, 0.0, 0.0, 1.0, 2.1, 500.0),
+                (0, 1, 10, 100, 1.5, 2.0, 11.0, 0.0, 0.0, 1.0, 2.1, 500.0),
+                (0, 1, 10, 101, -4.0, 1.0, 12.0, 0.0, 0.0, 1.0, 2.1, 500.0),
             ],
             dtype=photons_dtype,
         )

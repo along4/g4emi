@@ -55,13 +55,15 @@ class AnalysisDataBuilderMixin:
             [
                 ("intensifier_hit_x_mm", self.np.float64),
                 ("intensifier_hit_y_mm", self.np.float64),
+                ("intensifier_hit_time_ns", self.np.float64),
+                ("intensifier_hit_wavelength_nm", self.np.float64),
                 ("in_bounds", self.np.bool_),
             ]
         )
         rows = self.np.array(
             [
-                (0.0, 0.0, True),
-                (10.0, 0.0, False),
+                (0.0, 0.0, 11.0, 450.0, True),
+                (10.0, 0.0, 12.0, 500.0, False),
             ],
             dtype=dtype,
         )

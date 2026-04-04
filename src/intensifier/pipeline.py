@@ -168,12 +168,12 @@ def run_intensifier_pipeline_from_sim_config(
 ) -> IntensifierOutputBatch:
     """Load HDF5 inputs via `SimConfig` and run the full intensifier pipeline."""
 
+    del source_hdf5_path
     logger = get_logger()
     logger.info("[intensifier] Loading transported photons.")
     transported_photons = load_transported_photon_batch_from_sim_config(
         config,
         transport_hdf5_path=transport_hdf5_path,
-        source_hdf5_path=source_hdf5_path,
         require_in_bounds=require_in_bounds,
         show_progress=config.runner.show_progress,
     )
