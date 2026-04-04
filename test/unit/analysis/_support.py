@@ -187,6 +187,14 @@ class AnalysisDataBuilderMixin:
 
     def _write_event_recoil_hdf5(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
+        primaries_dtype = self.np.dtype(
+            [
+                ("gun_call_id", self.np.int64),
+                ("primary_species", "S16"),
+                ("primary_x_mm", self.np.float64),
+                ("primary_y_mm", self.np.float64),
+            ]
+        )
         secondaries_dtype = self.np.dtype(
             [
                 ("gun_call_id", self.np.int64),
@@ -195,6 +203,7 @@ class AnalysisDataBuilderMixin:
                 ("secondary_origin_x_mm", self.np.float64),
                 ("secondary_origin_y_mm", self.np.float64),
                 ("secondary_origin_z_mm", self.np.float64),
+                ("secondary_origin_energy_MeV", self.np.float64),
                 ("secondary_end_x_mm", self.np.float64),
                 ("secondary_end_y_mm", self.np.float64),
                 ("secondary_end_z_mm", self.np.float64),
@@ -209,12 +218,20 @@ class AnalysisDataBuilderMixin:
                 ("photon_origin_z_mm", self.np.float64),
             ]
         )
+        primary_rows = self.np.array(
+            [
+                (7, b"neutron", -0.5, 0.25),
+                (9, b"neutron", 1.8, 1.7),
+                (8, b"neutron", -1.2, -0.8),
+            ],
+            dtype=primaries_dtype,
+        )
         secondary_rows = self.np.array(
             [
-                (7, 21, b"proton", 0.0, 0.0, 0.0, 5.0, 1.0, 0.0),
-                (7, 22, b"alpha", 1.0, 3.0, 0.0, 1.0, 8.0, 2.0),
-                (9, 41, b"proton", 2.0, 2.0, 0.0, self.np.nan, 4.0, 0.0),
-                (8, 31, b"proton", -1.0, -1.0, 0.0, -2.0, -2.0, 0.0),
+                (7, 21, b"proton", 0.0, 0.0, 0.0, 4.250, 5.0, 1.0, 0.0),
+                (7, 22, b"alpha", 1.0, 3.0, 0.0, 1.500, 1.0, 8.0, 2.0),
+                (9, 41, b"proton", 2.0, 2.0, 0.0, 2.750, self.np.nan, 4.0, 0.0),
+                (8, 31, b"proton", -1.0, -1.0, 0.0, 3.125, -2.0, -2.0, 0.0),
             ],
             dtype=secondaries_dtype,
         )
@@ -230,5 +247,28 @@ class AnalysisDataBuilderMixin:
             dtype=photons_dtype,
         )
         with self.h5py.File(path, "w") as handle:
+            handle.create_dataset("primaries", data=primary_rows)
             handle.create_dataset("secondaries", data=secondary_rows)
             handle.create_dataset("photons", data=photon_rows)
+
+    def _write_event_transport_hdf5(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        transported_dtype = self.np.dtype(
+            [
+                ("source_photon_index", self.np.int64),
+                ("reached_intensifier", self.np.bool_),
+            ]
+        )
+        rows = self.np.array(
+            [
+                (0, False),
+                (1, True),
+                (2, True),
+                (3, False),
+                (4, False),
+                (5, True),
+            ],
+            dtype=transported_dtype,
+        )
+        with self.h5py.File(path, "w") as handle:
+            handle.create_dataset("transported_photons", data=rows)
