@@ -245,6 +245,20 @@ class SimConfigIntensifierTests(unittest.TestCase):
         payload = self._base_payload()
         payload["sensor"] = {
             "model": "Timepix",
+            "timepix": {},
+        }
+
+        config = self.SimConfig.model_validate(payload)
+        self.assertEqual(config.sensor.timepix.pixels_x, 256)
+        self.assertEqual(config.sensor.timepix.pixels_y, 256)
+        self.assertAlmostEqual(config.sensor.timepix.pixel_pitch_mm, 0.055)
+        self.assertAlmostEqual(config.sensor.timepix.max_tot_ns, 25550.0)
+        self.assertAlmostEqual(config.sensor.timepix.dead_time_ns, 475.0)
+
+    def test_sensor_timepix_accepts_camel_case_defaults_override(self) -> None:
+        payload = self._base_payload()
+        payload["sensor"] = {
+            "model": "Timepix",
             "timepix": {
                 "maxTotNs": 750.0,
                 "deadTimeNs": 0.0,
@@ -252,9 +266,6 @@ class SimConfigIntensifierTests(unittest.TestCase):
         }
 
         config = self.SimConfig.model_validate(payload)
-        self.assertEqual(config.sensor.timepix.pixels_x, 256)
-        self.assertEqual(config.sensor.timepix.pixels_y, 256)
-        self.assertAlmostEqual(config.sensor.timepix.pixel_pitch_mm, 0.055)
         self.assertAlmostEqual(config.sensor.timepix.max_tot_ns, 750.0)
         self.assertAlmostEqual(config.sensor.timepix.dead_time_ns, 0.0)
 
@@ -282,8 +293,6 @@ class SimConfigIntensifierTests(unittest.TestCase):
             "model": "Timepix",
             "timepix": {
                 "pixels_x": 0,
-                "max_tot_ns": 500.0,
-                "dead_time_ns": 50.0,
             },
         }
 
@@ -296,8 +305,6 @@ class SimConfigIntensifierTests(unittest.TestCase):
             "model": "Timepix",
             "timepix": {
                 "pixels_y": -1,
-                "max_tot_ns": 500.0,
-                "dead_time_ns": 50.0,
             },
         }
 
@@ -310,8 +317,6 @@ class SimConfigIntensifierTests(unittest.TestCase):
             "model": "Timepix",
             "timepix": {
                 "pixel_pitch_mm": 0.0,
-                "max_tot_ns": 500.0,
-                "dead_time_ns": 50.0,
             },
         }
 
@@ -324,7 +329,6 @@ class SimConfigIntensifierTests(unittest.TestCase):
             "model": "Timepix",
             "timepix": {
                 "max_tot_ns": 0.0,
-                "dead_time_ns": 50.0,
             },
         }
 
@@ -336,7 +340,6 @@ class SimConfigIntensifierTests(unittest.TestCase):
         payload["sensor"] = {
             "model": "Timepix",
             "timepix": {
-                "max_tot_ns": 500.0,
                 "dead_time_ns": -0.1,
             },
         }
@@ -348,10 +351,7 @@ class SimConfigIntensifierTests(unittest.TestCase):
         payload = self._base_payload()
         payload["sensor"] = {
             "model": "   ",
-            "timepix": {
-                "max_tot_ns": 500.0,
-                "dead_time_ns": 50.0,
-            },
+            "timepix": {},
         }
 
         with self.assertRaises(ValueError):
