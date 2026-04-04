@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -13,6 +14,14 @@ from src.sensor.models import TimepixParams
 
 if TYPE_CHECKING:
     from src.config.SimConfig import SimConfig
+
+
+@dataclass(slots=True)
+class _ActivePixelState:
+    """Mutable per-pixel readout state while accumulating one hit row."""
+
+    hit_index: int
+    hit_end_time_ns: float
 
 
 def timepix_params_from_sim_config(config: SimConfig) -> TimepixParams:
@@ -31,24 +40,14 @@ def timepix_params_from_sim_config(config: SimConfig) -> TimepixParams:
     )
 
 
-def compute_timepix_sensor_size_mm(params: TimepixParams) -> tuple[float, float]:
-    """Return active Timepix width/height in millimeters."""
-
-    return (
-        float(params.pixels_x) * float(params.pixel_pitch_mm),
-        float(params.pixels_y) * float(params.pixel_pitch_mm),
-    )
-
-
 def timepix_in_bounds_mask(
     intensifier_output: IntensifierOutputBatch,
     params: TimepixParams,
 ) -> np.ndarray:
     """Return a mask for intensifier events that fall on the centered Timepix area."""
 
-    sensor_width_mm, sensor_height_mm = compute_timepix_sensor_size_mm(params)
-    half_width_mm = sensor_width_mm / 2.0
-    half_height_mm = sensor_height_mm / 2.0
+    half_width_mm = params.sensor_width_mm / 2.0
+    half_height_mm = params.sensor_height_mm / 2.0
     return (
         (intensifier_output.output_x_mm >= -half_width_mm)
         & (intensifier_output.output_x_mm < half_width_mm)
@@ -64,11 +63,10 @@ def centered_mm_to_pixel_indices(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Map centered sensor-plane coordinates onto Timepix pixel indices."""
 
-    sensor_width_mm, sensor_height_mm = compute_timepix_sensor_size_mm(params)
-    x_pixel = np.floor((x_mm + sensor_width_mm / 2.0) / params.pixel_pitch_mm).astype(
+    x_pixel = np.floor((x_mm + params.sensor_width_mm / 2.0) / params.pixel_pitch_mm).astype(
         np.int32
     )
-    y_pixel = np.floor((y_mm + sensor_height_mm / 2.0) / params.pixel_pitch_mm).astype(
+    y_pixel = np.floor((y_mm + params.sensor_height_mm / 2.0) / params.pixel_pitch_mm).astype(
         np.int32
     )
     return x_pixel, y_pixel
@@ -145,8 +143,7 @@ def convert_timepix_events_to_hits(
     time_over_threshold_ns: list[float] = []
     contribution_count: list[int] = []
 
-    # Per-pixel state: active hit row index and current hit end time.
-    pixel_state: dict[tuple[int, int], tuple[int, float]] = {}
+    pixel_state: dict[tuple[int, int], _ActivePixelState] = {}
 
     for index in range(len(sorted_events)):
         pixel_key = (
@@ -154,26 +151,24 @@ def convert_timepix_events_to_hits(
             int(sorted_events.y_pixel[index]),
         )
         event_time_ns = float(sorted_events.event_time_ns[index])
-        event_tot_ns = min(
+        tot_contribution_ns = min(
             float(sorted_events.signal_amplitude_arb[index]),
             float(params.max_tot_ns),
         )
 
-        existing_state = pixel_state.get(pixel_key)
-        if existing_state is not None:
-            hit_index, hit_end_time_ns = existing_state
-            dead_time_end_ns = hit_end_time_ns + float(params.dead_time_ns)
+        state = pixel_state.get(pixel_key)
+        if state is not None:
+            dead_time_end_ns = state.hit_end_time_ns + float(params.dead_time_ns)
 
-            if event_time_ns < hit_end_time_ns:
-                remaining_tot_ns = hit_end_time_ns - event_time_ns
+            if event_time_ns < state.hit_end_time_ns:
+                remaining_tot_ns = state.hit_end_time_ns - event_time_ns
                 merged_tot_ns = min(
                     float(params.max_tot_ns),
-                    remaining_tot_ns + event_tot_ns,
+                    remaining_tot_ns + tot_contribution_ns,
                 )
-                hit_end_time_ns = event_time_ns + merged_tot_ns
-                time_over_threshold_ns[hit_index] = merged_tot_ns
-                contribution_count[hit_index] += 1
-                pixel_state[pixel_key] = (hit_index, hit_end_time_ns)
+                state.hit_end_time_ns = event_time_ns + merged_tot_ns
+                time_over_threshold_ns[state.hit_index] = merged_tot_ns
+                contribution_count[state.hit_index] += 1
                 continue
 
             if event_time_ns < dead_time_end_ns:
@@ -185,11 +180,13 @@ def convert_timepix_events_to_hits(
         x_pixel.append(pixel_key[0])
         y_pixel.append(pixel_key[1])
         time_of_arrival_ns.append(0.0)
-        time_over_threshold_ns.append(event_tot_ns)
+        time_over_threshold_ns.append(tot_contribution_ns)
         contribution_count.append(1)
 
-        hit_index = len(gun_call_id) - 1
-        pixel_state[pixel_key] = (hit_index, event_time_ns + event_tot_ns)
+        pixel_state[pixel_key] = _ActivePixelState(
+            hit_index=len(gun_call_id) - 1,
+            hit_end_time_ns=event_time_ns + tot_contribution_ns,
+        )
 
     return TimepixHitBatch(
         gun_call_id=np.asarray(gun_call_id, dtype=np.int64),

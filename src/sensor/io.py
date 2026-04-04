@@ -15,8 +15,10 @@ except ModuleNotFoundError as exc:  # pragma: no cover - dependency availability
     ) from exc
 import numpy as np
 
+from src.common.hdf5_schema import DATASET_TIMEPIX_HITS
 from src.common.hdf5_schema import DATASET_PRIMARIES
 from src.common.hdf5_schema import DATASET_SECONDARIES
+from src.common.hdf5_schema import TIMEPIX_HIT_FIELDS
 from src.config.ConfigIO import artifact_stem_for_sub_run
 from src.config.ConfigIO import resolve_run_environment_paths
 from src.intensifier.io import _copy_dataset_if_present
@@ -27,19 +29,23 @@ if TYPE_CHECKING:
     from src.config.SimConfig import SimConfig
 
 
-DATASET_TIMEPIX_HITS = "timepix_hits"
-
 _TIMEPIX_HIT_DTYPE = np.dtype(
-    [
-        ("gun_call_id", np.int64),
-        ("primary_track_id", np.int32),
-        ("secondary_track_id", np.int32),
-        ("x_pixel", np.int32),
-        ("y_pixel", np.int32),
-        ("time_of_arrival_ns", np.float64),
-        ("time_over_threshold_ns", np.float64),
-        ("contribution_count", np.int32),
-    ]
+    list(
+        zip(
+            TIMEPIX_HIT_FIELDS,
+            (
+                np.int64,
+                np.int32,
+                np.int32,
+                np.int32,
+                np.int32,
+                np.float64,
+                np.float64,
+                np.int32,
+            ),
+            strict=True,
+        )
+    )
 )
 
 

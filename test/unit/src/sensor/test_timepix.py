@@ -34,7 +34,6 @@ class TimepixModelTests(unittest.TestCase):
             from src.sensor.models import TimepixHitBatch
             from src.sensor.models import TimepixParams
             from src.sensor.timepix import centered_mm_to_pixel_indices
-            from src.sensor.timepix import compute_timepix_sensor_size_mm
             from src.sensor.timepix import convert_timepix_events_to_hits
             from src.sensor.timepix import map_intensifier_output_to_timepix_events
             from src.sensor.timepix import sort_timepix_events_by_time
@@ -55,7 +54,6 @@ class TimepixModelTests(unittest.TestCase):
         cls.TimepixHitBatch = TimepixHitBatch
         cls.TimepixParams = TimepixParams
         cls.centered_mm_to_pixel_indices = staticmethod(centered_mm_to_pixel_indices)
-        cls.compute_timepix_sensor_size_mm = staticmethod(compute_timepix_sensor_size_mm)
         cls.convert_timepix_events_to_hits = staticmethod(convert_timepix_events_to_hits)
         cls.map_intensifier_output_to_timepix_events = staticmethod(
             map_intensifier_output_to_timepix_events
@@ -250,10 +248,8 @@ class TimepixModelTests(unittest.TestCase):
             dead_time_ns=475.0,
         )
 
-        sensor_width_mm, sensor_height_mm = self.compute_timepix_sensor_size_mm(params)
-
-        self.assertAlmostEqual(sensor_width_mm, 14.08)
-        self.assertAlmostEqual(sensor_height_mm, 14.08)
+        self.assertAlmostEqual(params.sensor_width_mm, 14.08)
+        self.assertAlmostEqual(params.sensor_height_mm, 14.08)
 
     def test_timepix_in_bounds_mask_uses_centered_half_open_bounds(self) -> None:
         params = self.TimepixParams(

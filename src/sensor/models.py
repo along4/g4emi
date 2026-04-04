@@ -67,6 +67,18 @@ class TimepixParams:
         if float(self.dead_time_ns) < 0.0:
             raise ValueError("`dead_time_ns` must be non-negative.")
 
+    @property
+    def sensor_width_mm(self) -> float:
+        """Return active sensor width in millimeters."""
+
+        return float(self.pixels_x) * float(self.pixel_pitch_mm)
+
+    @property
+    def sensor_height_mm(self) -> float:
+        """Return active sensor height in millimeters."""
+
+        return float(self.pixels_y) * float(self.pixel_pitch_mm)
+
 
 @dataclass(slots=True)
 class TimepixEventBatch:
