@@ -225,25 +225,25 @@ class IntensifierPipelineTests(unittest.TestCase):
                 ("secondary_track_id", np.int32),
             ]
         )
-        photons_dtype = self.np.dtype(
+        photons_dtype = np.dtype(
             [
-                ("gun_call_id", self.np.int64),
-                ("primary_track_id", self.np.int32),
-                ("secondary_track_id", self.np.int32),
-                ("photon_track_id", self.np.int32),
-                ("optical_interface_hit_time_ns", self.np.float64),
-                ("optical_interface_hit_wavelength_nm", self.np.float64),
+                ("gun_call_id", np.int64),
+                ("primary_track_id", np.int32),
+                ("secondary_track_id", np.int32),
+                ("photon_track_id", np.int32),
+                ("optical_interface_hit_time_ns", np.float64),
+                ("optical_interface_hit_wavelength_nm", np.float64),
             ]
         )
-        photons = self.np.array(
+        photons = np.array(
             [
                 (0, 1, 10, 100, 11.0, 450.0),
                 (0, 1, 10, 101, 12.0, 500.0),
             ],
             dtype=photons_dtype,
         )
-        primaries = self.np.array([(0, 1)], dtype=primaries_dtype)
-        secondaries = self.np.array([(0, 1, 10)], dtype=secondaries_dtype)
+        primaries = np.array([(0, 1)], dtype=primaries_dtype)
+        secondaries = np.array([(0, 1, 10)], dtype=secondaries_dtype)
         with self.h5py.File(path, "w") as handle:
             handle.create_dataset("primaries", data=primaries)
             handle.create_dataset("secondaries", data=secondaries)
@@ -251,21 +251,21 @@ class IntensifierPipelineTests(unittest.TestCase):
 
     def _write_transport_hdf5(self, path: Path, *, source_hdf5: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
-        transported_dtype = self.np.dtype(
+        transported_dtype = np.dtype(
             [
-                ("source_photon_index", self.np.int64),
-                ("gun_call_id", self.np.int64),
-                ("primary_track_id", self.np.int32),
-                ("secondary_track_id", self.np.int32),
-                ("photon_track_id", self.np.int32),
-                ("intensifier_hit_x_mm", self.np.float64),
-                ("intensifier_hit_y_mm", self.np.float64),
-                ("intensifier_hit_z_mm", self.np.float64),
-                ("reached_intensifier", self.np.bool_),
-                ("in_bounds", self.np.bool_),
+                ("source_photon_index", np.int64),
+                ("gun_call_id", np.int64),
+                ("primary_track_id", np.int32),
+                ("secondary_track_id", np.int32),
+                ("photon_track_id", np.int32),
+                ("intensifier_hit_x_mm", np.float64),
+                ("intensifier_hit_y_mm", np.float64),
+                ("intensifier_hit_z_mm", np.float64),
+                ("reached_intensifier", np.bool_),
+                ("in_bounds", np.bool_),
             ]
         )
-        rows = self.np.array(
+        rows = np.array(
             [
                 (0, 0, 1, 10, 100, 1.5, 2.5, 3.5, True, True),
                 (1, 0, 1, 10, 101, 4.5, 5.5, 6.5, True, True),
