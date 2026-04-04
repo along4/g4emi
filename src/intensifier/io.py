@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
-from datetime import timezone
 
 try:
     import h5py
@@ -164,6 +163,17 @@ def intensifier_output_hdf5_path_from_sim_config(config: SimConfig) -> Path:
     return (sensor_dir / filename).resolve()
 
 
+def _resolve_intensifier_output_hdf5_path(
+    config: SimConfig,
+    output_hdf5_path: str | Path | None,
+) -> Path:
+    """Resolve an explicit or config-derived intensifier output HDF5 path."""
+
+    if output_hdf5_path is not None:
+        return Path(output_hdf5_path).resolve()
+    return intensifier_output_hdf5_path_from_sim_config(config)
+
+
 def intensifier_output_batch_to_structured_array(
     output_events: IntensifierOutputBatch,
 ) -> np.ndarray:
@@ -188,7 +198,7 @@ def write_intensifier_output_hdf5(
     output_events: IntensifierOutputBatch,
     *,
     config: SimConfig,
-    transport_hdf5_path: str | Path,
+    transport_hdf5_path: str | Path | None = None,
     output_hdf5_path: str | Path | None = None,
 ) -> Path:
     """Write intensifier output events to a standalone HDF5 file."""
@@ -197,11 +207,7 @@ def write_intensifier_output_hdf5(
         config,
         transport_hdf5_path=transport_hdf5_path,
     )
-    output_path = (
-        Path(output_hdf5_path).resolve()
-        if output_hdf5_path is not None
-        else intensifier_output_hdf5_path_from_sim_config(config)
-    )
+    output_path = _resolve_intensifier_output_hdf5_path(config, output_hdf5_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     structured = intensifier_output_batch_to_structured_array(output_events)

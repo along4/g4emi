@@ -7,9 +7,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from src.intensifier.io import intensifier_output_hdf5_path_from_sim_config
 from src.intensifier.io import load_transported_photon_batch_from_sim_config
-from src.intensifier.io import resolve_intensifier_input_hdf5_paths
 from src.intensifier.io import write_intensifier_output_hdf5
 from src.intensifier.mcp import convert_photoelectrons_to_mcp_events
 from src.intensifier.mcp import mcp_params_from_sim_config
@@ -72,11 +70,6 @@ def run_intensifier_pipeline_from_sim_config(
 ) -> IntensifierOutputBatch:
     """Load HDF5 inputs via `SimConfig` and run the full intensifier pipeline."""
 
-    transport_path_for_write = (
-        Path(transport_hdf5_path).resolve()
-        if transport_hdf5_path is not None
-        else None
-    )
     transported_photons = load_transported_photon_batch_from_sim_config(
         config,
         transport_hdf5_path=transport_hdf5_path,
@@ -91,16 +84,9 @@ def run_intensifier_pipeline_from_sim_config(
     )
     intensifier = config.intensifier
     if intensifier is not None and intensifier.write_output_hdf5:
-        if transport_path_for_write is None:
-            transport_path_for_write = resolve_intensifier_input_hdf5_paths(
-                config,
-                transport_hdf5_path=transport_hdf5_path,
-                source_hdf5_path=source_hdf5_path,
-            )[0]
         write_intensifier_output_hdf5(
             output_events,
             config=config,
-            transport_hdf5_path=transport_path_for_write,
-            output_hdf5_path=intensifier_output_hdf5_path_from_sim_config(config),
+            transport_hdf5_path=transport_hdf5_path,
         )
     return output_events
