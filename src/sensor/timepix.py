@@ -8,6 +8,7 @@ import numpy as np
 
 from src.intensifier.models import IntensifierOutputBatch
 from src.sensor.models import TimepixEventBatch
+from src.sensor.models import TimepixHitBatch
 from src.sensor.models import TimepixParams
 
 if TYPE_CHECKING:
@@ -101,4 +102,102 @@ def map_intensifier_output_to_timepix_events(
         y_pixel=y_pixel,
         event_time_ns=intensifier_output.output_time_ns[mask],
         signal_amplitude_arb=intensifier_output.signal_amplitude_arb[mask],
+    )
+
+
+def sort_timepix_events_by_time(events: TimepixEventBatch) -> TimepixEventBatch:
+    """Return one Timepix event batch sorted by event time with stable ordering."""
+
+    if len(events) == 0:
+        return TimepixEventBatch.empty()
+
+    order = np.argsort(events.event_time_ns, kind="stable")
+    return TimepixEventBatch(
+        source_photon_index=events.source_photon_index[order],
+        gun_call_id=events.gun_call_id[order],
+        primary_track_id=events.primary_track_id[order],
+        secondary_track_id=events.secondary_track_id[order],
+        photon_track_id=events.photon_track_id[order],
+        x_pixel=events.x_pixel[order],
+        y_pixel=events.y_pixel[order],
+        event_time_ns=events.event_time_ns[order],
+        signal_amplitude_arb=events.signal_amplitude_arb[order],
+    )
+
+
+def convert_timepix_events_to_hits(
+    events: TimepixEventBatch,
+    params: TimepixParams,
+) -> TimepixHitBatch:
+    """Apply per-pixel ToT and dead-time behavior to mapped Timepix events."""
+
+    if len(events) == 0:
+        return TimepixHitBatch.empty()
+
+    sorted_events = sort_timepix_events_by_time(events)
+
+    gun_call_id: list[int] = []
+    primary_track_id: list[int] = []
+    secondary_track_id: list[int] = []
+    x_pixel: list[int] = []
+    y_pixel: list[int] = []
+    time_of_arrival_ns: list[float] = []
+    time_over_threshold_ns: list[float] = []
+    contribution_count: list[int] = []
+
+    # Per-pixel state: active hit row index and current hit end time.
+    pixel_state: dict[tuple[int, int], tuple[int, float]] = {}
+
+    for index in range(len(sorted_events)):
+        pixel_key = (
+            int(sorted_events.x_pixel[index]),
+            int(sorted_events.y_pixel[index]),
+        )
+        event_time_ns = float(sorted_events.event_time_ns[index])
+        event_tot_ns = min(
+            float(sorted_events.signal_amplitude_arb[index]),
+            float(params.max_tot_ns),
+        )
+
+        existing_state = pixel_state.get(pixel_key)
+        if existing_state is not None:
+            hit_index, hit_end_time_ns = existing_state
+            dead_time_end_ns = hit_end_time_ns + float(params.dead_time_ns)
+
+            if event_time_ns < hit_end_time_ns:
+                remaining_tot_ns = hit_end_time_ns - event_time_ns
+                merged_tot_ns = min(
+                    float(params.max_tot_ns),
+                    remaining_tot_ns + event_tot_ns,
+                )
+                hit_end_time_ns = event_time_ns + merged_tot_ns
+                time_over_threshold_ns[hit_index] = merged_tot_ns
+                contribution_count[hit_index] += 1
+                pixel_state[pixel_key] = (hit_index, hit_end_time_ns)
+                continue
+
+            if event_time_ns < dead_time_end_ns:
+                continue
+
+        gun_call_id.append(int(sorted_events.gun_call_id[index]))
+        primary_track_id.append(int(sorted_events.primary_track_id[index]))
+        secondary_track_id.append(int(sorted_events.secondary_track_id[index]))
+        x_pixel.append(pixel_key[0])
+        y_pixel.append(pixel_key[1])
+        time_of_arrival_ns.append(0.0)
+        time_over_threshold_ns.append(event_tot_ns)
+        contribution_count.append(1)
+
+        hit_index = len(gun_call_id) - 1
+        pixel_state[pixel_key] = (hit_index, event_time_ns + event_tot_ns)
+
+    return TimepixHitBatch(
+        gun_call_id=np.asarray(gun_call_id, dtype=np.int64),
+        primary_track_id=np.asarray(primary_track_id, dtype=np.int32),
+        secondary_track_id=np.asarray(secondary_track_id, dtype=np.int32),
+        x_pixel=np.asarray(x_pixel, dtype=np.int32),
+        y_pixel=np.asarray(y_pixel, dtype=np.int32),
+        time_of_arrival_ns=np.asarray(time_of_arrival_ns, dtype=np.float64),
+        time_over_threshold_ns=np.asarray(time_over_threshold_ns, dtype=np.float64),
+        contribution_count=np.asarray(contribution_count, dtype=np.int32),
     )

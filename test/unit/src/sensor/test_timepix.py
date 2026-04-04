@@ -35,7 +35,9 @@ class TimepixModelTests(unittest.TestCase):
             from src.sensor.models import TimepixParams
             from src.sensor.timepix import centered_mm_to_pixel_indices
             from src.sensor.timepix import compute_timepix_sensor_size_mm
+            from src.sensor.timepix import convert_timepix_events_to_hits
             from src.sensor.timepix import map_intensifier_output_to_timepix_events
+            from src.sensor.timepix import sort_timepix_events_by_time
             from src.sensor.timepix import timepix_params_from_sim_config
             from src.sensor.timepix import timepix_in_bounds_mask
         except ModuleNotFoundError as exc:
@@ -54,9 +56,11 @@ class TimepixModelTests(unittest.TestCase):
         cls.TimepixParams = TimepixParams
         cls.centered_mm_to_pixel_indices = staticmethod(centered_mm_to_pixel_indices)
         cls.compute_timepix_sensor_size_mm = staticmethod(compute_timepix_sensor_size_mm)
+        cls.convert_timepix_events_to_hits = staticmethod(convert_timepix_events_to_hits)
         cls.map_intensifier_output_to_timepix_events = staticmethod(
             map_intensifier_output_to_timepix_events
         )
+        cls.sort_timepix_events_by_time = staticmethod(sort_timepix_events_by_time)
         cls.timepix_params_from_sim_config = staticmethod(timepix_params_from_sim_config)
         cls.timepix_in_bounds_mask = staticmethod(timepix_in_bounds_mask)
 
@@ -154,6 +158,21 @@ class TimepixModelTests(unittest.TestCase):
             signal_amplitude_arb=np.array([10.0, 20.0, 30.0, 40.0], dtype=np.float64),
             total_gain=np.array([100.0, 200.0, 300.0, 400.0], dtype=np.float64),
             wavelength_nm=np.array([400.0, 500.0, 600.0, 700.0], dtype=np.float64),
+        )
+
+    def _timepix_events(self) -> object:
+        """Build a deterministic mapped-event batch for readout tests."""
+
+        return self.TimepixEventBatch(
+            source_photon_index=np.array([0, 1, 2, 3, 4], dtype=np.int64),
+            gun_call_id=np.array([10, 11, 12, 13, 14], dtype=np.int64),
+            primary_track_id=np.array([100, 101, 102, 103, 104], dtype=np.int32),
+            secondary_track_id=np.array([200, 201, 202, 203, 204], dtype=np.int32),
+            photon_track_id=np.array([300, 301, 302, 303, 304], dtype=np.int32),
+            x_pixel=np.array([1, 1, 1, 2, 1], dtype=np.int32),
+            y_pixel=np.array([2, 2, 2, 2, 2], dtype=np.int32),
+            event_time_ns=np.array([10.0, 12.0, 30.0, 13.0, 50.0], dtype=np.float64),
+            signal_amplitude_arb=np.array([5.0, 4.0, 6.0, 8.0, 7.0], dtype=np.float64),
         )
 
     def test_timepix_params_reject_negative_dead_time(self) -> None:
@@ -324,6 +343,146 @@ class TimepixModelTests(unittest.TestCase):
         self.assertEqual(len(result), 0)
         self.assertEqual(result.x_pixel.dtype, np.int32)
         self.assertEqual(result.event_time_ns.dtype, np.float64)
+
+    def test_sort_timepix_events_by_time_is_stable(self) -> None:
+        events = self.TimepixEventBatch(
+            source_photon_index=np.array([0, 1, 2], dtype=np.int64),
+            gun_call_id=np.array([10, 11, 12], dtype=np.int64),
+            primary_track_id=np.array([100, 101, 102], dtype=np.int32),
+            secondary_track_id=np.array([200, 201, 202], dtype=np.int32),
+            photon_track_id=np.array([300, 301, 302], dtype=np.int32),
+            x_pixel=np.array([1, 1, 1], dtype=np.int32),
+            y_pixel=np.array([2, 2, 2], dtype=np.int32),
+            event_time_ns=np.array([7.0, 5.0, 5.0], dtype=np.float64),
+            signal_amplitude_arb=np.array([1.0, 2.0, 3.0], dtype=np.float64),
+        )
+
+        result = self.sort_timepix_events_by_time(events)
+
+        np.testing.assert_array_equal(
+            result.source_photon_index,
+            np.array([1, 2, 0], dtype=np.int64),
+        )
+
+    def test_convert_timepix_events_to_hits_merges_same_pixel_while_active(self) -> None:
+        params = self.TimepixParams(
+            pixels_x=256,
+            pixels_y=256,
+            pixel_pitch_mm=0.055,
+            max_tot_ns=20.0,
+            dead_time_ns=5.0,
+        )
+
+        result = self.convert_timepix_events_to_hits(self._timepix_events(), params)
+
+        self.assertEqual(len(result), 3)
+        np.testing.assert_array_equal(result.x_pixel, np.array([1, 2, 1], dtype=np.int32))
+        np.testing.assert_array_equal(result.y_pixel, np.array([2, 2, 2], dtype=np.int32))
+        np.testing.assert_allclose(
+            result.time_over_threshold_ns,
+            np.array([7.0, 8.0, 7.0], dtype=np.float64),
+        )
+        np.testing.assert_array_equal(
+            result.contribution_count,
+            np.array([2, 1, 1], dtype=np.int32),
+        )
+        np.testing.assert_allclose(result.time_of_arrival_ns, np.zeros(3, dtype=np.float64))
+        np.testing.assert_array_equal(result.gun_call_id, np.array([10, 13, 14], dtype=np.int64))
+
+    def test_convert_timepix_events_to_hits_clips_merged_tot_to_max(self) -> None:
+        params = self.TimepixParams(
+            pixels_x=256,
+            pixels_y=256,
+            pixel_pitch_mm=0.055,
+            max_tot_ns=6.0,
+            dead_time_ns=5.0,
+        )
+        events = self.TimepixEventBatch(
+            source_photon_index=np.array([0, 1], dtype=np.int64),
+            gun_call_id=np.array([10, 11], dtype=np.int64),
+            primary_track_id=np.array([100, 101], dtype=np.int32),
+            secondary_track_id=np.array([200, 201], dtype=np.int32),
+            photon_track_id=np.array([300, 301], dtype=np.int32),
+            x_pixel=np.array([1, 1], dtype=np.int32),
+            y_pixel=np.array([2, 2], dtype=np.int32),
+            event_time_ns=np.array([10.0, 12.0], dtype=np.float64),
+            signal_amplitude_arb=np.array([5.0, 5.0], dtype=np.float64),
+        )
+
+        result = self.convert_timepix_events_to_hits(events, params)
+
+        self.assertEqual(len(result), 1)
+        self.assertAlmostEqual(result.time_over_threshold_ns[0], 6.0)
+        self.assertEqual(result.contribution_count[0], 2)
+
+    def test_convert_timepix_events_to_hits_drops_events_during_dead_time(self) -> None:
+        params = self.TimepixParams(
+            pixels_x=256,
+            pixels_y=256,
+            pixel_pitch_mm=0.055,
+            max_tot_ns=20.0,
+            dead_time_ns=10.0,
+        )
+        events = self.TimepixEventBatch(
+            source_photon_index=np.array([0, 1], dtype=np.int64),
+            gun_call_id=np.array([10, 11], dtype=np.int64),
+            primary_track_id=np.array([100, 101], dtype=np.int32),
+            secondary_track_id=np.array([200, 201], dtype=np.int32),
+            photon_track_id=np.array([300, 301], dtype=np.int32),
+            x_pixel=np.array([1, 1], dtype=np.int32),
+            y_pixel=np.array([2, 2], dtype=np.int32),
+            event_time_ns=np.array([10.0, 16.0], dtype=np.float64),
+            signal_amplitude_arb=np.array([5.0, 4.0], dtype=np.float64),
+        )
+
+        result = self.convert_timepix_events_to_hits(events, params)
+
+        self.assertEqual(len(result), 1)
+        self.assertAlmostEqual(result.time_over_threshold_ns[0], 5.0)
+        self.assertEqual(result.contribution_count[0], 1)
+
+    def test_convert_timepix_events_to_hits_starts_new_hit_after_dead_time(self) -> None:
+        params = self.TimepixParams(
+            pixels_x=256,
+            pixels_y=256,
+            pixel_pitch_mm=0.055,
+            max_tot_ns=20.0,
+            dead_time_ns=5.0,
+        )
+        events = self.TimepixEventBatch(
+            source_photon_index=np.array([0, 1], dtype=np.int64),
+            gun_call_id=np.array([10, 11], dtype=np.int64),
+            primary_track_id=np.array([100, 101], dtype=np.int32),
+            secondary_track_id=np.array([200, 201], dtype=np.int32),
+            photon_track_id=np.array([300, 301], dtype=np.int32),
+            x_pixel=np.array([1, 1], dtype=np.int32),
+            y_pixel=np.array([2, 2], dtype=np.int32),
+            event_time_ns=np.array([10.0, 21.0], dtype=np.float64),
+            signal_amplitude_arb=np.array([5.0, 4.0], dtype=np.float64),
+        )
+
+        result = self.convert_timepix_events_to_hits(events, params)
+
+        self.assertEqual(len(result), 2)
+        np.testing.assert_array_equal(result.gun_call_id, np.array([10, 11], dtype=np.int64))
+        np.testing.assert_allclose(
+            result.time_over_threshold_ns,
+            np.array([5.0, 4.0], dtype=np.float64),
+        )
+
+    def test_convert_timepix_events_to_hits_handles_empty_input(self) -> None:
+        params = self.TimepixParams(
+            pixels_x=256,
+            pixels_y=256,
+            pixel_pitch_mm=0.055,
+            max_tot_ns=25550.0,
+            dead_time_ns=475.0,
+        )
+
+        result = self.convert_timepix_events_to_hits(self.TimepixEventBatch.empty(), params)
+
+        self.assertEqual(len(result), 0)
+        self.assertEqual(result.x_pixel.dtype, np.int32)
 
     def test_timepix_params_from_sim_config_requires_sensor(self) -> None:
         payload = self._config_payload()
