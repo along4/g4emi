@@ -4,7 +4,8 @@ This module defines the in-memory contracts for the planned sensor/readout
 submodules:
 
 - `timepix.py` resolves normalized `TimepixParams` from `SimConfig`
-- later sensor pipeline code will emit `TimepixHitBatch`
+- `timepix.py` maps intensifier output into `TimepixEventBatch`
+- later sensor pipeline code will merge those into `TimepixHitBatch`
 
 These models are intentionally distinct from persisted HDF5 schema constants in
 `src/common/hdf5_schema.py`. They describe internal pipeline data only.
@@ -65,6 +66,85 @@ class TimepixParams:
             raise ValueError("`max_tot_ns` must be strictly positive.")
         if float(self.dead_time_ns) < 0.0:
             raise ValueError("`dead_time_ns` must be non-negative.")
+
+
+@dataclass(slots=True)
+class TimepixEventBatch:
+    """Mapped per-event Timepix candidates before readout merging."""
+
+    source_photon_index: Int64Array
+    gun_call_id: Int64Array
+    primary_track_id: Int32Array
+    secondary_track_id: Int32Array
+    photon_track_id: Int32Array
+    x_pixel: Int32Array
+    y_pixel: Int32Array
+    event_time_ns: FloatArray
+    signal_amplitude_arb: FloatArray
+
+    def __post_init__(self) -> None:
+        self.source_photon_index = _as_1d_array(
+            self.source_photon_index,
+            np.int64,
+            "source_photon_index",
+        )
+        self.gun_call_id = _as_1d_array(self.gun_call_id, np.int64, "gun_call_id")
+        self.primary_track_id = _as_1d_array(
+            self.primary_track_id,
+            np.int32,
+            "primary_track_id",
+        )
+        self.secondary_track_id = _as_1d_array(
+            self.secondary_track_id,
+            np.int32,
+            "secondary_track_id",
+        )
+        self.photon_track_id = _as_1d_array(
+            self.photon_track_id,
+            np.int32,
+            "photon_track_id",
+        )
+        self.x_pixel = _as_1d_array(self.x_pixel, np.int32, "x_pixel")
+        self.y_pixel = _as_1d_array(self.y_pixel, np.int32, "y_pixel")
+        self.event_time_ns = _as_1d_array(self.event_time_ns, np.float64, "event_time_ns")
+        self.signal_amplitude_arb = _as_1d_array(
+            self.signal_amplitude_arb,
+            np.float64,
+            "signal_amplitude_arb",
+        )
+        _require_equal_lengths(
+            type(self).__name__,
+            {
+                "source_photon_index": self.source_photon_index,
+                "gun_call_id": self.gun_call_id,
+                "primary_track_id": self.primary_track_id,
+                "secondary_track_id": self.secondary_track_id,
+                "photon_track_id": self.photon_track_id,
+                "x_pixel": self.x_pixel,
+                "y_pixel": self.y_pixel,
+                "event_time_ns": self.event_time_ns,
+                "signal_amplitude_arb": self.signal_amplitude_arb,
+            },
+        )
+
+    def __len__(self) -> int:
+        return int(self.source_photon_index.shape[0])
+
+    @classmethod
+    def empty(cls) -> "TimepixEventBatch":
+        """Return an empty mapped-event batch with the correct dtypes."""
+
+        return cls(
+            source_photon_index=np.array([], dtype=np.int64),
+            gun_call_id=np.array([], dtype=np.int64),
+            primary_track_id=np.array([], dtype=np.int32),
+            secondary_track_id=np.array([], dtype=np.int32),
+            photon_track_id=np.array([], dtype=np.int32),
+            x_pixel=np.array([], dtype=np.int32),
+            y_pixel=np.array([], dtype=np.int32),
+            event_time_ns=np.array([], dtype=np.float64),
+            signal_amplitude_arb=np.array([], dtype=np.float64),
+        )
 
 
 @dataclass(slots=True)
@@ -140,4 +220,3 @@ class TimepixHitBatch:
             time_over_threshold_ns=np.array([], dtype=np.float64),
             contribution_count=np.array([], dtype=np.int32),
         )
-

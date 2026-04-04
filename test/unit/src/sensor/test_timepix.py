@@ -29,9 +29,15 @@ class TimepixModelTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         try:
             from src.config.SimConfig import SimConfig
+            from src.intensifier.models import IntensifierOutputBatch
+            from src.sensor.models import TimepixEventBatch
             from src.sensor.models import TimepixHitBatch
             from src.sensor.models import TimepixParams
+            from src.sensor.timepix import centered_mm_to_pixel_indices
+            from src.sensor.timepix import compute_timepix_sensor_size_mm
+            from src.sensor.timepix import map_intensifier_output_to_timepix_events
             from src.sensor.timepix import timepix_params_from_sim_config
+            from src.sensor.timepix import timepix_in_bounds_mask
         except ModuleNotFoundError as exc:
             missing = (getattr(exc, "name", "") or "").lower()
             if missing in {"numpy", "pydantic"}:
@@ -42,9 +48,17 @@ class TimepixModelTests(unittest.TestCase):
             raise
 
         cls.SimConfig = SimConfig
+        cls.IntensifierOutputBatch = IntensifierOutputBatch
+        cls.TimepixEventBatch = TimepixEventBatch
         cls.TimepixHitBatch = TimepixHitBatch
         cls.TimepixParams = TimepixParams
+        cls.centered_mm_to_pixel_indices = staticmethod(centered_mm_to_pixel_indices)
+        cls.compute_timepix_sensor_size_mm = staticmethod(compute_timepix_sensor_size_mm)
+        cls.map_intensifier_output_to_timepix_events = staticmethod(
+            map_intensifier_output_to_timepix_events
+        )
         cls.timepix_params_from_sim_config = staticmethod(timepix_params_from_sim_config)
+        cls.timepix_in_bounds_mask = staticmethod(timepix_in_bounds_mask)
 
     def _config_payload(self) -> dict[str, object]:
         """Build a minimal valid SimConfig payload with sensor parameters."""
@@ -125,6 +139,23 @@ class TimepixModelTests(unittest.TestCase):
             },
         }
 
+    def _intensifier_output(self) -> object:
+        """Build a deterministic intensifier output batch for sensor mapping tests."""
+
+        return self.IntensifierOutputBatch(
+            source_photon_index=np.array([0, 1, 2, 3], dtype=np.int64),
+            gun_call_id=np.array([10, 10, 11, 12], dtype=np.int64),
+            primary_track_id=np.array([100, 100, 101, 102], dtype=np.int32),
+            secondary_track_id=np.array([200, 201, 202, 203], dtype=np.int32),
+            photon_track_id=np.array([300, 301, 302, 303], dtype=np.int32),
+            output_x_mm=np.array([-1.9, -0.1, 0.1, 2.0], dtype=np.float64),
+            output_y_mm=np.array([0.0, -0.9, 0.9, 0.0], dtype=np.float64),
+            output_time_ns=np.array([5.0, 6.0, 7.0, 8.0], dtype=np.float64),
+            signal_amplitude_arb=np.array([10.0, 20.0, 30.0, 40.0], dtype=np.float64),
+            total_gain=np.array([100.0, 200.0, 300.0, 400.0], dtype=np.float64),
+            wavelength_nm=np.array([400.0, 500.0, 600.0, 700.0], dtype=np.float64),
+        )
+
     def test_timepix_params_reject_negative_dead_time(self) -> None:
         with self.assertRaises(ValueError):
             self.TimepixParams(
@@ -134,6 +165,14 @@ class TimepixModelTests(unittest.TestCase):
                 max_tot_ns=25550.0,
                 dead_time_ns=-1.0,
             )
+
+    def test_timepix_event_batch_empty_has_expected_dtypes(self) -> None:
+        batch = self.TimepixEventBatch.empty()
+
+        self.assertEqual(len(batch), 0)
+        self.assertEqual(batch.source_photon_index.dtype, np.int64)
+        self.assertEqual(batch.x_pixel.dtype, np.int32)
+        self.assertEqual(batch.event_time_ns.dtype, np.float64)
 
     def test_timepix_hit_batch_preserves_values(self) -> None:
         batch = self.TimepixHitBatch(
@@ -182,6 +221,109 @@ class TimepixModelTests(unittest.TestCase):
         self.assertAlmostEqual(params.pixel_pitch_mm, 0.055)
         self.assertAlmostEqual(params.max_tot_ns, 25550.0)
         self.assertAlmostEqual(params.dead_time_ns, 475.0)
+
+    def test_compute_timepix_sensor_size_mm_matches_single_timepix3(self) -> None:
+        params = self.TimepixParams(
+            pixels_x=256,
+            pixels_y=256,
+            pixel_pitch_mm=0.055,
+            max_tot_ns=25550.0,
+            dead_time_ns=475.0,
+        )
+
+        sensor_width_mm, sensor_height_mm = self.compute_timepix_sensor_size_mm(params)
+
+        self.assertAlmostEqual(sensor_width_mm, 14.08)
+        self.assertAlmostEqual(sensor_height_mm, 14.08)
+
+    def test_timepix_in_bounds_mask_uses_centered_half_open_bounds(self) -> None:
+        params = self.TimepixParams(
+            pixels_x=4,
+            pixels_y=2,
+            pixel_pitch_mm=1.0,
+            max_tot_ns=25550.0,
+            dead_time_ns=475.0,
+        )
+        intensifier_output = self.IntensifierOutputBatch(
+            source_photon_index=np.array([0, 1, 2, 3, 4, 5], dtype=np.int64),
+            gun_call_id=np.array([10, 11, 12, 13, 14, 15], dtype=np.int64),
+            primary_track_id=np.array([100, 101, 102, 103, 104, 105], dtype=np.int32),
+            secondary_track_id=np.array([200, 201, 202, 203, 204, 205], dtype=np.int32),
+            photon_track_id=np.array([300, 301, 302, 303, 304, 305], dtype=np.int32),
+            output_x_mm=np.array([-2.0, 1.999, 2.0, 0.0, 0.0, 0.0], dtype=np.float64),
+            output_y_mm=np.array([0.0, 0.0, 0.0, -1.0, 0.999, 1.0], dtype=np.float64),
+            output_time_ns=np.zeros(6, dtype=np.float64),
+            signal_amplitude_arb=np.ones(6, dtype=np.float64),
+            total_gain=np.ones(6, dtype=np.float64),
+            wavelength_nm=np.full(6, 500.0, dtype=np.float64),
+        )
+
+        mask = self.timepix_in_bounds_mask(intensifier_output, params)
+
+        np.testing.assert_array_equal(
+            mask,
+            np.array([True, True, False, True, True, False], dtype=bool),
+        )
+
+    def test_centered_mm_to_pixel_indices_maps_edges_correctly(self) -> None:
+        params = self.TimepixParams(
+            pixels_x=4,
+            pixels_y=2,
+            pixel_pitch_mm=1.0,
+            max_tot_ns=25550.0,
+            dead_time_ns=475.0,
+        )
+
+        x_pixel, y_pixel = self.centered_mm_to_pixel_indices(
+            np.array([-2.0, -1.01, -0.01, 0.99, 1.999], dtype=np.float64),
+            np.array([-1.0, -0.01, 0.0, 0.5, 0.999], dtype=np.float64),
+            params,
+        )
+
+        np.testing.assert_array_equal(x_pixel, np.array([0, 0, 1, 2, 3], dtype=np.int32))
+        np.testing.assert_array_equal(y_pixel, np.array([0, 0, 1, 1, 1], dtype=np.int32))
+
+    def test_map_intensifier_output_to_timepix_events_drops_out_of_bounds(self) -> None:
+        params = self.TimepixParams(
+            pixels_x=4,
+            pixels_y=2,
+            pixel_pitch_mm=1.0,
+            max_tot_ns=25550.0,
+            dead_time_ns=475.0,
+        )
+
+        result = self.map_intensifier_output_to_timepix_events(
+            self._intensifier_output(),
+            params,
+        )
+
+        self.assertEqual(len(result), 3)
+        np.testing.assert_array_equal(result.source_photon_index, np.array([0, 1, 2], dtype=np.int64))
+        np.testing.assert_array_equal(result.x_pixel, np.array([0, 1, 2], dtype=np.int32))
+        np.testing.assert_array_equal(result.y_pixel, np.array([1, 0, 1], dtype=np.int32))
+        np.testing.assert_allclose(result.event_time_ns, np.array([5.0, 6.0, 7.0], dtype=np.float64))
+        np.testing.assert_allclose(
+            result.signal_amplitude_arb,
+            np.array([10.0, 20.0, 30.0], dtype=np.float64),
+        )
+
+    def test_map_intensifier_output_to_timepix_events_handles_empty_input(self) -> None:
+        params = self.TimepixParams(
+            pixels_x=256,
+            pixels_y=256,
+            pixel_pitch_mm=0.055,
+            max_tot_ns=25550.0,
+            dead_time_ns=475.0,
+        )
+
+        result = self.map_intensifier_output_to_timepix_events(
+            self.IntensifierOutputBatch.empty(),
+            params,
+        )
+
+        self.assertEqual(len(result), 0)
+        self.assertEqual(result.x_pixel.dtype, np.int32)
+        self.assertEqual(result.event_time_ns.dtype, np.float64)
 
     def test_timepix_params_from_sim_config_requires_sensor(self) -> None:
         payload = self._config_payload()
