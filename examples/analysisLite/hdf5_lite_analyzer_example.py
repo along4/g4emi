@@ -19,6 +19,7 @@ from example_support import (  # noqa: E402
 
 ensure_repo_root_on_path()
 from analysis.spatial import (  # noqa: E402
+    _resolve_scintillator_plot_xy_range,
     intensifier_photons_to_image,
     neutron_hits_to_image,
     optical_interface_photons_to_image,
@@ -64,10 +65,11 @@ def _parse_args() -> argparse.Namespace:
         help=(
             "Optional SimConfig YAML path used to set photon-origin/exit plot "
             "extents to scintillator XY size. If omitted, bounds are inferred "
-            "from HDF5 data unless --xy-limits is provided."
+            "from HDF5 data unless --xy-limits or --xy-dimensions is provided."
         ),
     )
-    parser.add_argument(
+    xy_group = parser.add_mutually_exclusive_group()
+    xy_group.add_argument(
         "--xy-limits",
         nargs=4,
         type=float,
@@ -78,12 +80,60 @@ def _parse_args() -> argparse.Namespace:
             "Takes precedence over --sim-config-yaml."
         ),
     )
+    xy_group.add_argument(
+        "--xy-dimensions",
+        nargs=2,
+        type=float,
+        metavar=("WIDTH_MM", "HEIGHT_MM"),
+        default=None,
+        help=(
+            "Set photon origin/exit plot width and height in mm. The plot is "
+            "centered on the SimConfig scintillator center when "
+            "--sim-config-yaml is provided; otherwise it is centered on the "
+            "inferred HDF5 data midpoint."
+        ),
+    )
     parser.add_argument(
         "--show",
         action="store_true",
         help="Display the plots interactively instead of writing PNGs.",
     )
     return parser.parse_args()
+
+
+def _xy_range_from_dimensions(
+    *,
+    hdf5_path: Path,
+    sim_config_yaml_path: Path | None,
+    width_mm: float,
+    height_mm: float,
+) -> tuple[tuple[float, float], tuple[float, float]]:
+    """Build an XY plotting range from width/height around a resolved center."""
+
+    if width_mm <= 0.0:
+        raise ValueError("--xy-dimensions requires WIDTH_MM > 0.")
+    if height_mm <= 0.0:
+        raise ValueError("--xy-dimensions requires HEIGHT_MM > 0.")
+
+    base_range = _resolve_scintillator_plot_xy_range(
+        hdf5_path=hdf5_path,
+        neutron_labels=("n", "neutron"),
+        shared_range=True,
+        use_scintillator_extent=(sim_config_yaml_path is not None),
+        sim_config_yaml_path=sim_config_yaml_path,
+        xy_range_override=None,
+    )
+    if base_range is None:
+        raise ValueError("Could not infer a center for --xy-dimensions.")
+
+    center_x_mm = 0.5 * (base_range[0][0] + base_range[0][1])
+    center_y_mm = 0.5 * (base_range[1][0] + base_range[1][1])
+    half_width_mm = 0.5 * width_mm
+    half_height_mm = 0.5 * height_mm
+    return (
+        (center_x_mm - half_width_mm, center_x_mm + half_width_mm),
+        (center_y_mm - half_height_mm, center_y_mm + half_height_mm),
+    )
 
 
 def main() -> None:
@@ -136,6 +186,14 @@ def main() -> None:
         xy_range_override = (
             (x_min, x_max),
             (y_min, y_max),
+        )
+    elif args.xy_dimensions is not None:
+        width_mm, height_mm = [float(value) for value in args.xy_dimensions]
+        xy_range_override = _xy_range_from_dimensions(
+            hdf5_path=hdf5_path,
+            sim_config_yaml_path=sim_config_yaml_path,
+            width_mm=width_mm,
+            height_mm=height_mm,
         )
 
     neutron_hits_to_image(hdf5_path, output_path=neutron_png, show=False)
