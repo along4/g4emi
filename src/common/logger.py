@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from pathlib import Path
 import sys
+import time
 from typing import TYPE_CHECKING, TextIO
 
 if TYPE_CHECKING:
@@ -128,6 +130,23 @@ def get_logger():
     """Return the shared loguru logger."""
 
     return _require_loguru()
+
+
+@contextmanager
+def log_stage(stage_name: str):
+    """Log a stage start/finish pair with elapsed wall time."""
+
+    logger = get_logger()
+    start_time = time.perf_counter()
+    logger.info(f"[{stage_name}] Starting.")
+    try:
+        yield
+    except Exception:
+        elapsed_s = time.perf_counter() - start_time
+        logger.exception(f"[{stage_name}] Failed after {elapsed_s:.2f} s.")
+        raise
+    elapsed_s = time.perf_counter() - start_time
+    logger.info(f"[{stage_name}] Finished in {elapsed_s:.2f} s.")
 
 
 def _remove_owned_handlers(logger: object) -> None:

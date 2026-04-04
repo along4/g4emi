@@ -20,6 +20,7 @@ from src.intensifier.io import intensifier_output_hdf5_path_from_sim_config  # n
 from src.intensifier.pipeline import run_intensifier_pipeline_from_sim_config  # noqa: E402
 from src.optics.OpticalTransport import resolve_transport_paths, transport_from_sim_config  # noqa: E402
 from src.common.logger import get_logger  # noqa: E402
+from src.common.logger import log_stage  # noqa: E402
 from src.runner.runSimulation import run_simulation  # noqa: E402
 from src.sensor.io import timepix_hits_hdf5_path_from_sim_config  # noqa: E402
 from src.sensor.io import write_timepix_hits_hdf5  # noqa: E402
@@ -100,12 +101,13 @@ def main() -> None:
 
     logger.info(f"YAML: {yaml_path}")
     logger.info(f"Expected transport HDF5: {transported_hdf5}")
-    summary = transport_from_sim_config(
-        config,
-        input_hdf5_path=simulated_hdf5,
-        output_hdf5_path=transported_hdf5,
-        overwrite=not args.no_overwrite_transport,
-    )
+    with log_stage("transport"):
+        summary = transport_from_sim_config(
+            config,
+            input_hdf5_path=simulated_hdf5,
+            output_hdf5_path=transported_hdf5,
+            overwrite=not args.no_overwrite_transport,
+        )
     logger.info("Transport finished.")
     logger.info(f"Transport engine: {summary.ray_engine}")
     logger.info(
@@ -128,7 +130,11 @@ def main() -> None:
     if config.intensifier is not None and config.intensifier.write_output_hdf5:
         logger.info(f"Intensifier HDF5: {intensifier_hdf5}")
 
-    timepix_hits = run_timepix_pipeline(intensifier_output, timepix_params_from_sim_config(config))
+    timepix_hits = run_timepix_pipeline(
+        intensifier_output,
+        timepix_params_from_sim_config(config),
+    )
+    logger.info("[sensor] Writing Timepix HDF5 output.")
     written_sensor_hdf5 = write_timepix_hits_hdf5(
         timepix_hits,
         config=config,

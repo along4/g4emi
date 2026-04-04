@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from src.common.logger import get_logger
+from src.common.logger import log_stage
 from src.intensifier.io import load_transported_photon_batch_from_sim_config
 from src.intensifier.io import write_intensifier_output_hdf5
 from src.intensifier.mcp import convert_photoelectrons_to_mcp_events
@@ -43,21 +45,28 @@ def run_intensifier_pipeline(
     if rng is None:
         rng = np.random.default_rng()
 
-    photoelectrons = convert_photons_to_photoelectrons(
-        transported_photons,
-        params.photocathode,
-        rng=rng,
-    )
-    mcp_events = convert_photoelectrons_to_mcp_events(
-        photoelectrons,
-        params.mcp,
-        rng=rng,
-    )
-    return convert_mcp_events_to_intensifier_output(
-        mcp_events,
-        params.phosphor,
-        rng=rng,
-    )
+    logger = get_logger()
+    logger.info(f"[intensifier] Input transported photons: {len(transported_photons)}")
+    with log_stage("intensifier"):
+        photoelectrons = convert_photons_to_photoelectrons(
+            transported_photons,
+            params.photocathode,
+            rng=rng,
+        )
+        logger.info(f"[intensifier] Photoelectrons: {len(photoelectrons)}")
+        mcp_events = convert_photoelectrons_to_mcp_events(
+            photoelectrons,
+            params.mcp,
+            rng=rng,
+        )
+        logger.info(f"[intensifier] MCP events: {len(mcp_events)}")
+        output_events = convert_mcp_events_to_intensifier_output(
+            mcp_events,
+            params.phosphor,
+            rng=rng,
+        )
+    logger.info(f"[intensifier] Output phosphor events: {len(output_events)}")
+    return output_events
 
 
 def run_intensifier_pipeline_from_sim_config(
@@ -70,6 +79,8 @@ def run_intensifier_pipeline_from_sim_config(
 ) -> IntensifierOutputBatch:
     """Load HDF5 inputs via `SimConfig` and run the full intensifier pipeline."""
 
+    logger = get_logger()
+    logger.info("[intensifier] Loading transported photons.")
     transported_photons = load_transported_photon_batch_from_sim_config(
         config,
         transport_hdf5_path=transport_hdf5_path,
@@ -84,6 +95,7 @@ def run_intensifier_pipeline_from_sim_config(
     )
     intensifier = config.intensifier
     if intensifier is not None and intensifier.write_output_hdf5:
+        logger.info("[intensifier] Writing intensifier HDF5 output.")
         write_intensifier_output_hdf5(
             output_events,
             config=config,
