@@ -437,6 +437,37 @@ class TimepixModelTests(unittest.TestCase):
         self.assertAlmostEqual(result.time_over_threshold_ns[0], 5.0)
         self.assertEqual(result.contribution_count[0], 1)
 
+    def test_convert_timepix_events_to_hits_treats_pixels_independently(self) -> None:
+        params = self.TimepixParams(
+            pixels_x=256,
+            pixels_y=256,
+            pixel_pitch_mm=0.055,
+            max_tot_ns=20.0,
+            dead_time_ns=10.0,
+        )
+        events = self.TimepixEventBatch(
+            source_photon_index=np.array([0, 1, 2], dtype=np.int64),
+            gun_call_id=np.array([10, 11, 12], dtype=np.int64),
+            primary_track_id=np.array([100, 101, 102], dtype=np.int32),
+            secondary_track_id=np.array([200, 201, 202], dtype=np.int32),
+            photon_track_id=np.array([300, 301, 302], dtype=np.int32),
+            x_pixel=np.array([1, 2, 1], dtype=np.int32),
+            y_pixel=np.array([2, 2, 2], dtype=np.int32),
+            event_time_ns=np.array([10.0, 11.0, 12.0], dtype=np.float64),
+            signal_amplitude_arb=np.array([5.0, 4.0, 3.0], dtype=np.float64),
+        )
+
+        result = self.convert_timepix_events_to_hits(events, params)
+
+        self.assertEqual(len(result), 2)
+        np.testing.assert_array_equal(result.x_pixel, np.array([1, 2], dtype=np.int32))
+        np.testing.assert_array_equal(result.y_pixel, np.array([2, 2], dtype=np.int32))
+        np.testing.assert_array_equal(result.contribution_count, np.array([2, 1], dtype=np.int32))
+        np.testing.assert_allclose(
+            result.time_over_threshold_ns,
+            np.array([6.0, 4.0], dtype=np.float64),
+        )
+
     def test_convert_timepix_events_to_hits_starts_new_hit_after_dead_time(self) -> None:
         params = self.TimepixParams(
             pixels_x=256,

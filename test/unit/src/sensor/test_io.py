@@ -322,6 +322,30 @@ class TimepixIoTests(unittest.TestCase):
                 self.assertEqual(handle.attrs["source_hdf5"], str(source_hdf5.resolve()))
                 self.assertIn("generated_utc", handle.attrs)
 
+    def test_write_timepix_hits_hdf5_writes_empty_dataset(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            config = self.SimConfig.model_validate(self._base_payload(tmp_path))
+            source_hdf5 = tmp_path / "source.h5"
+            transport_hdf5 = tmp_path / "transport.h5"
+            output_hdf5 = tmp_path / "sensor" / "timepix_hits_0000.h5"
+            self._write_source_hdf5(source_hdf5)
+            self._write_transport_hdf5(transport_hdf5, source_hdf5=source_hdf5)
+
+            written_path = self.write_timepix_hits_hdf5(
+                self.TimepixHitBatch.empty(),
+                config=config,
+                transport_hdf5_path=transport_hdf5,
+                source_hdf5_path=source_hdf5,
+                output_hdf5_path=output_hdf5,
+            )
+
+            with self.h5py.File(written_path, "r") as handle:
+                self.assertIn(self.DATASET_TIMEPIX_HITS, handle)
+                dataset = handle[self.DATASET_TIMEPIX_HITS][:]
+                self.assertEqual(len(dataset), 0)
+                self.assertEqual(dataset.dtype.names[0], "gun_call_id")
+
 
 if __name__ == "__main__":
     unittest.main()

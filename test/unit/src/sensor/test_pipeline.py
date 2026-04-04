@@ -227,7 +227,14 @@ class TimepixPipelineTests(unittest.TestCase):
                 ),
             )
 
-    def _write_transport_hdf5(self, path: Path, *, source_hdf5: Path) -> None:
+    def _write_transport_hdf5(
+        self,
+        path: Path,
+        *,
+        source_hdf5: Path,
+        hit_x_mm: float = 0.0,
+        hit_y_mm: float = 0.0,
+    ) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         with self.h5py.File(path, "w") as handle:
             handle.create_dataset(
@@ -251,8 +258,8 @@ class TimepixPipelineTests(unittest.TestCase):
                 "transported_photons",
                 data=np.array(
                     [
-                        (0, 0, 1, 10, 100, 0.0, 0.0, 0.0, True, True),
-                        (1, 0, 1, 10, 101, 0.0, 0.0, 0.0, True, True),
+                        (0, 0, 1, 10, 100, hit_x_mm, hit_y_mm, 0.0, True, True),
+                        (1, 0, 1, 10, 101, hit_x_mm, hit_y_mm, 0.0, True, True),
                     ],
                     dtype=np.dtype(
                         [
@@ -338,6 +345,42 @@ class TimepixPipelineTests(unittest.TestCase):
                     str(source_hdf5.resolve()),
                 )
                 self.assertIn("generated_utc", handle.attrs)
+
+    def test_run_timepix_pipeline_from_sim_config_writes_empty_output_when_no_hits_survive(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            payload = self._config_payload(tmp_path)
+            payload["sensor"]["timepix"]["pixelsX"] = 1
+            payload["sensor"]["timepix"]["pixelsY"] = 1
+            payload["sensor"]["timepix"]["pixelPitchMm"] = 0.01
+            config = self.SimConfig.model_validate(payload)
+            source_hdf5 = tmp_path / "simulatedPhotons" / "source.h5"
+            transport_hdf5 = tmp_path / "transportedPhotons" / "transport.h5"
+            expected_output = (
+                tmp_path
+                / "timepix_pipeline_test"
+                / "sensor"
+                / "timepix_hits_0000.h5"
+            )
+            self._write_source_hdf5(source_hdf5)
+            self._write_transport_hdf5(
+                transport_hdf5,
+                source_hdf5=source_hdf5,
+                hit_x_mm=1.0,
+                hit_y_mm=1.0,
+            )
+
+            result = self.run_timepix_pipeline_from_sim_config(
+                config,
+                transport_hdf5_path=transport_hdf5,
+                source_hdf5_path=source_hdf5,
+            )
+
+            self.assertEqual(len(result), 0)
+            self.assertTrue(expected_output.exists())
+            with self.h5py.File(expected_output, "r") as handle:
+                self.assertIn(self.DATASET_TIMEPIX_HITS, handle)
+                self.assertEqual(len(handle[self.DATASET_TIMEPIX_HITS]), 0)
 
 
 if __name__ == "__main__":
