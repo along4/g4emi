@@ -153,12 +153,9 @@ bool EnsureReady(const std::string& hdf5Path, std::string* errorMessage) {
     return false;
   }
 
-  std::error_code existsEc;
-  if (std::filesystem::exists(hdf5Path, existsEc) && !existsEc) {
-    s.file = H5Fopen(hdf5Path.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
-  } else {
-    s.file = H5Fcreate(hdf5Path.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
-  }
+  // Treat each simulation run as authoritative for its output path: recreate
+  // the file on first open so stale rows from a previous run are never appended.
+  s.file = H5Fcreate(hdf5Path.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
   if (s.file < 0) {
     if (errorMessage) {
       *errorMessage = "Failed to open/create " + hdf5Path;

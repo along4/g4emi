@@ -1,3 +1,18 @@
+if(APPLE)
+  # Under the Pixi/conda macOS toolchain, CMake's FindThreads try-compile may
+  # incorrectly attempt to link pthread symbols as a separate library even
+  # though they are provided by libSystem. Seed the expected Darwin result
+  # before Geant4's nested find_dependency(Threads) runs.
+  set(CMAKE_THREAD_LIBS_INIT "" CACHE STRING "" FORCE)
+  set(CMAKE_HAVE_LIBC_PTHREAD 1 CACHE BOOL "" FORCE)
+  set(CMAKE_HAVE_THREADS_LIBRARY 1 CACHE BOOL "" FORCE)
+  set(CMAKE_USE_PTHREADS_INIT 1 CACHE BOOL "" FORCE)
+  set(Threads_FOUND TRUE CACHE BOOL "" FORCE)
+  if(NOT TARGET Threads::Threads)
+    add_library(Threads::Threads INTERFACE IMPORTED)
+  endif()
+endif()
+
 find_package(Geant4 REQUIRED ui_all vis_all)
 include(${Geant4_USE_FILE})
 
