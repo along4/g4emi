@@ -220,6 +220,143 @@ class SimConfigIntensifierTests(unittest.TestCase):
         config = self.SimConfig.model_validate(payload)
         self.assertFalse(config.intensifier.write_output_hdf5)
 
+    def test_sensor_timepix_accepts_snake_case(self) -> None:
+        payload = self._base_payload()
+        payload["sensor"] = {
+            "model": "Timepix",
+            "timepix": {
+                "pixels_x": 256,
+                "pixels_y": 255,
+                "pixel_pitch_mm": 0.11,
+                "max_tot_ns": 500.0,
+                "dead_time_ns": 50.0,
+            },
+        }
+
+        config = self.SimConfig.model_validate(payload)
+        self.assertEqual(config.sensor.model, "Timepix")
+        self.assertEqual(config.sensor.timepix.pixels_x, 256)
+        self.assertEqual(config.sensor.timepix.pixels_y, 255)
+        self.assertAlmostEqual(config.sensor.timepix.pixel_pitch_mm, 0.11)
+        self.assertAlmostEqual(config.sensor.timepix.max_tot_ns, 500.0)
+        self.assertAlmostEqual(config.sensor.timepix.dead_time_ns, 50.0)
+
+    def test_sensor_timepix_accepts_camel_case_and_geometry_defaults(self) -> None:
+        payload = self._base_payload()
+        payload["sensor"] = {
+            "model": "Timepix",
+            "timepix": {
+                "maxTotNs": 750.0,
+                "deadTimeNs": 0.0,
+            },
+        }
+
+        config = self.SimConfig.model_validate(payload)
+        self.assertEqual(config.sensor.timepix.pixels_x, 256)
+        self.assertEqual(config.sensor.timepix.pixels_y, 256)
+        self.assertAlmostEqual(config.sensor.timepix.pixel_pitch_mm, 0.055)
+        self.assertAlmostEqual(config.sensor.timepix.max_tot_ns, 750.0)
+        self.assertAlmostEqual(config.sensor.timepix.dead_time_ns, 0.0)
+
+    def test_sensor_timepix_preserves_explicit_geometry_overrides(self) -> None:
+        payload = self._base_payload()
+        payload["sensor"] = {
+            "model": "Timepix",
+            "timepix": {
+                "pixelsX": 128,
+                "pixelsY": 512,
+                "pixelPitchMm": 0.08,
+                "maxTotNs": 900.0,
+                "deadTimeNs": 25.0,
+            },
+        }
+
+        config = self.SimConfig.model_validate(payload)
+        self.assertEqual(config.sensor.timepix.pixels_x, 128)
+        self.assertEqual(config.sensor.timepix.pixels_y, 512)
+        self.assertAlmostEqual(config.sensor.timepix.pixel_pitch_mm, 0.08)
+
+    def test_sensor_timepix_rejects_non_positive_pixels_x(self) -> None:
+        payload = self._base_payload()
+        payload["sensor"] = {
+            "model": "Timepix",
+            "timepix": {
+                "pixels_x": 0,
+                "max_tot_ns": 500.0,
+                "dead_time_ns": 50.0,
+            },
+        }
+
+        with self.assertRaises(ValueError):
+            self.SimConfig.model_validate(payload)
+
+    def test_sensor_timepix_rejects_non_positive_pixels_y(self) -> None:
+        payload = self._base_payload()
+        payload["sensor"] = {
+            "model": "Timepix",
+            "timepix": {
+                "pixels_y": -1,
+                "max_tot_ns": 500.0,
+                "dead_time_ns": 50.0,
+            },
+        }
+
+        with self.assertRaises(ValueError):
+            self.SimConfig.model_validate(payload)
+
+    def test_sensor_timepix_rejects_non_positive_pixel_pitch(self) -> None:
+        payload = self._base_payload()
+        payload["sensor"] = {
+            "model": "Timepix",
+            "timepix": {
+                "pixel_pitch_mm": 0.0,
+                "max_tot_ns": 500.0,
+                "dead_time_ns": 50.0,
+            },
+        }
+
+        with self.assertRaises(ValueError):
+            self.SimConfig.model_validate(payload)
+
+    def test_sensor_timepix_rejects_non_positive_max_tot(self) -> None:
+        payload = self._base_payload()
+        payload["sensor"] = {
+            "model": "Timepix",
+            "timepix": {
+                "max_tot_ns": 0.0,
+                "dead_time_ns": 50.0,
+            },
+        }
+
+        with self.assertRaises(ValueError):
+            self.SimConfig.model_validate(payload)
+
+    def test_sensor_timepix_rejects_negative_dead_time(self) -> None:
+        payload = self._base_payload()
+        payload["sensor"] = {
+            "model": "Timepix",
+            "timepix": {
+                "max_tot_ns": 500.0,
+                "dead_time_ns": -0.1,
+            },
+        }
+
+        with self.assertRaises(ValueError):
+            self.SimConfig.model_validate(payload)
+
+    def test_sensor_model_rejects_blank_string(self) -> None:
+        payload = self._base_payload()
+        payload["sensor"] = {
+            "model": "   ",
+            "timepix": {
+                "max_tot_ns": 500.0,
+                "dead_time_ns": 50.0,
+            },
+        }
+
+        with self.assertRaises(ValueError):
+            self.SimConfig.model_validate(payload)
+
 
 if __name__ == "__main__":
     unittest.main()
