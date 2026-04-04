@@ -265,15 +265,15 @@ def load_transported_photon_batch(
         )
         _require_fields(DATASET_PHOTONS, source_fields, _REQUIRED_SOURCE_PHOTON_FIELDS)
 
-        transported = transported_ds[:]
-        mask = np.asarray(transported["reached_intensifier"], dtype=bool)
+        mask = np.asarray(transported_ds["reached_intensifier"], dtype=bool)
         if require_in_bounds:
-            mask &= np.asarray(transported["in_bounds"], dtype=bool)
+            mask &= np.asarray(transported_ds["in_bounds"], dtype=bool)
 
-        selected = transported[mask]
-        if len(selected) == 0:
+        selected_indices = np.flatnonzero(mask)
+        if len(selected_indices) == 0:
             return TransportedPhotonBatch.empty()
 
+        selected = transported_ds[selected_indices]
         source_indices = np.asarray(selected["source_photon_index"], dtype=np.int64)
         source_rows = source_ds[source_indices]
 
