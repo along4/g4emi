@@ -375,19 +375,19 @@ class TimepixModelTests(unittest.TestCase):
 
         result = self.convert_timepix_events_to_hits(self._timepix_events(), params)
 
-        self.assertEqual(len(result), 3)
-        np.testing.assert_array_equal(result.x_pixel, np.array([1, 2, 1], dtype=np.int32))
-        np.testing.assert_array_equal(result.y_pixel, np.array([2, 2, 2], dtype=np.int32))
+        self.assertEqual(len(result), 4)
+        np.testing.assert_array_equal(result.x_pixel, np.array([1, 2, 1, 1], dtype=np.int32))
+        np.testing.assert_array_equal(result.y_pixel, np.array([2, 2, 2, 2], dtype=np.int32))
         np.testing.assert_allclose(
             result.time_over_threshold_ns,
-            np.array([7.0, 8.0, 7.0], dtype=np.float64),
+            np.array([7.0, 8.0, 6.0, 7.0], dtype=np.float64),
         )
         np.testing.assert_array_equal(
             result.contribution_count,
-            np.array([2, 1, 1], dtype=np.int32),
+            np.array([2, 1, 1, 1], dtype=np.int32),
         )
-        np.testing.assert_allclose(result.time_of_arrival_ns, np.zeros(3, dtype=np.float64))
-        np.testing.assert_array_equal(result.gun_call_id, np.array([10, 13, 14], dtype=np.int64))
+        np.testing.assert_allclose(result.time_of_arrival_ns, np.zeros(4, dtype=np.float64))
+        np.testing.assert_array_equal(result.gun_call_id, np.array([10, 13, 12, 14], dtype=np.int64))
 
     def test_convert_timepix_events_to_hits_clips_merged_tot_to_max(self) -> None:
         params = self.TimepixParams(
