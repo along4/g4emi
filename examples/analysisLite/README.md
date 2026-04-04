@@ -31,3 +31,7 @@ Module-level analysis docs live in
 The event-level example automatically uses the sibling `transportedPhotons`
 HDF5 file when present so photon origins can be split by whether they reached
 the intensifier.
+
+When a sibling `sensor/timepix_hits_<subrun>.h5` file is present, the
+lightweight spatial example also writes a Timepix pixel map weighted by
+integrated `time_over_threshold_ns`.

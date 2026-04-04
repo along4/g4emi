@@ -14,6 +14,7 @@ from matplotlib import pyplot as plt
 from example_support import (  # noqa: E402
     default_output_dir_from_input,
     ensure_repo_root_on_path,
+    infer_sensor_hdf5_path,
     infer_transport_hdf5_path,
 )
 
@@ -25,6 +26,7 @@ from analysis.spatial import (  # noqa: E402
     optical_interface_photons_to_image,
     photon_exit_to_image,
     photon_origins_to_image,
+    timepix_tot_to_image,
 )
 
 
@@ -56,6 +58,16 @@ def _parse_args() -> argparse.Namespace:
             "Optional transport HDF5 path containing /transported_photons. "
             "If omitted, tries sibling path "
             "data/<run>/transportedPhotons/photons_intensifier_hits_0000.h5."
+        ),
+    )
+    parser.add_argument(
+        "--sensor-hdf5-path",
+        type=Path,
+        default=None,
+        help=(
+            "Optional sensor HDF5 path containing /timepix_hits. "
+            "If omitted, tries sibling path "
+            "data/<run>/sensor/timepix_hits_0000.h5."
         ),
     )
     parser.add_argument(
@@ -162,11 +174,17 @@ def main() -> None:
     intensifier_png = (
         None if output_dir is None else output_dir / "photons_intensifier_hits.png"
     )
+    timepix_png = None if output_dir is None else output_dir / "timepix_integrated_tot.png"
 
     transport_hdf5_path = (
         args.transport_hdf5_path.expanduser().resolve()
         if args.transport_hdf5_path is not None
         else infer_transport_hdf5_path(hdf5_path)
+    )
+    sensor_hdf5_path = (
+        args.sensor_hdf5_path.expanduser().resolve()
+        if args.sensor_hdf5_path is not None
+        else infer_sensor_hdf5_path(hdf5_path)
     )
     sim_config_yaml_path = (
         args.sim_config_yaml.expanduser().resolve()
@@ -222,6 +240,14 @@ def main() -> None:
         )
     else:
         intensifier_png = None
+    if sensor_hdf5_path is not None and sensor_hdf5_path.exists():
+        timepix_tot_to_image(
+            sensor_hdf5_path,
+            output_path=timepix_png,
+            show=False,
+        )
+    else:
+        timepix_png = None
 
     print(f"Input HDF5: {hdf5_path}")
     if xy_range_override is not None:
@@ -236,6 +262,10 @@ def main() -> None:
             print("Skipped intensifier plot: transport HDF5 not found.")
         elif transport_hdf5_path is not None:
             print(f"Transport HDF5: {transport_hdf5_path}")
+        if timepix_png is None:
+            print("Skipped Timepix plot: sensor HDF5 not found.")
+        elif sensor_hdf5_path is not None:
+            print(f"Sensor HDF5: {sensor_hdf5_path}")
         plt.show()
         return
 
@@ -251,6 +281,14 @@ def main() -> None:
         print(
             "  - (skipped) photons_intensifier_hits.png "
             "[transport HDF5 not found]"
+        )
+    if timepix_png is not None:
+        print(f"  - {timepix_png}")
+        print(f"Sensor HDF5: {sensor_hdf5_path}")
+    else:
+        print(
+            "  - (skipped) timepix_integrated_tot.png "
+            "[sensor HDF5 not found]"
         )
 
 

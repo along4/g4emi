@@ -79,6 +79,31 @@ class AnalysisDataBuilderMixin:
                 "intensifier_input_plane"
             )
 
+    def _write_timepix_hdf5(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        dtype = self.np.dtype(
+            [
+                ("gun_call_id", self.np.int64),
+                ("primary_track_id", self.np.int32),
+                ("secondary_track_id", self.np.int32),
+                ("x_pixel", self.np.int32),
+                ("y_pixel", self.np.int32),
+                ("time_of_arrival_ns", self.np.float64),
+                ("time_over_threshold_ns", self.np.float64),
+                ("contribution_count", self.np.int32),
+            ]
+        )
+        rows = self.np.array(
+            [
+                (0, 1, 10, 10, 20, 0.0, 5.0, 1),
+                (0, 1, 10, 10, 20, 0.0, 7.0, 1),
+                (0, 1, 11, 11, 21, 0.0, 3.0, 1),
+            ],
+            dtype=dtype,
+        )
+        with self.h5py.File(path, "w") as handle:
+            handle.create_dataset("timepix_hits", data=rows)
+
     def _write_photons_hdf5(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         dtype = self.np.dtype(

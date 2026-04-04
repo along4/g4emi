@@ -19,7 +19,7 @@ def ensure_repo_root_on_path() -> Path:
 def default_output_dir_from_input(hdf5_path: Path) -> Path:
     """Infer the default analyzer output directory from an input HDF5 path."""
 
-    stage_dir_names = {"simulatedPhotons", "transportedPhotons"}
+    stage_dir_names = {"simulatedPhotons", "transportedPhotons", "sensor"}
     if hdf5_path.parent.name in stage_dir_names:
         return hdf5_path.parent.parent / "plots"
     return hdf5_path.parent / "plots"
@@ -33,4 +33,15 @@ def infer_transport_hdf5_path(sim_hdf5_path: Path) -> Path | None:
     run_root = sim_hdf5_path.parent.parent
     suffix = sim_hdf5_path.stem.removeprefix("photon_optical_interface_hits")
     candidate = run_root / "transportedPhotons" / f"photons_intensifier_hits{suffix}.h5"
+    return candidate if candidate.exists() else None
+
+
+def infer_sensor_hdf5_path(sim_hdf5_path: Path) -> Path | None:
+    """Infer the sibling Timepix HDF5 path for a simulated-photons file."""
+
+    if sim_hdf5_path.parent.name != "simulatedPhotons":
+        return None
+    run_root = sim_hdf5_path.parent.parent
+    suffix = sim_hdf5_path.stem.removeprefix("photon_optical_interface_hits")
+    candidate = run_root / "sensor" / f"timepix_hits{suffix}.h5"
     return candidate if candidate.exists() else None

@@ -44,6 +44,7 @@ Spatial:
 - `photon_exit_to_image(...)`
 - `optical_interface_photons_to_image(...)`
 - `intensifier_photons_to_image(...)`
+- `timepix_tot_to_image(...)`
 
 Timing:
 - `photon_creation_delays_ns(...)`
@@ -71,6 +72,8 @@ Events:
   from HDF5 data.
 - `intensifier_photons_to_image(...)` uses intensifier screen metadata from
   transport HDF5 attributes when available.
+- `timepix_tot_to_image(...)` plots Timepix pixel hits over the observed pixel
+  extent and weights each pixel by summed `time_over_threshold_ns`.
 
 ## Tests
 
