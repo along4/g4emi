@@ -97,7 +97,7 @@ class EventAnalysisTests(AnalysisDataBuilderMixin, AnalysisTestCase):
             self.assertEqual(ax.get_ylabel(), "y (mm)")
             self.assertIn("event 7", ax.get_title())
             self.assertEqual(len(ax.lines), 2)
-            self.assertEqual(len(ax.collections), 7)
+            self.assertEqual(len(ax.collections), 9)
             legend = ax.get_legend()
             self.assertIsNotNone(legend)
             legend_labels = [text.get_text() for text in legend.get_texts()]
@@ -105,10 +105,12 @@ class EventAnalysisTests(AnalysisDataBuilderMixin, AnalysisTestCase):
                 legend_labels,
                 [
                     "Neutron hit",
-                    "proton #21, 4.250 MeV",
-                    "alpha #22, 1.500 MeV",
-                    "Photon origins (not at intensifier)",
+                    "proton #21, 4.250 MeV, enter-lens=2",
+                    "alpha #22, 1.500 MeV, enter-lens=1",
+                    "Photon origins (missed intensifier)",
+                    "Photon exits (missed intensifier)",
                     "Photon origins (reached intensifier)",
+                    "Photon exits (reached intensifier)",
                 ],
             )
             hover_texts = [
@@ -117,7 +119,15 @@ class EventAnalysisTests(AnalysisDataBuilderMixin, AnalysisTestCase):
                 if getattr(artist, "_hover_text", None) is not None
             ]
             self.assertTrue(any("Neutron hit" in text for text in hover_texts))
-            self.assertTrue(any("proton #21" in text and "4.250 MeV" in text for text in hover_texts))
+            self.assertTrue(
+                any(
+                    "proton #21" in text
+                    and "4.250 MeV" in text
+                    and "enter-lens photons=2" in text
+                    for text in hover_texts
+                )
+            )
+            self.assertTrue(any("Photon exits" in text for text in hover_texts))
             self.plt.close(fig)
 
     def test_event_recoil_paths_ignores_nan_endpoints_when_setting_limits(self) -> None:
@@ -133,11 +143,11 @@ class EventAnalysisTests(AnalysisDataBuilderMixin, AnalysisTestCase):
             )
 
             self.assertEqual(len(ax.lines), 0)
-            self.assertEqual(len(ax.collections), 2)
+            self.assertEqual(len(ax.collections), 3)
             self.assertTrue(self.np.all(self.np.isfinite(self.np.asarray(ax.get_xlim()))))
             self.assertTrue(self.np.all(self.np.isfinite(self.np.asarray(ax.get_ylim()))))
             legend = ax.get_legend()
             self.assertIsNotNone(legend)
             legend_labels = [text.get_text() for text in legend.get_texts()]
-            self.assertEqual(legend_labels, ["Neutron hit", "Photon origins"])
+            self.assertEqual(legend_labels, ["Neutron hit", "Photon origins", "Photon exits"])
             self.plt.close(fig)

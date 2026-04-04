@@ -216,6 +216,9 @@ class AnalysisDataBuilderMixin:
                 ("photon_origin_x_mm", self.np.float64),
                 ("photon_origin_y_mm", self.np.float64),
                 ("photon_origin_z_mm", self.np.float64),
+                ("photon_scint_exit_x_mm", self.np.float64),
+                ("photon_scint_exit_y_mm", self.np.float64),
+                ("photon_scint_exit_z_mm", self.np.float64),
             ]
         )
         primary_rows = self.np.array(
@@ -237,12 +240,12 @@ class AnalysisDataBuilderMixin:
         )
         photon_rows = self.np.array(
             [
-                (7, 21, 1.0, 0.2, 0.0),
-                (7, 21, 3.5, 0.8, 0.0),
-                (7, 22, 1.1, 5.5, 1.0),
-                (9, 41, 2.3, 2.2, 0.0),
-                (9, 41, 2.7, 2.9, 0.0),
-                (8, 31, -1.5, -1.5, 0.0),
+                (7, 21, 1.0, 0.2, 0.0, 1.4, 0.5, 0.3),
+                (7, 21, 3.5, 0.8, 0.0, 4.1, 1.2, 0.3),
+                (7, 22, 1.1, 5.5, 1.0, 1.0, 6.2, 1.9),
+                (9, 41, 2.3, 2.2, 0.0, 2.6, 2.4, 0.2),
+                (9, 41, 2.7, 2.9, 0.0, self.np.nan, self.np.nan, self.np.nan),
+                (8, 31, -1.5, -1.5, 0.0, -1.8, -1.9, 0.4),
             ],
             dtype=photons_dtype,
         )

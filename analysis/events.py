@@ -12,6 +12,9 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from src.common.hdf5_schema import DATASET_TRANSPORTED_PHOTONS
 from src.common.hdf5_schema import (
+    PHOTON_SCINT_EXIT_X_FIELD,
+    PHOTON_SCINT_EXIT_Y_FIELD,
+    PHOTON_SCINT_EXIT_Z_FIELD,
     SECONDARY_END_X_FIELD,
     SECONDARY_END_Y_FIELD,
     SECONDARY_END_Z_FIELD,
@@ -142,6 +145,9 @@ def event_recoil_paths_to_image(
         "photon_origin_x_mm",
         "photon_origin_y_mm",
         "photon_origin_z_mm",
+        PHOTON_SCINT_EXIT_X_FIELD,
+        PHOTON_SCINT_EXIT_Y_FIELD,
+        PHOTON_SCINT_EXIT_Z_FIELD,
     }
     require_fields(primaries, primary_required, dataset_name="primaries")
     require_fields(secondaries, secondary_required, dataset_name="secondaries")
@@ -243,7 +249,7 @@ def event_recoil_paths_to_image(
         end_x = float(row[end_field_by_axis[axis_1]])
         end_y = float(row[end_field_by_axis[axis_2]])
         energy_label = (
-            f", {origin_energy_mev:.3f} MeV" if np.isfinite(origin_energy_mev) else ""
+            f"{origin_energy_mev:.3f} MeV" if np.isfinite(origin_energy_mev) else "unknown energy"
         )
         line_is_finite = bool(
             np.isfinite(origin_x)
@@ -260,13 +266,13 @@ def event_recoil_paths_to_image(
                 color=color,
                 linewidth=1.8,
                 alpha=0.9,
-                label=f"{species} #{secondary_track_id}{energy_label}",
+                label=f"{species} #{secondary_track_id}, {energy_label}",
                 zorder=2,
             )[0]
             _set_hover_text(
                 line_artist,
                 f"{species} #{secondary_track_id}\n"
-                f"energy={origin_energy_mev:.3f} MeV\n"
+                f"energy={energy_label}\n"
                 f"origin: ({origin_x:.3f}, {origin_y:.3f}) mm\n"
                 f"end: ({end_x:.3f}, {end_y:.3f}) mm",
             )
@@ -306,6 +312,7 @@ def event_recoil_paths_to_image(
             )
 
         secondary_photon_mask = photon_secondary_ids == secondary_track_id
+        emitted_photon_count = int(np.count_nonzero(secondary_photon_mask))
         photon_x_mm = np.asarray(
             event_photons[f"photon_origin_{axis_1}_mm"][secondary_photon_mask],
             dtype=float,
@@ -320,6 +327,20 @@ def event_recoil_paths_to_image(
         if photon_x_mm.size > 0:
             all_x_mm.append(photon_x_mm)
             all_y_mm.append(photon_y_mm)
+        line_label = (
+            f"{species} #{secondary_track_id}, {energy_label}, "
+            f"enter-lens={emitted_photon_count}"
+        )
+        if line_is_finite:
+            line_artist.set_label(line_label)
+            _set_hover_text(
+                line_artist,
+                f"{species} #{secondary_track_id}\n"
+                f"energy={energy_label}\n"
+                f"enter-lens photons={emitted_photon_count}\n"
+                f"origin: ({origin_x:.3f}, {origin_y:.3f}) mm\n"
+                f"end: ({end_x:.3f}, {end_y:.3f}) mm",
+            )
 
     photon_x_all = np.asarray(event_photons[f"photon_origin_{axis_1}_mm"], dtype=float)
     photon_y_all = np.asarray(event_photons[f"photon_origin_{axis_2}_mm"], dtype=float)
@@ -331,6 +352,19 @@ def event_recoil_paths_to_image(
         if transport_reached_mask is not None
         else np.zeros(photon_x_all.shape[0], dtype=bool)
     )
+    photon_exit_x_all = np.asarray(event_photons[f"photon_scint_exit_{axis_1}_mm"], dtype=float)
+    photon_exit_y_all = np.asarray(event_photons[f"photon_scint_exit_{axis_2}_mm"], dtype=float)
+    finite_exit_mask = np.isfinite(photon_exit_x_all) & np.isfinite(photon_exit_y_all)
+    photon_exit_x_all = photon_exit_x_all[finite_exit_mask]
+    photon_exit_y_all = photon_exit_y_all[finite_exit_mask]
+    photon_exit_reached_mask = (
+        transport_reached_mask[finite_exit_mask]
+        if transport_reached_mask is not None
+        else np.zeros(photon_exit_x_all.shape[0], dtype=bool)
+    )
+    if photon_exit_x_all.size > 0:
+        all_x_mm.append(photon_exit_x_all)
+        all_y_mm.append(photon_exit_y_all)
 
     unreached_mask = ~photon_reached_mask
     if np.any(unreached_mask):
@@ -341,7 +375,7 @@ def event_recoil_paths_to_image(
             alpha=0.22,
             s=18.0,
             label=(
-                "Photon origins (not at intensifier)"
+                "Photon origins (missed intensifier)"
                 if transport_reached_mask is not None
                 else "Photon origins"
             ),
@@ -350,8 +384,30 @@ def event_recoil_paths_to_image(
         _set_hover_text(
             unreached_artist,
             "Photon origins\n"
-            f"class={'not at intensifier' if transport_reached_mask is not None else 'all'}\n"
+            f"class={'missed intensifier' if transport_reached_mask is not None else 'all'}\n"
             f"count={int(np.count_nonzero(unreached_mask))}",
+        )
+    exit_unreached_mask = ~photon_exit_reached_mask
+    if np.any(exit_unreached_mask):
+        exit_unreached_artist = ax.scatter(
+            photon_exit_x_all[exit_unreached_mask],
+            photon_exit_y_all[exit_unreached_mask],
+            color="#d95f02",
+            alpha=0.45,
+            s=52.0,
+            marker="^",
+            label=(
+                "Photon exits (missed intensifier)"
+                if transport_reached_mask is not None
+                else "Photon exits"
+            ),
+            zorder=1,
+        )
+        _set_hover_text(
+            exit_unreached_artist,
+            "Photon exits\n"
+            f"class={'missed intensifier' if transport_reached_mask is not None else 'all'}\n"
+            f"count={int(np.count_nonzero(exit_unreached_mask))}",
         )
     if np.any(photon_reached_mask):
         reached_artist = ax.scatter(
@@ -368,6 +424,23 @@ def event_recoil_paths_to_image(
             "Photon origins\n"
             "class=reached intensifier\n"
             f"count={int(np.count_nonzero(photon_reached_mask))}",
+        )
+    if np.any(photon_exit_reached_mask):
+        exit_reached_artist = ax.scatter(
+            photon_exit_x_all[photon_exit_reached_mask],
+            photon_exit_y_all[photon_exit_reached_mask],
+            color="#1b9e77",
+            alpha=0.55,
+            s=58.0,
+            marker="^",
+            label="Photon exits (reached intensifier)",
+            zorder=1,
+        )
+        _set_hover_text(
+            exit_reached_artist,
+            "Photon exits\n"
+            "class=reached intensifier\n"
+            f"count={int(np.count_nonzero(photon_exit_reached_mask))}",
         )
 
     finite_x_values = [values for values in all_x_mm if values.size > 0]
