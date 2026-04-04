@@ -286,14 +286,22 @@ class IntensifierIoTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
             config = self.SimConfig.model_validate(self._base_payload(tmp_path))
-            transport_paths = self.resolve_intensifier_input_hdf5_paths(
-                config,
-                transport_hdf5_path=tmp_path / "transportedPhotons" / "photons_intensifier_hits_0000.h5",
-                source_hdf5_path=tmp_path / "simulatedPhotons" / "photon_optical_interface_hits_0000.h5",
+            source_hdf5 = (
+                tmp_path / "simulatedPhotons" / "photon_optical_interface_hits_0000.h5"
             )
-            source_hdf5, transport_hdf5 = transport_paths[1], transport_paths[0]
+            transport_hdf5 = (
+                tmp_path / "transportedPhotons" / "photons_intensifier_hits_0000.h5"
+            )
             self._write_source_hdf5(source_hdf5)
             self._write_transport_hdf5(transport_hdf5, source_hdf5=source_hdf5)
+
+            transport_paths = self.resolve_intensifier_input_hdf5_paths(
+                config,
+                transport_hdf5_path=transport_hdf5,
+                source_hdf5_path=source_hdf5,
+            )
+            self.assertEqual(transport_paths[0], transport_hdf5.resolve())
+            self.assertEqual(transport_paths[1], source_hdf5.resolve())
 
             batch = self.load_transported_photon_batch_from_sim_config(
                 config,

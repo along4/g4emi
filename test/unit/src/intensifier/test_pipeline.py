@@ -301,6 +301,26 @@ class IntensifierPipelineTests(unittest.TestCase):
         self.assertTrue(np.all(result.output_time_ns >= photons.time_ns))
         self.assertTrue(np.all(result.signal_amplitude_arb > 0.0))
 
+    def test_run_intensifier_pipeline_supports_chunked_compute(self) -> None:
+        photons = self._photons()
+        params = self._params()
+
+        result = self.run_intensifier_pipeline(
+            photons,
+            params,
+            rng=np.random.default_rng(123),
+            chunk_rows=1,
+        )
+
+        self.assertEqual(len(result), len(photons))
+        np.testing.assert_array_equal(result.source_photon_index, photons.source_photon_index)
+        np.testing.assert_array_equal(result.gun_call_id, photons.gun_call_id)
+        np.testing.assert_array_equal(result.primary_track_id, photons.primary_track_id)
+        np.testing.assert_array_equal(result.secondary_track_id, photons.secondary_track_id)
+        np.testing.assert_array_equal(result.photon_track_id, photons.photon_track_id)
+        self.assertTrue(np.all(result.output_time_ns >= photons.time_ns))
+        self.assertTrue(np.all(result.signal_amplitude_arb > 0.0))
+
     def test_repeated_calls_can_reuse_one_parameter_bundle(self) -> None:
         photons = self._photons()
         params = self._params()

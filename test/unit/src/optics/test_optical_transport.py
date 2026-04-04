@@ -268,8 +268,8 @@ class OpticalTransportTests(unittest.TestCase):
             self.assertTrue(str(resolved.input_hdf5).endswith("photon_optical_interface_hits_0042.h5"))
             self.assertTrue(str(resolved.output_hdf5).endswith("photons_intensifier_hits_0042.h5"))
 
-    def test_transport_from_sim_config_writes_linked_secondary_hdf5(self) -> None:
-        """Transport should preserve linkage IDs and emit NaNs for misses."""
+    def test_transport_from_sim_config_writes_only_reached_hits(self) -> None:
+        """Transport should preserve linkage IDs and write only reached hits."""
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = self._build_config(Path(tmp_dir))
@@ -297,9 +297,9 @@ class OpticalTransportTests(unittest.TestCase):
                 self.assertIn("secondary_end_z_mm", handle["secondaries"].dtype.names)
 
                 rows = handle["transported_photons"][:]
-                self.assertEqual(len(rows), 2)
-                self.assertListEqual(rows["source_photon_index"].tolist(), [0, 1])
-                self.assertListEqual(rows["photon_track_id"].tolist(), [100, 101])
+                self.assertEqual(len(rows), 1)
+                self.assertListEqual(rows["source_photon_index"].tolist(), [0])
+                self.assertListEqual(rows["photon_track_id"].tolist(), [100])
                 self.assertNotIn("optical_interface_hit_x_mm", rows.dtype.names)
                 self.assertNotIn("optical_interface_hit_y_mm", rows.dtype.names)
                 self.assertNotIn("optical_interface_hit_dir_x", rows.dtype.names)
@@ -309,15 +309,10 @@ class OpticalTransportTests(unittest.TestCase):
                 self.assertNotIn("optical_interface_hit_wavelength_nm", rows.dtype.names)
 
                 self.assertTrue(bool(rows["reached_intensifier"][0]))
-                self.assertFalse(bool(rows["reached_intensifier"][1]))
                 self.assertFalse(bool(rows["in_bounds"][0]))
-                self.assertFalse(bool(rows["in_bounds"][1]))
                 self.assertAlmostEqual(float(rows["intensifier_hit_x_mm"][0]), 11.5)
                 self.assertAlmostEqual(float(rows["intensifier_hit_y_mm"][0]), -3.0)
                 self.assertAlmostEqual(float(rows["intensifier_hit_z_mm"][0]), 42.0)
-                self.assertTrue(self.np.isnan(float(rows["intensifier_hit_x_mm"][1])))
-                self.assertTrue(self.np.isnan(float(rows["intensifier_hit_y_mm"][1])))
-                self.assertTrue(self.np.isnan(float(rows["intensifier_hit_z_mm"][1])))
 
                 self.assertEqual(handle.attrs["transport_engine"], "stub-tracer")
                 self.assertIn("source_hdf5", handle.attrs)
@@ -389,8 +384,7 @@ class OpticalTransportTests(unittest.TestCase):
                 rows = handle["transported_photons"][:]
                 self.assertTrue(bool(rows["reached_intensifier"][0]))
                 self.assertTrue(bool(rows["in_bounds"][0]))
-                self.assertFalse(bool(rows["reached_intensifier"][1]))
-                self.assertFalse(bool(rows["in_bounds"][1]))
+                self.assertEqual(len(rows), 1)
                 self.assertFalse(bool(handle.attrs["intensifier_input_screen_defined"]))
 
     def test_transport_logs_summary_to_run_log_when_logger_configured(self) -> None:
