@@ -33,6 +33,7 @@ compile_commands.json
 
 # Local scratch dirs (common spelling variants)
 /.scratch/
+/docs/temp/
 
 # Temporary design notes
 /docs/temp/
