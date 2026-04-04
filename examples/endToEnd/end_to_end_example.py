@@ -1,4 +1,4 @@
-"""Full end-to-end example: YAML -> simulation -> photon transport."""
+"""Full end-to-end example: YAML -> simulation -> transport -> sensor."""
 
 from __future__ import annotations
 
@@ -16,16 +16,23 @@ from src.config.ConfigIO import (  # noqa: E402
     simulated_output_filename,
 )
 from src.config.SimConfig import SimulationConfig  # noqa: E402
+from src.intensifier.io import intensifier_output_hdf5_path_from_sim_config  # noqa: E402
+from src.intensifier.pipeline import run_intensifier_pipeline_from_sim_config  # noqa: E402
 from src.optics.OpticalTransport import resolve_transport_paths, transport_from_sim_config  # noqa: E402
 from src.common.logger import get_logger  # noqa: E402
 from src.runner.runSimulation import run_simulation  # noqa: E402
+from src.sensor.io import timepix_hits_hdf5_path_from_sim_config  # noqa: E402
+from src.sensor.io import write_timepix_hits_hdf5  # noqa: E402
+from src.sensor.pipeline import run_timepix_pipeline  # noqa: E402
+from src.sensor.timepix import timepix_params_from_sim_config  # noqa: E402
 
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
             "Run full pipeline from SimConfig YAML: write macro, run g4emi, "
-            "and transport photons to the intensifier plane."
+            "transport photons to the intensifier plane, then run the "
+            "intensifier and Timepix sensor stages."
         )
     )
     parser.add_argument(
@@ -77,6 +84,8 @@ def main() -> None:
     paths = resolve_run_environment_paths(config)
     simulated_hdf5 = (paths.simulated_photons / simulated_output_filename(config)).resolve()
     transported_hdf5 = resolve_transport_paths(config).output_hdf5.resolve()
+    intensifier_hdf5 = intensifier_output_hdf5_path_from_sim_config(config).resolve()
+    sensor_hdf5 = timepix_hits_hdf5_path_from_sim_config(config).resolve()
 
     completed = run_simulation(config, dry_run=args.dry_run)
 
@@ -106,6 +115,29 @@ def main() -> None:
         f"missed={summary.missed_photons}"
     )
     logger.info(f"Transport output: {summary.output_hdf5}")
+
+    intensifier_output = run_intensifier_pipeline_from_sim_config(
+        config,
+        transport_hdf5_path=transported_hdf5,
+        source_hdf5_path=simulated_hdf5,
+    )
+    logger.info(
+        "Intensifier output events: "
+        f"{len(intensifier_output)}"
+    )
+    if config.intensifier is not None and config.intensifier.write_output_hdf5:
+        logger.info(f"Intensifier HDF5: {intensifier_hdf5}")
+
+    timepix_hits = run_timepix_pipeline(intensifier_output, timepix_params_from_sim_config(config))
+    written_sensor_hdf5 = write_timepix_hits_hdf5(
+        timepix_hits,
+        config=config,
+        transport_hdf5_path=transported_hdf5,
+        source_hdf5_path=simulated_hdf5,
+        output_hdf5_path=sensor_hdf5,
+    )
+    logger.info(f"Timepix hits: {len(timepix_hits)}")
+    logger.info(f"Timepix HDF5: {written_sensor_hdf5}")
 
 
 if __name__ == "__main__":

@@ -67,6 +67,24 @@ optical:
     diameterRule: min(entranceDiameter,sensorMaxWidth)
   showTransportProgress: true
 
+intensifier:
+  model: Cricket2
+  input_screen:
+    image_circle_diameter_mm: 18.0
+    center_mm: [0.0, 0.0]
+    magnification: 1.0
+    coordinate_frame: intensifier_input_plane
+    notes: Cricket2 nominal image-circle diameter and 1:1 magnification.
+
+sensor:
+  model: Timepix3
+  timepix:
+    pixels_x: 256
+    pixels_y: 256
+    pixel_pitch_mm: 0.055
+    max_tot_ns: 25550.0
+    dead_time_ns: 475.0
+
 simulation:
   numberOfParticles: 5000
   runtimeControls:
@@ -85,7 +103,7 @@ Metadata:
   author: Alex Long
   date: 2026-02-24
   version: ScintPiX v0.1
-  description: Catalog-based EJ200 examples.
+  description: Catalog-based EJ200 example with intensifier and Timepix3 sensor.
   RunEnvironment:
     WorkingDirectory: data
     SimulationRunID: ScintCatalog_example

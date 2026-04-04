@@ -74,6 +74,15 @@ intensifier:
     coordinate_frame: intensifier_input_plane
     notes: Cricket2 nominal image-circle diameter and 1:1 magnification.
 
+sensor:
+  model: Timepix3
+  timepix:
+    pixels_x: 256
+    pixels_y: 256
+    pixel_pitch_mm: 0.055
+    max_tot_ns: 25550.0
+    dead_time_ns: 475.0
+
 simulation:
   numberOfParticles: 10000
   runtimeControls:
@@ -92,7 +101,7 @@ Metadata:
   author: Alex Long
   date: 2026-02-19
   version: ScintPiX v0.1
-  description: Canon EF 50 mm f/1.0L simulation configuration.
+  description: Canon EF 50 mm f/1.0L simulation configuration with intensifier and Timepix3 sensor.
   RunEnvironment:
     SimulationRunID: CanonEF50mmf1p0L_run
     WorkingDirectory: data
