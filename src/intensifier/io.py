@@ -21,6 +21,7 @@ from src.common.hdf5_schema import DATASET_PHOTONS
 from src.common.hdf5_schema import DATASET_PRIMARIES
 from src.common.hdf5_schema import DATASET_SECONDARIES
 from src.common.hdf5_schema import DATASET_TRANSPORTED_PHOTONS
+from src.common.hdf5_utils import copy_dataset_if_present
 from src.common.logger import get_logger
 from src.config.ConfigIO import artifact_stem_for_sub_run
 from src.config.ConfigIO import resolve_run_environment_paths
@@ -74,17 +75,6 @@ def _require_fields(
     missing = [field for field in required_fields if field not in available]
     if missing:
         raise KeyError(f"Dataset '{dataset_name}' is missing required fields: {missing}")
-
-
-def _copy_dataset_if_present(
-    source: h5py.File,
-    destination: h5py.File,
-    dataset_name: str,
-) -> None:
-    """Copy one dataset when present in the source HDF5 file."""
-
-    if dataset_name in source:
-        source.copy(dataset_name, destination)
 
 
 def _require_existing_path(path: str | Path, label: str) -> Path:
@@ -236,8 +226,8 @@ def write_intensifier_output_hdf5(
         output_path,
         "w",
     ) as output_handle:
-        _copy_dataset_if_present(transport_handle, output_handle, DATASET_PRIMARIES)
-        _copy_dataset_if_present(transport_handle, output_handle, DATASET_SECONDARIES)
+        copy_dataset_if_present(transport_handle, output_handle, DATASET_PRIMARIES)
+        copy_dataset_if_present(transport_handle, output_handle, DATASET_SECONDARIES)
         output_handle.create_dataset(DATASET_INTENSIFIER_OUTPUT_EVENTS, data=structured)
 
         output_handle.attrs["source_hdf5"] = str(source_path)
@@ -252,7 +242,6 @@ def write_intensifier_output_hdf5(
 def load_transported_photon_batch(
     transport_hdf5_path: str | Path,
     *,
-    source_hdf5_path: str | Path | None = None,
     require_in_bounds: bool = True,
     show_progress: bool = False,
     chunk_rows: int = _DEFAULT_LOAD_CHUNK_ROWS,
@@ -260,7 +249,6 @@ def load_transported_photon_batch(
     """Load usable transported photons and source timing/wavelength into one batch."""
 
     transport_path = _resolve_transport_hdf5_path(None, transport_hdf5_path)
-    del source_hdf5_path
     logger = get_logger()
     if chunk_rows <= 0:
         raise ValueError("`chunk_rows` must be > 0.")
@@ -375,13 +363,11 @@ def load_transported_photon_batch_from_sim_config(
     config,
     *,
     transport_hdf5_path: str | Path | None = None,
-    source_hdf5_path: str | Path | None = None,
     require_in_bounds: bool = True,
     show_progress: bool | None = None,
 ) -> TransportedPhotonBatch:
     """Resolve HDF5 input paths from `SimConfig` and load one photon batch."""
 
-    del source_hdf5_path
     transport_path = _resolve_transport_hdf5_path(config, transport_hdf5_path)
     return load_transported_photon_batch(
         transport_path,

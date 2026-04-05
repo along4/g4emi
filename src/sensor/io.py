@@ -19,9 +19,9 @@ from src.common.hdf5_schema import DATASET_TIMEPIX_HITS
 from src.common.hdf5_schema import DATASET_PRIMARIES
 from src.common.hdf5_schema import DATASET_SECONDARIES
 from src.common.hdf5_schema import TIMEPIX_HIT_FIELDS
+from src.common.hdf5_utils import copy_dataset_if_present
 from src.config.ConfigIO import artifact_stem_for_sub_run
 from src.config.ConfigIO import resolve_run_environment_paths
-from src.intensifier.io import _copy_dataset_if_present
 from src.intensifier.io import resolve_intensifier_input_hdf5_paths
 from src.sensor.models import TimepixHitBatch
 
@@ -117,8 +117,8 @@ def write_timepix_hits_hdf5(
         output_path,
         "w",
     ) as output_handle:
-        _copy_dataset_if_present(transport_handle, output_handle, DATASET_PRIMARIES)
-        _copy_dataset_if_present(transport_handle, output_handle, DATASET_SECONDARIES)
+        copy_dataset_if_present(transport_handle, output_handle, DATASET_PRIMARIES)
+        copy_dataset_if_present(transport_handle, output_handle, DATASET_SECONDARIES)
         output_handle.create_dataset(DATASET_TIMEPIX_HITS, data=structured)
 
         output_handle.attrs["source_hdf5"] = str(source_path)

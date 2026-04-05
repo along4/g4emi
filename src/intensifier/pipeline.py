@@ -169,24 +169,23 @@ def run_intensifier_pipeline_from_sim_config(
     """Load HDF5 inputs via `SimConfig` and run the full intensifier pipeline."""
 
     del source_hdf5_path
+    effective_show_progress = (
+        bool(config.runner.show_progress) if show_progress is None else bool(show_progress)
+    )
     logger = get_logger()
     logger.info("[intensifier] Loading transported photons.")
     transported_photons = load_transported_photon_batch_from_sim_config(
         config,
         transport_hdf5_path=transport_hdf5_path,
         require_in_bounds=require_in_bounds,
-        show_progress=config.runner.show_progress,
+        show_progress=effective_show_progress,
     )
     params = intensifier_params_from_sim_config(config)
     output_events = run_intensifier_pipeline(
         transported_photons,
         params,
         rng=rng,
-        show_progress=(
-            bool(config.runner.show_progress)
-            if show_progress is None
-            else bool(show_progress)
-        ),
+        show_progress=effective_show_progress,
     )
     intensifier = config.intensifier
     if intensifier is not None and intensifier.write_output_hdf5:

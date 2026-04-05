@@ -26,6 +26,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover - dependency availability
 import numpy as np
 
 try:
+    from src.common.hdf5_utils import copy_dataset_if_present
     from src.common.logger import ensure_run_logger, get_logger
     from src.config.ConfigIO import (
         from_yaml,
@@ -40,6 +41,7 @@ try:
 except ModuleNotFoundError:
     # Support direct execution when repository root is not on sys.path.
     sys.path.append(str(Path(__file__).resolve().parents[2]))
+    from src.common.hdf5_utils import copy_dataset_if_present
     from src.common.logger import ensure_run_logger, get_logger
     from src.config.ConfigIO import (
         from_yaml,
@@ -516,8 +518,8 @@ def transport_from_sim_config(
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     with h5py.File(input_path, "r") as src, h5py.File(output_path, "w") as dst:
-        _copy_dataset_if_present(src, dst, "primaries")
-        _copy_dataset_if_present(src, dst, "secondaries")
+        copy_dataset_if_present(src, dst, "primaries")
+        copy_dataset_if_present(src, dst, "secondaries")
 
         if "photons" not in src:
             raise KeyError(f"Dataset 'photons' not found in {input_path}")
@@ -795,20 +797,6 @@ def _create_transported_dataset(
         dtype=_TRANSPORT_DTYPE,
         chunks=(chunk_rows,),
     )
-
-
-def _copy_dataset_if_present(
-    source: h5py.File,
-    destination: h5py.File,
-    dataset_name: str,
-) -> None:
-    """Copy one dataset when present in source HDF5."""
-
-    if dataset_name not in source:
-        return
-    # Use HDF5's native copy to avoid loading the entire dataset into memory
-    # and to preserve dataset creation properties (e.g. chunking/compression).
-    source.copy(dataset_name, destination)
 
 
 def _require_photon_fields(

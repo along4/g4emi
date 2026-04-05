@@ -304,7 +304,6 @@ def intensifier_photons_to_image(
     hdf5_path: str | Path,
     bins: int | Sequence[int] = (256, 256),
     *,
-    require_reached_intensifier: bool = True,
     overlay_input_screen: bool = True,
     cmap: str = "viridis",
     log_scale: bool = True,
@@ -331,21 +330,16 @@ def intensifier_photons_to_image(
             (center_y_mm - radius_mm, center_y_mm + radius_mm),
         )
 
-    mask = np.ones(len(transported), dtype=bool)
-    reached_mask = np.ones(len(transported), dtype=bool)
-    if require_reached_intensifier:
-        mask &= reached_mask
-
     out_of_bounds_fraction = None
     if "in_bounds" in transported_names:
         in_bounds_mask = np.asarray(transported["in_bounds"], dtype=bool)
-        reached_count = int(np.count_nonzero(reached_mask))
-        if reached_count > 0:
-            out_of_bounds_count = int(np.count_nonzero(reached_mask & ~in_bounds_mask))
-            out_of_bounds_fraction = float(out_of_bounds_count / reached_count)
+        total_count = len(transported)
+        if total_count > 0:
+            out_of_bounds_count = int(np.count_nonzero(~in_bounds_mask))
+            out_of_bounds_fraction = float(out_of_bounds_count / total_count)
 
-    x_mm = np.asarray(transported["intensifier_hit_x_mm"][mask], dtype=float)
-    y_mm = np.asarray(transported["intensifier_hit_y_mm"][mask], dtype=float)
+    x_mm = np.asarray(transported["intensifier_hit_x_mm"], dtype=float)
+    y_mm = np.asarray(transported["intensifier_hit_y_mm"], dtype=float)
     finite_mask = np.isfinite(x_mm) & np.isfinite(y_mm)
     x_mm = x_mm[finite_mask]
     y_mm = y_mm[finite_mask]
