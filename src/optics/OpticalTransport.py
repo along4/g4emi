@@ -690,21 +690,22 @@ def _transport_rows_chunk(
 ) -> tuple[np.ndarray, int]:
     """Build one output chunk for `/transported_photons` containing only hits."""
 
-    hit_rows: list[tuple[object, ...]] = []
+    has_wavelength = "optical_interface_hit_wavelength_nm" in photon_field_names
+    n = len(photons_chunk)
+    out = np.empty(n, dtype=_TRANSPORT_DTYPE)
+    hit_count = 0
+
     for index, photon in enumerate(photons_chunk):
         x_mm = float(photon["optical_interface_hit_x_mm"])
         y_mm = float(photon["optical_interface_hit_y_mm"])
-        dir_x = float(photon["optical_interface_hit_dir_x"])
-        dir_y = float(photon["optical_interface_hit_dir_y"])
-        dir_z = float(photon["optical_interface_hit_dir_z"])
-        wvl_nm = (
-            float(photon["optical_interface_hit_wavelength_nm"])
-            if "optical_interface_hit_wavelength_nm" in photon_field_names
-            else None
-        )
 
         if not np.isfinite(x_mm) or not np.isfinite(y_mm):
             continue
+
+        dir_x = float(photon["optical_interface_hit_dir_x"])
+        dir_y = float(photon["optical_interface_hit_dir_y"])
+        dir_z = float(photon["optical_interface_hit_dir_z"])
+        wvl_nm = float(photon["optical_interface_hit_wavelength_nm"]) if has_wavelength else None
 
         hit = tracer.trace_to_sensor(
             x_mm=x_mm,
@@ -718,10 +719,9 @@ def _transport_rows_chunk(
             continue
 
         sensor_x, sensor_y, sensor_z = hit
-        if not all(np.isfinite(v) for v in (sensor_x, sensor_y, sensor_z)):
+        if not (np.isfinite(sensor_x) and np.isfinite(sensor_y) and np.isfinite(sensor_z)):
             continue
 
-        in_bounds = True
         if input_screen is None:
             in_bounds = True
         else:
@@ -730,28 +730,24 @@ def _transport_rows_chunk(
                 sensor_y,
                 input_screen=input_screen,
             )
-        hit_rows.append(
-            (
-                np.int64(source_index_offset + index),
-                np.int64(photon["gun_call_id"]),
-                np.int32(photon["primary_track_id"]),
-                np.int32(photon["secondary_track_id"]),
-                np.int32(photon["photon_track_id"]),
-                np.float64(sensor_x),
-                np.float64(sensor_y),
-                np.float64(sensor_z),
-                np.float64(photon["optical_interface_hit_time_ns"]),
-                np.float64(photon["optical_interface_hit_wavelength_nm"])
-                if "optical_interface_hit_wavelength_nm" in photon_field_names
-                else np.nan,
-                bool(in_bounds),
-            )
-        )
 
-    if not hit_rows:
-        return np.empty(0, dtype=_TRANSPORT_DTYPE), 0
-    out = np.array(hit_rows, dtype=_TRANSPORT_DTYPE)
-    return out, len(hit_rows)
+        row = out[hit_count]
+        row["source_photon_index"] = source_index_offset + index
+        row["gun_call_id"] = photon["gun_call_id"]
+        row["primary_track_id"] = photon["primary_track_id"]
+        row["secondary_track_id"] = photon["secondary_track_id"]
+        row["photon_track_id"] = photon["photon_track_id"]
+        row["intensifier_hit_x_mm"] = sensor_x
+        row["intensifier_hit_y_mm"] = sensor_y
+        row["intensifier_hit_z_mm"] = sensor_z
+        row["intensifier_hit_time_ns"] = photon["optical_interface_hit_time_ns"]
+        row["intensifier_hit_wavelength_nm"] = (
+            photon["optical_interface_hit_wavelength_nm"] if has_wavelength else np.nan
+        )
+        row["in_bounds"] = in_bounds
+        hit_count += 1
+
+    return out[:hit_count], hit_count
 
 
 def _resolve_transport_chunk_rows(
