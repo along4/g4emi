@@ -99,8 +99,8 @@ def main() -> None:
             f"{simulated_hdf5}"
         )
 
-    logger.info(f"YAML: {yaml_path}")
-    logger.info(f"Expected transport HDF5: {transported_hdf5}")
+    logger.info(f"[run] YAML: {yaml_path}")
+    logger.info(f"[transport] Expected output HDF5: {transported_hdf5}")
     with log_stage("transport"):
         summary = transport_from_sim_config(
             config,
@@ -108,15 +108,6 @@ def main() -> None:
             output_hdf5_path=transported_hdf5,
             overwrite=not args.no_overwrite_transport,
         )
-    logger.info("Transport finished.")
-    logger.info(f"Transport engine: {summary.ray_engine}")
-    logger.info(
-        "Photons: "
-        f"total={summary.total_photons}, "
-        f"transported={summary.transported_photons}, "
-        f"missed={summary.missed_photons}"
-    )
-    logger.info(f"Transport output: {summary.output_hdf5}")
 
     intensifier_output = run_intensifier_pipeline_from_sim_config(
         config,
@@ -124,11 +115,11 @@ def main() -> None:
         source_hdf5_path=simulated_hdf5,
     )
     logger.info(
-        "Intensifier output events: "
+        "[intensifier] Output events: "
         f"{len(intensifier_output)}"
     )
     if config.intensifier is not None and config.intensifier.write_output_hdf5:
-        logger.info(f"Intensifier HDF5: {intensifier_hdf5}")
+        logger.info(f"[intensifier] HDF5: {intensifier_hdf5}")
 
     timepix_hits = run_timepix_pipeline(
         intensifier_output,
@@ -142,8 +133,8 @@ def main() -> None:
         source_hdf5_path=simulated_hdf5,
         output_hdf5_path=sensor_hdf5,
     )
-    logger.info(f"Timepix hits: {len(timepix_hits)}")
-    logger.info(f"Timepix HDF5: {written_sensor_hdf5}")
+    logger.info(f"[sensor] Timepix hits: {len(timepix_hits)}")
+    logger.info(f"[sensor] HDF5: {written_sensor_hdf5}")
 
 
 if __name__ == "__main__":

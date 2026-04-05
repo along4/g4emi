@@ -491,13 +491,16 @@ def transport_from_sim_config(
         raise FileExistsError(f"Refusing to overwrite existing file: {output_path}")
 
     lens, smx_path = _primary_lens_model(config)
-    logger.info(f"Run log: {log_path}")
-    logger.info(f"Starting optical transport for run '{config.metadata.run_environment.simulation_run_id}'.")
-    logger.info(f"Transport input HDF5: {input_path}")
-    logger.info(f"Transport output HDF5: {output_path}")
+    logger.info(f"[transport] Run log: {log_path}")
+    logger.info(
+        "[transport] Starting optical transport for run "
+        f"'{config.metadata.run_environment.simulation_run_id}'."
+    )
+    logger.info(f"[transport] Input HDF5: {input_path}")
+    logger.info(f"[transport] Output HDF5: {output_path}")
     logger.debug(f"Transport log directory: {run_paths.log}")
     logger.debug(f"Transport overwrite enabled: {overwrite}")
-    logger.info(f"Primary lens: {lens.name} ({lens.zmx_path})")
+    logger.info(f"[transport] Primary lens: {lens.name} ({lens.zmx_path})")
     tracer_impl = (
         tracer
         if tracer is not None
@@ -523,7 +526,7 @@ def transport_from_sim_config(
         _require_photon_fields(photon_field_names, _REQUIRED_PHOTON_FIELDS)
 
         total = len(photons_ds)
-        logger.info(f"Loaded {total} photons for transport.")
+        logger.info(f"[transport] Loaded {total} photons for transport.")
         # Resolve effective row chunking from config.
         # - explicit integer uses caller-provided chunk rows
         # - "auto" derives rows from target MiB and row byte sizes
@@ -619,13 +622,13 @@ def transport_from_sim_config(
         missed_photons=total - transported_count,
     )
     logger.info(
-        "Transport finished: "
+        "[transport] Finished: "
         f"total={summary.total_photons}, "
         f"transported={summary.transported_photons}, "
         f"missed={summary.missed_photons}."
     )
-    logger.info(f"Transport engine: {summary.ray_engine}")
-    logger.info(f"Transport output: {summary.output_hdf5}")
+    logger.info(f"[transport] Engine: {summary.ray_engine}")
+    logger.info(f"[transport] Output: {summary.output_hdf5}")
     return summary
 
 

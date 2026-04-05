@@ -185,7 +185,7 @@ def run_simulation(
     else:
         logger = get_logger()
     if completed is None:
-        logger.info("Dry run requested; skipping g4emi launch.")
+        logger.info("[simulation] Dry run requested; skipping g4emi launch.")
         return None
-    logger.info("Simulation finished.")
+    logger.info("[simulation] Completed.")
     return completed
