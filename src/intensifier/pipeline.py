@@ -168,7 +168,6 @@ def run_intensifier_pipeline_from_sim_config(
 ) -> IntensifierOutputBatch:
     """Load HDF5 inputs via `SimConfig` and run the full intensifier pipeline."""
 
-    del source_hdf5_path
     effective_show_progress = (
         bool(config.runner.show_progress) if show_progress is None else bool(show_progress)
     )
@@ -194,5 +193,6 @@ def run_intensifier_pipeline_from_sim_config(
             output_events,
             config=config,
             transport_hdf5_path=transport_hdf5_path,
+            source_hdf5_path=source_hdf5_path,
         )
     return output_events

@@ -206,6 +206,7 @@ def write_intensifier_output_hdf5(
     *,
     config: SimConfig,
     transport_hdf5_path: str | Path | None = None,
+    source_hdf5_path: str | Path | None = None,
     output_hdf5_path: str | Path | None = None,
 ) -> Path:
     """Write intensifier output events to a standalone HDF5 file."""
@@ -213,6 +214,7 @@ def write_intensifier_output_hdf5(
     transport_path, source_path = resolve_intensifier_input_hdf5_paths(
         config,
         transport_hdf5_path=transport_hdf5_path,
+        source_hdf5_path=source_hdf5_path,
     )
     output_path = _resolve_intensifier_output_hdf5_path(config, output_hdf5_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)

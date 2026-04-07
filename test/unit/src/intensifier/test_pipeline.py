@@ -423,6 +423,38 @@ class IntensifierPipelineTests(unittest.TestCase):
                 self.assertEqual(handle.attrs["intensifier_model"], "Cricket2")
                 self.assertIn("generated_utc", handle.attrs)
 
+    def test_run_intensifier_pipeline_from_sim_config_honors_source_hdf5_override_when_writing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            payload = self._config_payload(tmp_path)
+            payload["intensifier"]["writeOutputHdf5"] = True
+            config = self.SimConfig.model_validate(payload)
+            source_hdf5_from_attr = tmp_path / "simulatedPhotons" / "source_from_attr.h5"
+            source_hdf5_override = tmp_path / "simulatedPhotons" / "source_override.h5"
+            transport_hdf5 = tmp_path / "transportedPhotons" / "transport.h5"
+            expected_output = (
+                tmp_path
+                / "intensifier_pipeline_test"
+                / "sensor"
+                / "intensifier_output_events_0000.h5"
+            )
+            self._write_source_hdf5(source_hdf5_from_attr)
+            self._write_source_hdf5(source_hdf5_override)
+            self._write_transport_hdf5(transport_hdf5, source_hdf5=source_hdf5_from_attr)
+
+            self.run_intensifier_pipeline_from_sim_config(
+                config,
+                transport_hdf5_path=transport_hdf5,
+                source_hdf5_path=source_hdf5_override,
+                rng=np.random.default_rng(123),
+            )
+
+            with self.h5py.File(expected_output, "r") as handle:
+                self.assertEqual(
+                    handle.attrs["source_hdf5"],
+                    str(source_hdf5_override.resolve()),
+                )
+
 
 if __name__ == "__main__":
     unittest.main()
