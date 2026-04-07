@@ -18,6 +18,7 @@ DATASET_SECONDARIES = "secondaries"
 DATASET_PHOTONS = "photons"
 DATASET_TRANSPORTED_PHOTONS = "transported_photons"
 DATASET_INTENSIFIER_OUTPUT_EVENTS = "intensifier_output_events"
+DATASET_TIMEPIX_HITS = "timepix_hits"
 
 PRIMARY_FIELDS = (
     "gun_call_id",
@@ -80,7 +81,8 @@ TRANSPORTED_PHOTON_FIELDS = (
     "intensifier_hit_x_mm",
     "intensifier_hit_y_mm",
     "intensifier_hit_z_mm",
-    "reached_intensifier",
+    "intensifier_hit_time_ns",
+    "intensifier_hit_wavelength_nm",
     "in_bounds",
 )
 
@@ -96,6 +98,17 @@ INTENSIFIER_OUTPUT_FIELDS = (
     "signal_amplitude_arb",
     "total_gain",
     "wavelength_nm",
+)
+
+TIMEPIX_HIT_FIELDS = (
+    "gun_call_id",
+    "primary_track_id",
+    "secondary_track_id",
+    "x_pixel",
+    "y_pixel",
+    "time_of_arrival_ns",
+    "time_over_threshold_ns",
+    "contribution_count",
 )
 
 PRIMARY_INTERACTION_TIME_FIELD = "primary_interaction_time_ns"

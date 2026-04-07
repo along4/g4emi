@@ -1473,14 +1473,14 @@ def prepare_simulation_run(config: SimConfig) -> bool:
     output_hdf5 = (paths.simulated_photons / simulated_output_filename(config)).resolve()
 
     logger.info(
-        "Preparing simulation run "
+        "[setup] Preparing simulation run "
         f"'{config.metadata.run_environment.simulation_run_id}' "
         f"sub-run {config.metadata.run_environment.sub_run_number:0{SUB_RUN_NUMBER_WIDTH}d}."
     )
-    logger.info(f"Run log: {log_path}")
-    logger.info(f"Macro: {paths.macro_file.resolve()}")
-    logger.info(f"Expected HDF5: {output_hdf5}")
-    logger.info(f"Binary: {config.runner.binary}")
+    logger.info(f"[setup] Run log: {log_path}")
+    logger.info(f"[setup] Macro: {paths.macro_file.resolve()}")
+    logger.info(f"[setup] Expected HDF5: {output_hdf5}")
+    logger.info(f"[setup] Binary: {config.runner.binary}")
     return True
 
 

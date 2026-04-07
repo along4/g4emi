@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
+import sys
 from typing import TYPE_CHECKING
 
 try:
@@ -20,6 +21,8 @@ from src.common.hdf5_schema import DATASET_PHOTONS
 from src.common.hdf5_schema import DATASET_PRIMARIES
 from src.common.hdf5_schema import DATASET_SECONDARIES
 from src.common.hdf5_schema import DATASET_TRANSPORTED_PHOTONS
+from src.common.hdf5_utils import copy_dataset_if_present
+from src.common.logger import get_logger
 from src.config.ConfigIO import artifact_stem_for_sub_run
 from src.config.ConfigIO import resolve_run_environment_paths
 from src.intensifier.models import IntensifierOutputBatch
@@ -38,13 +41,9 @@ _REQUIRED_TRANSPORT_FIELDS = (
     "intensifier_hit_x_mm",
     "intensifier_hit_y_mm",
     "intensifier_hit_z_mm",
-    "reached_intensifier",
+    "intensifier_hit_time_ns",
+    "intensifier_hit_wavelength_nm",
     "in_bounds",
-)
-
-_REQUIRED_SOURCE_PHOTON_FIELDS = (
-    "optical_interface_hit_time_ns",
-    "optical_interface_hit_wavelength_nm",
 )
 
 _INTENSIFIER_OUTPUT_DTYPE = np.dtype(
@@ -62,6 +61,7 @@ _INTENSIFIER_OUTPUT_DTYPE = np.dtype(
         ("wavelength_nm", np.float64),
     ]
 )
+_DEFAULT_LOAD_CHUNK_ROWS = 250_000
 
 
 def _require_fields(
@@ -77,17 +77,6 @@ def _require_fields(
         raise KeyError(f"Dataset '{dataset_name}' is missing required fields: {missing}")
 
 
-def _copy_dataset_if_present(
-    source: h5py.File,
-    destination: h5py.File,
-    dataset_name: str,
-) -> None:
-    """Copy one dataset when present in the source HDF5 file."""
-
-    if dataset_name in source:
-        source.copy(dataset_name, destination)
-
-
 def _require_existing_path(path: str | Path, label: str) -> Path:
     """Resolve `path` and require that it exists on disk."""
 
@@ -95,6 +84,24 @@ def _require_existing_path(path: str | Path, label: str) -> Path:
     if not resolved.exists():
         raise FileNotFoundError(f"{label} not found: {resolved}")
     return resolved
+
+
+def _write_load_progress(label: str, current: int, total: int) -> None:
+    """Render a simple in-terminal progress bar for HDF5 loading work."""
+
+    if total <= 0:
+        return
+    clamped = min(current, total)
+    width = 30
+    fraction = clamped / total
+    filled = int(width * fraction)
+    bar = f"[{'#' * filled}{'-' * (width - filled)}]"
+    percent = int(fraction * 100)
+    sys.stderr.write(f"\r{label} {bar} {percent:3d}% ({clamped}/{total} rows)")
+    sys.stderr.flush()
+    if clamped >= total:
+        sys.stderr.write("\n")
+        sys.stderr.flush()
 
 
 def _resolve_transport_hdf5_path(
@@ -199,6 +206,7 @@ def write_intensifier_output_hdf5(
     *,
     config: SimConfig,
     transport_hdf5_path: str | Path | None = None,
+    source_hdf5_path: str | Path | None = None,
     output_hdf5_path: str | Path | None = None,
 ) -> Path:
     """Write intensifier output events to a standalone HDF5 file."""
@@ -206,6 +214,7 @@ def write_intensifier_output_hdf5(
     transport_path, source_path = resolve_intensifier_input_hdf5_paths(
         config,
         transport_hdf5_path=transport_hdf5_path,
+        source_hdf5_path=source_hdf5_path,
     )
     output_path = _resolve_intensifier_output_hdf5_path(config, output_hdf5_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -219,8 +228,8 @@ def write_intensifier_output_hdf5(
         output_path,
         "w",
     ) as output_handle:
-        _copy_dataset_if_present(transport_handle, output_handle, DATASET_PRIMARIES)
-        _copy_dataset_if_present(transport_handle, output_handle, DATASET_SECONDARIES)
+        copy_dataset_if_present(transport_handle, output_handle, DATASET_PRIMARIES)
+        copy_dataset_if_present(transport_handle, output_handle, DATASET_SECONDARIES)
         output_handle.create_dataset(DATASET_INTENSIFIER_OUTPUT_EVENTS, data=structured)
 
         output_handle.attrs["source_hdf5"] = str(source_path)
@@ -235,62 +244,120 @@ def write_intensifier_output_hdf5(
 def load_transported_photon_batch(
     transport_hdf5_path: str | Path,
     *,
-    source_hdf5_path: str | Path | None = None,
     require_in_bounds: bool = True,
+    show_progress: bool = False,
+    chunk_rows: int = _DEFAULT_LOAD_CHUNK_ROWS,
 ) -> TransportedPhotonBatch:
     """Load usable transported photons and source timing/wavelength into one batch."""
 
     transport_path = _resolve_transport_hdf5_path(None, transport_hdf5_path)
-    source_path = _resolve_source_hdf5_path(transport_path, source_hdf5_path)
+    logger = get_logger()
+    if chunk_rows <= 0:
+        raise ValueError("`chunk_rows` must be > 0.")
 
-    with h5py.File(transport_path, "r") as transport_handle, h5py.File(
-        source_path,
-        "r",
-    ) as source_handle:
+    with h5py.File(transport_path, "r") as transport_handle:
         if DATASET_TRANSPORTED_PHOTONS not in transport_handle:
             raise KeyError(
                 f"Dataset '{DATASET_TRANSPORTED_PHOTONS}' not found in {transport_path}"
             )
-        if DATASET_PHOTONS not in source_handle:
-            raise KeyError(f"Dataset '{DATASET_PHOTONS}' not found in {source_path}")
 
         transported_ds = transport_handle[DATASET_TRANSPORTED_PHOTONS]
-        source_ds = source_handle[DATASET_PHOTONS]
         transported_fields = transported_ds.dtype.names or ()
-        source_fields = source_ds.dtype.names or ()
         _require_fields(
             DATASET_TRANSPORTED_PHOTONS,
             transported_fields,
             _REQUIRED_TRANSPORT_FIELDS,
         )
-        _require_fields(DATASET_PHOTONS, source_fields, _REQUIRED_SOURCE_PHOTON_FIELDS)
 
-        mask = np.asarray(transported_ds["reached_intensifier"], dtype=bool)
-        if require_in_bounds:
-            mask &= np.asarray(transported_ds["in_bounds"], dtype=bool)
+        total_transport_rows = int(transported_ds.shape[0])
+        source_index_parts: list[np.ndarray] = []
+        gun_call_parts: list[np.ndarray] = []
+        primary_track_parts: list[np.ndarray] = []
+        secondary_track_parts: list[np.ndarray] = []
+        photon_track_parts: list[np.ndarray] = []
+        x_parts: list[np.ndarray] = []
+        y_parts: list[np.ndarray] = []
+        z_parts: list[np.ndarray] = []
+        time_parts: list[np.ndarray] = []
+        wavelength_parts: list[np.ndarray] = []
+        selected_row_count = 0
 
-        selected_indices = np.flatnonzero(mask)
-        if len(selected_indices) == 0:
+        for start in range(0, total_transport_rows, chunk_rows):
+            stop = min(start + chunk_rows, total_transport_rows)
+            reached_mask = np.ones(stop - start, dtype=bool)
+            if require_in_bounds:
+                reached_mask &= np.asarray(
+                    transported_ds["in_bounds"][start:stop],
+                    dtype=bool,
+                )
+
+            if np.any(reached_mask):
+                selected_chunk = transported_ds[start:stop][reached_mask]
+                source_index_parts.append(
+                    np.asarray(selected_chunk["source_photon_index"], dtype=np.int64)
+                )
+                gun_call_parts.append(
+                    np.asarray(selected_chunk["gun_call_id"], dtype=np.int64)
+                )
+                primary_track_parts.append(
+                    np.asarray(selected_chunk["primary_track_id"], dtype=np.int32)
+                )
+                secondary_track_parts.append(
+                    np.asarray(selected_chunk["secondary_track_id"], dtype=np.int32)
+                )
+                photon_track_parts.append(
+                    np.asarray(selected_chunk["photon_track_id"], dtype=np.int32)
+                )
+                x_parts.append(
+                    np.asarray(selected_chunk["intensifier_hit_x_mm"], dtype=np.float64)
+                )
+                y_parts.append(
+                    np.asarray(selected_chunk["intensifier_hit_y_mm"], dtype=np.float64)
+                )
+                z_parts.append(
+                    np.asarray(selected_chunk["intensifier_hit_z_mm"], dtype=np.float64)
+                )
+                time_parts.append(
+                    np.asarray(selected_chunk["intensifier_hit_time_ns"], dtype=np.float64)
+                )
+                wavelength_parts.append(
+                    np.asarray(
+                        selected_chunk["intensifier_hit_wavelength_nm"],
+                        dtype=np.float64,
+                    )
+                )
+                selected_row_count += int(np.count_nonzero(reached_mask))
+
+            if show_progress:
+                _write_load_progress("Intensifier load", stop, total_transport_rows)
+
+        if selected_row_count == 0:
             return TransportedPhotonBatch.empty()
 
-        selected = transported_ds[selected_indices]
-        source_indices = np.asarray(selected["source_photon_index"], dtype=np.int64)
-        source_rows = source_ds[source_indices]
+        logger.info(
+            "[intensifier] Selected transported photons for intensifier input: "
+            f"{selected_row_count}"
+        )
+        source_indices = np.concatenate(source_index_parts)
+        gun_call_id = np.concatenate(gun_call_parts)
+        primary_track_id = np.concatenate(primary_track_parts)
+        secondary_track_id = np.concatenate(secondary_track_parts)
+        photon_track_id = np.concatenate(photon_track_parts)
+        x_mm = np.concatenate(x_parts)
+        y_mm = np.concatenate(y_parts)
+        z_mm = np.concatenate(z_parts)
 
         return TransportedPhotonBatch(
             source_photon_index=source_indices,
-            gun_call_id=np.asarray(selected["gun_call_id"], dtype=np.int64),
-            primary_track_id=np.asarray(selected["primary_track_id"], dtype=np.int32),
-            secondary_track_id=np.asarray(selected["secondary_track_id"], dtype=np.int32),
-            photon_track_id=np.asarray(selected["photon_track_id"], dtype=np.int32),
-            x_mm=np.asarray(selected["intensifier_hit_x_mm"], dtype=np.float64),
-            y_mm=np.asarray(selected["intensifier_hit_y_mm"], dtype=np.float64),
-            z_mm=np.asarray(selected["intensifier_hit_z_mm"], dtype=np.float64),
-            time_ns=np.asarray(source_rows["optical_interface_hit_time_ns"], dtype=np.float64),
-            wavelength_nm=np.asarray(
-                source_rows["optical_interface_hit_wavelength_nm"],
-                dtype=np.float64,
-            ),
+            gun_call_id=gun_call_id,
+            primary_track_id=primary_track_id,
+            secondary_track_id=secondary_track_id,
+            photon_track_id=photon_track_id,
+            x_mm=x_mm,
+            y_mm=y_mm,
+            z_mm=z_mm,
+            time_ns=np.concatenate(time_parts),
+            wavelength_nm=np.concatenate(wavelength_parts),
         )
 
 
@@ -298,18 +365,18 @@ def load_transported_photon_batch_from_sim_config(
     config,
     *,
     transport_hdf5_path: str | Path | None = None,
-    source_hdf5_path: str | Path | None = None,
     require_in_bounds: bool = True,
+    show_progress: bool | None = None,
 ) -> TransportedPhotonBatch:
     """Resolve HDF5 input paths from `SimConfig` and load one photon batch."""
 
-    transport_path, source_path = resolve_intensifier_input_hdf5_paths(
-        config,
-        transport_hdf5_path=transport_hdf5_path,
-        source_hdf5_path=source_hdf5_path,
-    )
+    transport_path = _resolve_transport_hdf5_path(config, transport_hdf5_path)
     return load_transported_photon_batch(
         transport_path,
-        source_hdf5_path=source_path,
         require_in_bounds=require_in_bounds,
+        show_progress=(
+            bool(config.runner.show_progress)
+            if show_progress is None
+            else bool(show_progress)
+        ),
     )

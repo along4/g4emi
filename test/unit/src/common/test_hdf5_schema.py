@@ -45,6 +45,25 @@ class Hdf5SchemaTests(unittest.TestCase):
             ),
         )
 
+    def test_timepix_hit_schema_constants_are_defined(self) -> None:
+        from src.common.hdf5_schema import DATASET_TIMEPIX_HITS
+        from src.common.hdf5_schema import TIMEPIX_HIT_FIELDS
+
+        self.assertEqual(DATASET_TIMEPIX_HITS, "timepix_hits")
+        self.assertEqual(
+            TIMEPIX_HIT_FIELDS,
+            (
+                "gun_call_id",
+                "primary_track_id",
+                "secondary_track_id",
+                "x_pixel",
+                "y_pixel",
+                "time_of_arrival_ns",
+                "time_over_threshold_ns",
+                "contribution_count",
+            ),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -9,6 +9,10 @@ Current files:
 - `EJ276D.yaml`: explicit three-component timing example for scintillator config
 - `three_component_timing_example.yaml`: timing-focused example configuration
 
+All example YAMLs now include:
+- an `intensifier` block for post-transport staged intensifier response
+- a `sensor.timepix` block for downstream centered single-chip Timepix3 readout
+
 These YAMLs are consumed by scripts in:
 - [`SimulationSetup/`](../SimulationSetup/README.md)
 - [`runSimulation/`](../runSimulation/README.md)

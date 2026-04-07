@@ -9,6 +9,8 @@ It covers:
 
 The current intensifier module consumes this transport output in memory. It
 can also optionally write a separate persisted intensifier-stage HDF5 dataset.
+A downstream Timepix sensor stage can also write a persisted sensor HDF5
+dataset.
 
 This is a reference for the current writer schema. It does not describe legacy
 aliases or older ad hoc outputs.
@@ -34,6 +36,7 @@ Optional intensifier output is written under the `sensor/` stage.
 Typical paths:
 
 - `<run_root>/sensor/intensifier_output_events_<subrun>.h5`
+- `<run_root>/sensor/timepix_hits_<subrun>.h5`
 
 ## Simulation Datasets
 
@@ -250,6 +253,55 @@ Common attributes:
 - `transport_hdf5`
 - `run_id`
 - `intensifier_model`
+- `generated_utc`
+
+## Timepix Sensor Output Dataset
+
+The Timepix sensor pipeline writes a standalone HDF5 file under `sensor/`.
+
+Timepix output HDF5 files contain:
+
+- copied `/primaries`
+- copied `/secondaries`
+- `/timepix_hits`
+
+### `/timepix_hits`
+
+Fields:
+
+- `gun_call_id`
+- `primary_track_id`
+- `secondary_track_id`
+- `x_pixel`
+- `y_pixel`
+- `time_of_arrival_ns`
+- `time_over_threshold_ns`
+- `contribution_count`
+
+Notes:
+
+- `/timepix_hits` stores one row per final merged Timepix pixel hit.
+- `gun_call_id`, `primary_track_id`, and `secondary_track_id` are currently
+  representative IDs from the first contributing intensifier event in that
+  merged pixel hit.
+- `time_of_arrival_ns` is currently written as `0.0` for every row. The
+  current Timepix stage uses intensifier event times internally for merge and
+  dead-time behavior, but does not yet persist a calibrated downstream ToA.
+- `time_over_threshold_ns` is currently a ToT-like proxy derived from
+  phosphor-stage `signal_amplitude_arb` and clipped by the configured
+  `max_tot_ns`.
+- `contribution_count` records how many mapped intensifier events were merged
+  into the final pixel-hit row.
+
+### Timepix Output File Attributes
+
+Common attributes:
+
+- `source_hdf5`
+- `transport_hdf5`
+- `run_id`
+- `intensifier_model`
+- `sensor_model`
 - `generated_utc`
 
 ## Schema Sources

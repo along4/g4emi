@@ -55,15 +55,15 @@ class AnalysisDataBuilderMixin:
             [
                 ("intensifier_hit_x_mm", self.np.float64),
                 ("intensifier_hit_y_mm", self.np.float64),
-                ("reached_intensifier", self.np.bool_),
+                ("intensifier_hit_time_ns", self.np.float64),
+                ("intensifier_hit_wavelength_nm", self.np.float64),
                 ("in_bounds", self.np.bool_),
             ]
         )
         rows = self.np.array(
             [
-                (0.0, 0.0, True, True),
-                (10.0, 0.0, True, False),
-                (self.np.nan, self.np.nan, False, False),
+                (0.0, 0.0, 11.0, 450.0, True),
+                (10.0, 0.0, 12.0, 500.0, False),
             ],
             dtype=dtype,
         )
@@ -78,6 +78,31 @@ class AnalysisDataBuilderMixin:
             handle.attrs["intensifier_input_screen_coordinate_frame"] = (
                 "intensifier_input_plane"
             )
+
+    def _write_timepix_hdf5(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        dtype = self.np.dtype(
+            [
+                ("gun_call_id", self.np.int64),
+                ("primary_track_id", self.np.int32),
+                ("secondary_track_id", self.np.int32),
+                ("x_pixel", self.np.int32),
+                ("y_pixel", self.np.int32),
+                ("time_of_arrival_ns", self.np.float64),
+                ("time_over_threshold_ns", self.np.float64),
+                ("contribution_count", self.np.int32),
+            ]
+        )
+        rows = self.np.array(
+            [
+                (0, 1, 10, 10, 20, 0.0, 5.0, 1),
+                (0, 1, 10, 10, 20, 0.0, 7.0, 1),
+                (0, 1, 11, 11, 21, 0.0, 3.0, 1),
+            ],
+            dtype=dtype,
+        )
+        with self.h5py.File(path, "w") as handle:
+            handle.create_dataset("timepix_hits", data=rows)
 
     def _write_photons_hdf5(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -259,17 +284,13 @@ class AnalysisDataBuilderMixin:
         transported_dtype = self.np.dtype(
             [
                 ("source_photon_index", self.np.int64),
-                ("reached_intensifier", self.np.bool_),
             ]
         )
         rows = self.np.array(
             [
-                (0, False),
-                (1, True),
-                (2, True),
-                (3, False),
-                (4, False),
-                (5, True),
+                (1,),
+                (2,),
+                (5,),
             ],
             dtype=transported_dtype,
         )

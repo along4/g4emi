@@ -33,9 +33,10 @@ pixi run g4emi data/CanonEF50mmf1p0L_run/macros/CanonEF50mmf1p0L_run.mac
 - Run Geant4 directly from a macro: `pixi run run-neutron-gps`
 - Generate and run from YAML: `pixi run python examples/runSimulation/run_simulation_from_yaml.py examples/yamlFiles/CanonEF50mmf1p0L_example.yaml`
 - Transport optical-interface hits to the intensifier plane: `pixi run python examples/photonTransportation/optical_transport_example.py examples/yamlFiles/CanonEF50mmf1p0L_example.yaml`
+- Run the full simulation -> transport -> intensifier -> Timepix pipeline: `pixi run python examples/endToEnd/end_to_end_example.py examples/yamlFiles/CanonEF50mmf1p0L_example.yaml`
 - Generate lightweight analysis outputs: `pixi run python examples/analysisLite/hdf5_lite_analyzer_example.py data/CanonEF50mmf1p0L_run/simulatedPhotons/photon_optical_interface_hits.h5`
 
-For the full YAML -> simulation -> transport pipeline, see
+For the full YAML -> simulation -> transport -> intensifier -> Timepix pipeline, see
 [examples/endToEnd/README.md](examples/endToEnd/README.md).
 
 For analysis examples and module-level guidance, see

@@ -204,15 +204,15 @@ class IntensifierIoTests(unittest.TestCase):
                 ("intensifier_hit_x_mm", self.np.float64),
                 ("intensifier_hit_y_mm", self.np.float64),
                 ("intensifier_hit_z_mm", self.np.float64),
-                ("reached_intensifier", self.np.bool_),
+                ("intensifier_hit_time_ns", self.np.float64),
+                ("intensifier_hit_wavelength_nm", self.np.float64),
                 ("in_bounds", self.np.bool_),
             ]
         )
         rows = self.np.array(
             [
-                (0, 0, 1, 10, 100, 1.5, 2.5, 3.5, True, True),
-                (1, 0, 1, 10, 101, 4.5, 5.5, 6.5, True, False),
-                (2, 0, 1, 10, 102, self.np.nan, self.np.nan, self.np.nan, False, False),
+                (0, 0, 1, 10, 100, 1.5, 2.5, 3.5, 11.0, 450.0, True),
+                (1, 0, 1, 10, 101, 4.5, 5.5, 6.5, 12.0, 500.0, False),
             ],
             dtype=transported_dtype,
         )
@@ -286,14 +286,22 @@ class IntensifierIoTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
             config = self.SimConfig.model_validate(self._base_payload(tmp_path))
-            transport_paths = self.resolve_intensifier_input_hdf5_paths(
-                config,
-                transport_hdf5_path=tmp_path / "transportedPhotons" / "photons_intensifier_hits_0000.h5",
-                source_hdf5_path=tmp_path / "simulatedPhotons" / "photon_optical_interface_hits_0000.h5",
+            source_hdf5 = (
+                tmp_path / "simulatedPhotons" / "photon_optical_interface_hits_0000.h5"
             )
-            source_hdf5, transport_hdf5 = transport_paths[1], transport_paths[0]
+            transport_hdf5 = (
+                tmp_path / "transportedPhotons" / "photons_intensifier_hits_0000.h5"
+            )
             self._write_source_hdf5(source_hdf5)
             self._write_transport_hdf5(transport_hdf5, source_hdf5=source_hdf5)
+
+            transport_paths = self.resolve_intensifier_input_hdf5_paths(
+                config,
+                transport_hdf5_path=transport_hdf5,
+                source_hdf5_path=source_hdf5,
+            )
+            self.assertEqual(transport_paths[0], transport_hdf5.resolve())
+            self.assertEqual(transport_paths[1], source_hdf5.resolve())
 
             batch = self.load_transported_photon_batch_from_sim_config(
                 config,

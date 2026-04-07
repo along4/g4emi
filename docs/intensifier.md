@@ -10,7 +10,7 @@ It is designed to be:
 - physically staged
 - fast enough for routine simulation work
 - configured through `SimConfig`
-- separate from any future sensor/readout model
+- separate from downstream sensor/readout models
 
 ## What It Does
 
@@ -59,8 +59,9 @@ stages can work from one normalized in-memory batch.
 
 The module currently returns an in-memory `IntensifierOutputBatch`.
 
-This output is sensor-agnostic. It is meant to be passed to a later sensor
-stage.
+This output is sensor-agnostic. It is passed to the downstream sensor stage.
+The current repo now includes an initial Timepix sensor/readout stage under
+`src/sensor/`, but the intensifier output contract remains sensor-agnostic.
 
 By default, no intensifier-stage HDF5 file is written.
 
@@ -186,10 +187,11 @@ Included now:
 - HDF5 input loading from optical transport output
 - in-memory intensifier output events
 - optional standalone intensifier output HDF5 writing
+- downstream Timepix sensor/readout stage as a separate module
 
 Not included yet:
 
-- sensor/readout modeling
 - detailed saturation effects
 - pore-level MCP transport
 - explicit phosphor-photon simulation
+- calibrated downstream ToA persistence

@@ -9,7 +9,7 @@ import subprocess
 import sys
 
 try:
-    from src.common.logger import get_logger, resolve_run_log_path
+    from src.common.logger import get_logger, log_stage, resolve_run_log_path
     from src.config.ConfigIO import prepare_simulation_run
     from src.config.ConfigIO import (
         resolve_run_environment_paths,
@@ -18,7 +18,7 @@ try:
     from src.config.SimConfig import SimConfig
 except ModuleNotFoundError:
     sys.path.append(str(Path(__file__).resolve().parents[2]))
-    from src.common.logger import get_logger, resolve_run_log_path
+    from src.common.logger import get_logger, log_stage, resolve_run_log_path
     from src.config.ConfigIO import prepare_simulation_run
     from src.config.ConfigIO import (
         resolve_run_environment_paths,
@@ -118,6 +118,7 @@ def run(
         _simulation_total_events(config) if config.runner.show_progress else None
     )
 
+    logger = get_logger()
     if dry_run:
         return None
 
@@ -125,31 +126,34 @@ def run(
     displayed_progress = False
     if log_filename is not None:
         log_path = Path(log_filename)
-    with log_path.open("a", encoding="utf-8") as log_file:
-        with subprocess.Popen(
-            command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-        ) as process:
-            if process.stdout is None:
-                raise RuntimeError("Simulation process did not expose a stdout stream.")
+    logger.info(f"[simulation] Command: {shlex.join(command)}")
+    logger.info(f"[simulation] Output HDF5: {output_hdf5}")
+    with log_stage("simulation"):
+        with log_path.open("a", encoding="utf-8") as log_file:
+            with subprocess.Popen(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+            ) as process:
+                if process.stdout is None:
+                    raise RuntimeError("Simulation process did not expose a stdout stream.")
 
-            for line in process.stdout:
-                log_file.write(line)
-                log_file.flush()
+                for line in process.stdout:
+                    log_file.write(line)
+                    log_file.flush()
 
-                if total_events is None:
-                    continue
-                progress = _parse_simulated_events(line)
-                if progress is None or progress < last_progress:
-                    continue
-                last_progress = progress
-                displayed_progress = True
-                _write_progress(progress, total_events)
+                    if total_events is None:
+                        continue
+                    progress = _parse_simulated_events(line)
+                    if progress is None or progress < last_progress:
+                        continue
+                    last_progress = progress
+                    displayed_progress = True
+                    _write_progress(progress, total_events)
 
-            return_code = process.wait()
+                return_code = process.wait()
 
     if displayed_progress and total_events is not None and last_progress < total_events:
         sys.stderr.write("\n")
@@ -181,7 +185,7 @@ def run_simulation(
     else:
         logger = get_logger()
     if completed is None:
-        logger.info("Dry run requested; skipping g4emi launch.")
+        logger.info("[simulation] Dry run requested; skipping g4emi launch.")
         return None
-    logger.info("Simulation finished.")
+    logger.info("[simulation] Completed.")
     return completed

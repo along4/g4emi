@@ -16,8 +16,11 @@ from analysis.io import (
 from analysis.plotting import plot_histogram_2d, save_and_maybe_show
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
+from matplotlib.colors import LogNorm
 from matplotlib.figure import Figure
+from src.common.hdf5_schema import DATASET_TIMEPIX_HITS
 from src.common.hdf5_schema import PHOTON_SCINT_EXIT_X_FIELD, PHOTON_SCINT_EXIT_Y_FIELD
+from src.common.hdf5_schema import TIMEPIX_HIT_FIELDS
 
 XYRange = tuple[tuple[float, float], tuple[float, float]]
 
@@ -301,7 +304,6 @@ def intensifier_photons_to_image(
     hdf5_path: str | Path,
     bins: int | Sequence[int] = (256, 256),
     *,
-    require_reached_intensifier: bool = True,
     overlay_input_screen: bool = True,
     cmap: str = "viridis",
     log_scale: bool = True,
@@ -328,28 +330,16 @@ def intensifier_photons_to_image(
             (center_y_mm - radius_mm, center_y_mm + radius_mm),
         )
 
-    mask = np.ones(len(transported), dtype=bool)
-    reached_mask = np.ones(len(transported), dtype=bool)
-    if "reached_intensifier" in transported_names:
-        reached_mask = np.asarray(transported["reached_intensifier"], dtype=bool)
-    else:
-        reached_mask = (
-            np.isfinite(np.asarray(transported["intensifier_hit_x_mm"], dtype=float))
-            & np.isfinite(np.asarray(transported["intensifier_hit_y_mm"], dtype=float))
-        )
-    if require_reached_intensifier:
-        mask &= reached_mask
-
     out_of_bounds_fraction = None
     if "in_bounds" in transported_names:
         in_bounds_mask = np.asarray(transported["in_bounds"], dtype=bool)
-        reached_count = int(np.count_nonzero(reached_mask))
-        if reached_count > 0:
-            out_of_bounds_count = int(np.count_nonzero(reached_mask & ~in_bounds_mask))
-            out_of_bounds_fraction = float(out_of_bounds_count / reached_count)
+        total_count = len(transported)
+        if total_count > 0:
+            out_of_bounds_count = int(np.count_nonzero(~in_bounds_mask))
+            out_of_bounds_fraction = float(out_of_bounds_count / total_count)
 
-    x_mm = np.asarray(transported["intensifier_hit_x_mm"][mask], dtype=float)
-    y_mm = np.asarray(transported["intensifier_hit_y_mm"][mask], dtype=float)
+    x_mm = np.asarray(transported["intensifier_hit_x_mm"], dtype=float)
+    y_mm = np.asarray(transported["intensifier_hit_y_mm"], dtype=float)
     finite_mask = np.isfinite(x_mm) & np.isfinite(y_mm)
     x_mm = x_mm[finite_mask]
     y_mm = y_mm[finite_mask]
@@ -390,10 +380,70 @@ def intensifier_photons_to_image(
     return fig, ax
 
 
+def timepix_tot_to_image(
+    hdf5_path: str | Path,
+    *,
+    cmap: str = "viridis",
+    log_scale: bool = True,
+    output_path: str | Path | None = None,
+    show: bool = False,
+) -> tuple[Figure, Axes]:
+    """Plot a Timepix pixel map weighted by integrated `time_over_threshold_ns`."""
+
+    hits = read_structured_dataset(hdf5_path, DATASET_TIMEPIX_HITS)
+    require_fields(hits, TIMEPIX_HIT_FIELDS, dataset_name=DATASET_TIMEPIX_HITS)
+
+    x_pixel = np.asarray(hits["x_pixel"], dtype=np.int32)
+    y_pixel = np.asarray(hits["y_pixel"], dtype=np.int32)
+    tot_ns = np.asarray(hits["time_over_threshold_ns"], dtype=np.float64)
+
+    if len(hits) == 0:
+        image = np.zeros((1, 1), dtype=np.float64)
+        x_min = y_min = 0
+    else:
+        finite_mask = np.isfinite(tot_ns)
+        x_pixel = x_pixel[finite_mask]
+        y_pixel = y_pixel[finite_mask]
+        tot_ns = tot_ns[finite_mask]
+        if x_pixel.size == 0:
+            image = np.zeros((1, 1), dtype=np.float64)
+            x_min = y_min = 0
+        else:
+            x_min = int(np.min(x_pixel))
+            x_max = int(np.max(x_pixel))
+            y_min = int(np.min(y_pixel))
+            y_max = int(np.max(y_pixel))
+            image = np.zeros((y_max - y_min + 1, x_max - x_min + 1), dtype=np.float64)
+            np.add.at(image, (y_pixel - y_min, x_pixel - x_min), tot_ns)
+
+    fig, ax = plt.subplots(figsize=(7, 6))
+    norm = None
+    if log_scale and np.any(image > 0.0):
+        norm = LogNorm(vmin=1.0, vmax=float(image.max()))
+
+    rendered = ax.imshow(
+        image,
+        origin="lower",
+        interpolation="nearest",
+        aspect="equal",
+        cmap=cmap,
+        norm=norm,
+        extent=[x_min - 0.5, x_min + image.shape[1] - 0.5, y_min - 0.5, y_min + image.shape[0] - 0.5],
+    )
+    ax.set_title("Timepix Pixel Map (Integrated ToT)")
+    ax.set_xlabel("x pixel")
+    ax.set_ylabel("y pixel")
+    fig.colorbar(rendered, ax=ax, label="summed time_over_threshold_ns")
+    fig.tight_layout()
+    save_and_maybe_show(fig, output_path=output_path, show=show)
+    return fig, ax
+
+
 __all__ = [
     "intensifier_photons_to_image",
     "neutron_hits_to_image",
     "optical_interface_photons_to_image",
     "photon_exit_to_image",
     "photon_origins_to_image",
+    "timepix_tot_to_image",
 ]

@@ -6,6 +6,8 @@ This example runs the full pipeline from one command:
 2. Generate Geant4 macro
 3. Run `g4emi`
 4. Transport photons to intensifier plane
+5. Run the intensifier pipeline
+6. Run the Timepix sensor pipeline and write `timepix_hits_<subrun>.h5`
 
 Run from repo root:
 
@@ -32,3 +34,11 @@ runner:
   showProgress: true
   verifyOutput: true
 ```
+
+If the YAML enables `intensifier.write_output_hdf5`, the example also writes:
+
+- `<run_root>/sensor/intensifier_output_events_<subrun>.h5`
+
+The Timepix sensor stage always writes:
+
+- `<run_root>/sensor/timepix_hits_<subrun>.h5`

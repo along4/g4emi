@@ -261,14 +261,15 @@ class IntensifierPipelineTests(unittest.TestCase):
                 ("intensifier_hit_x_mm", np.float64),
                 ("intensifier_hit_y_mm", np.float64),
                 ("intensifier_hit_z_mm", np.float64),
-                ("reached_intensifier", np.bool_),
+                ("intensifier_hit_time_ns", np.float64),
+                ("intensifier_hit_wavelength_nm", np.float64),
                 ("in_bounds", np.bool_),
             ]
         )
         rows = np.array(
             [
-                (0, 0, 1, 10, 100, 1.5, 2.5, 3.5, True, True),
-                (1, 0, 1, 10, 101, 4.5, 5.5, 6.5, True, True),
+                (0, 0, 1, 10, 100, 1.5, 2.5, 3.5, 11.0, 450.0, True),
+                (1, 0, 1, 10, 101, 4.5, 5.5, 6.5, 12.0, 500.0, True),
             ],
             dtype=transported_dtype,
         )
@@ -290,6 +291,26 @@ class IntensifierPipelineTests(unittest.TestCase):
             photons,
             params,
             rng=np.random.default_rng(123),
+        )
+
+        self.assertEqual(len(result), len(photons))
+        np.testing.assert_array_equal(result.source_photon_index, photons.source_photon_index)
+        np.testing.assert_array_equal(result.gun_call_id, photons.gun_call_id)
+        np.testing.assert_array_equal(result.primary_track_id, photons.primary_track_id)
+        np.testing.assert_array_equal(result.secondary_track_id, photons.secondary_track_id)
+        np.testing.assert_array_equal(result.photon_track_id, photons.photon_track_id)
+        self.assertTrue(np.all(result.output_time_ns >= photons.time_ns))
+        self.assertTrue(np.all(result.signal_amplitude_arb > 0.0))
+
+    def test_run_intensifier_pipeline_supports_chunked_compute(self) -> None:
+        photons = self._photons()
+        params = self._params()
+
+        result = self.run_intensifier_pipeline(
+            photons,
+            params,
+            rng=np.random.default_rng(123),
+            chunk_rows=1,
         )
 
         self.assertEqual(len(result), len(photons))
@@ -401,6 +422,38 @@ class IntensifierPipelineTests(unittest.TestCase):
                 self.assertEqual(handle.attrs["run_id"], "intensifier_pipeline_test")
                 self.assertEqual(handle.attrs["intensifier_model"], "Cricket2")
                 self.assertIn("generated_utc", handle.attrs)
+
+    def test_run_intensifier_pipeline_from_sim_config_honors_source_hdf5_override_when_writing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            payload = self._config_payload(tmp_path)
+            payload["intensifier"]["writeOutputHdf5"] = True
+            config = self.SimConfig.model_validate(payload)
+            source_hdf5_from_attr = tmp_path / "simulatedPhotons" / "source_from_attr.h5"
+            source_hdf5_override = tmp_path / "simulatedPhotons" / "source_override.h5"
+            transport_hdf5 = tmp_path / "transportedPhotons" / "transport.h5"
+            expected_output = (
+                tmp_path
+                / "intensifier_pipeline_test"
+                / "sensor"
+                / "intensifier_output_events_0000.h5"
+            )
+            self._write_source_hdf5(source_hdf5_from_attr)
+            self._write_source_hdf5(source_hdf5_override)
+            self._write_transport_hdf5(transport_hdf5, source_hdf5=source_hdf5_from_attr)
+
+            self.run_intensifier_pipeline_from_sim_config(
+                config,
+                transport_hdf5_path=transport_hdf5,
+                source_hdf5_path=source_hdf5_override,
+                rng=np.random.default_rng(123),
+            )
+
+            with self.h5py.File(expected_output, "r") as handle:
+                self.assertEqual(
+                    handle.attrs["source_hdf5"],
+                    str(source_hdf5_override.resolve()),
+                )
 
 
 if __name__ == "__main__":
